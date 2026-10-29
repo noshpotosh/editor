@@ -2129,6 +2129,34 @@ suite('EditorService', () => {
 		assert.ok(failingEditor instanceof ErrorPlaceholderEditor);
 	});
 
+
+	test('closing a shared input leaves its retained session alive', async () => {
+		const [part, service] = await createEditorService();
+		part.sessions.activate('one');
+		const input = disposables.add(new TestFileEditorInput(URI.file('/shared/file.txt'), TEST_EDITOR_INPUT_ID));
+		await service.openEditor(input);
+		part.sessions.activate('two');
+		await service.openEditor(input);
+		await part.activeGroup.closeAllEditors();
+		assert.strictEqual(input.isDisposed(), false);
+		part.sessions.activate('one');
+		assert.strictEqual(service.activeEditor, input);
+	});
+
+	test('retained session editors are excluded from navigation but included in Save All', async () => {
+		const [part, service] = await createEditorService();
+		part.sessions.activate('one');
+		const input = disposables.add(new TestFileEditorInput(URI.file('/one/file.txt'), TEST_EDITOR_INPUT_ID));
+		await service.openEditor(input);
+		input.setDirty();
+		part.sessions.activate('two');
+		assert.deepStrictEqual(service.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE), []);
+		assert.deepStrictEqual(service.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE, { includeInactive: true }).map(({ editor }) => editor), [input]);
+		await service.saveAll();
+		assert.deepStrictEqual([input.gotSaved, input.isDirty()], [true, false]);
+		part.sessions.activate('one');
+		assert.strictEqual(service.activeEditor, input);
+	});
 	test('save, saveAll, revertAll', async function () {
 		const [part, service] = await createEditorService();
 

@@ -54,6 +54,7 @@ export interface IEditorPartUIState {
 
 interface IEditorPartMemento {
 	'editorpart.state'?: IEditorPartUIState;
+	'editorpart.sessions'?: { active: string; states: Record<string, IEditorPartUIState> };
 	'editorpart.centeredview'?: CenteredViewState;
 }
 
@@ -157,6 +158,81 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 	private readonly profileMemento = this.getMemento(StorageScope.PROFILE, StorageTarget.MACHINE);
 
 	private readonly groupViews = new Map<GroupIdentifier, IEditorGroupView>();
+	private activeSession: string | undefined;
+	private readonly retainedSessions = new Map<string, { state: IEditorPartUIState; groups: IEditorGroupView[] }>();
+	private activeSessionGroups: Set<GroupIdentifier> | undefined;
+
+	readonly sessions = {
+		activate: (id: string) => this.activateSession(id),
+		owns: (id: string, groupId: GroupIdentifier) => id === this.activeSession ? !!this.activeSessionGroups?.has(groupId) : !!this.retainedSessions.get(id)?.groups.some(group => group.id === groupId),
+		close: (id: string) => this.closeSession(id),
+		ids: (): readonly string[] => [...this.retainedSessions.keys(), ...(this.activeSession ? [this.activeSession] : [])],
+	};
+
+	private activateSession(id: string): void {
+		if (this.activeSession === id) { return; }
+		if (!this.activeSession) {
+			const restored = this.workspaceMemento['editorpart.sessions'];
+			if (restored) {
+				this.activeSession = restored.active;
+				for (const [key, state] of Object.entries(restored.states)) {
+					if (key !== restored.active) {
+						this.retainedSessions.set(key, { state, groups: [] });
+					}
+				}
+			} else {
+				this.activeSession = id;
+			}
+			this.activeSessionGroups = new Set(this.groupViews.keys());
+			if (this.activeSession === id) { return; }
+		}
+		this.retainedSessions.set(this.activeSession, { state: this.createState(), groups: this.getGroups(GroupsOrder.GRID_APPEARANCE) });
+		this.activeSession = id;
+		this.activeSessionGroups = new Set();
+		this.mostRecentActiveGroups = [];
+		const newGroups: IEditorGroupView[] = [];
+		const retained = this.retainedSessions.get(id);
+		if (retained) {
+			for (const group of retained.groups) { this.activeSessionGroups.add(group.id); }
+			this.doCreateGridControlWithState(retained.state.serializedGrid, retained.state.activeGroup, retained.groups.length ? retained.groups : undefined);
+			// Deserialized groups need the same registration as freshly created groups.
+			if (!retained.groups.length) {
+				newGroups.push(...this.groups);
+			}
+			this.mostRecentActiveGroups = retained.state.mostRecentActiveGroups;
+			this.doSetGroupActive(this.getGroup(retained.state.activeGroup) ?? this.groups[0]);
+			this.retainedSessions.delete(id);
+		} else {
+			const group = this.doCreateGroupView();
+			this.doSetGridWidget(new SerializableGrid(group));
+			newGroups.push(group);
+			this.doSetGroupActive(group);
+		}
+		this.notifyGroupIndexChange();
+		this.updateContainer();
+		if (this._contentDimension) { this.doLayout(this._contentDimension); }
+		for (const group of newGroups) { this._onDidAddGroup.fire(group); }
+	}
+
+	private async closeSession(id: string): Promise<boolean> {
+		const groups = id === this.activeSession ? this.groups : this.retainedSessions.get(id)?.groups ?? [];
+		for (const group of groups) {
+			if (!await group.confirmCloseAllEditors()) { return false; }
+		}
+		for (const group of groups) {
+			if (!await group.closeAllEditors()) { return false; }
+		}
+		// The active grid must remain valid until the controller activates its successor.
+		if (id !== this.activeSession) {
+			for (const group of groups) {
+				group.dispose();
+				this._onDidRemoveGroup.fire(group);
+			}
+			this.retainedSessions.delete(id);
+		}
+		return true;
+	}
+
 	private mostRecentActiveGroups: GroupIdentifier[] = [];
 
 	protected readonly container = $('.content');
@@ -290,12 +366,14 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		}
 	};
 
+	get allGroups(): IEditorGroupView[] { return Array.from(this.groupViews.values()); }
+
 	get groups(): IEditorGroupView[] {
-		return Array.from(this.groupViews.values());
+		return Array.from(this.groupViews.values()).filter(group => !this.activeSessionGroups || this.activeSessionGroups.has(group.id));
 	}
 
 	get count(): number {
-		return this.groupViews.size;
+		return this.groups.length;
 	}
 
 	get orientation(): GroupOrientation {
@@ -324,7 +402,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 				return this.groups;
 
 			case GroupsOrder.MOST_RECENTLY_ACTIVE: {
-				const mostRecentActive = coalesce(this.mostRecentActiveGroups.map(groupId => this.getGroup(groupId)));
+				const mostRecentActive = coalesce(this.mostRecentActiveGroups.map(groupId => this.getGroup(groupId))).filter(group => !this.activeSessionGroups || this.activeSessionGroups.has(group.id));
 
 				// there can be groups that got never active, even though they exist. in this case
 				// make sure to just append them at the end so that all groups are returned properly
@@ -701,6 +779,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 
 		// Keep in map
 		this.groupViews.set(groupView.id, groupView);
+		this.activeSessionGroups?.add(groupView.id);
 
 		// Track focus
 		const groupDisposables = new DisposableStore();
@@ -1088,7 +1167,16 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		this._isReady = true;
 
 		// Signal restored
-		Promises.settled(this.groups.map(group => group.whenRestored)).finally(() => {
+		Promises.settled(this.groups.map(group => group.whenRestored)).then(async () => {
+			// Register retained inputs before backup recovery looks for missing editors.
+			const sessions = this._willRestoreState ? this.workspaceMemento['editorpart.sessions'] : undefined;
+			if (sessions) {
+				this.activateSession(sessions.active);
+				for (const id of Object.keys(sessions.states)) { this.activateSession(id); }
+				this.activateSession(sessions.active);
+				await Promises.settled(this.allGroups.map(group => group.whenRestored));
+			}
+		}).finally(() => {
 			this.whenRestoredPromise.complete();
 		});
 
@@ -1484,10 +1572,22 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 	}
 
 	protected override saveState(): void {
+		if (this.activeSession && this.gridWidget) {
+			const states: Record<string, IEditorPartUIState> = { [this.activeSession]: this.createState() };
+			for (const [id, session] of this.retainedSessions) {
+				let index = 0;
+				const refresh = (node: ISerializedNode): ISerializedNode => node.type === 'branch'
+					? { ...node, data: node.data.map(refresh) }
+					: { ...node, data: session.groups[index++]?.toJSON() ?? node.data };
+				states[id] = { ...session.state, serializedGrid: { ...session.state.serializedGrid, root: refresh(session.state.serializedGrid.root) } };
+			}
+			this.workspaceMemento['editorpart.sessions'] = { active: this.activeSession, states };
+		}
+
 
 		// Persist grid UI state
 		if (this.gridWidget) {
-			if (this.isEmpty) {
+			if (this.isEmpty && !this.activeSession) {
 				delete this.workspaceMemento[EditorPart.EDITOR_PART_UI_STATE_STORAGE_KEY];
 			} else {
 				this.workspaceMemento[EditorPart.EDITOR_PART_UI_STATE_STORAGE_KEY] = this.createState();
@@ -1642,7 +1742,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 			this._onDidRemoveGroup.fire(group);
 		}
 
-		this.groupViews.clear();
+		this.activeSessionGroups?.clear();
 		this.mostRecentActiveGroups = [];
 	}
 
@@ -1651,6 +1751,14 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		// Event
 		this._onWillDispose.fire();
 
+		// Retained groups remain registered until the part is disposed.
+		for (const session of this.retainedSessions.values()) {
+			for (const group of session.groups) {
+				group.dispose();
+				this._onDidRemoveGroup.fire(group);
+			}
+		}
+		this.retainedSessions.clear();
 		// Forward to all groups
 		this.disposeGroups();
 

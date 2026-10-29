@@ -273,7 +273,7 @@ export interface IEditorService {
 	 * @param order the order of the editors to use
 	 * @param options whether to exclude sticky editors or not
 	 */
-	getEditors(order: EditorsOrder, options?: { excludeSticky?: boolean }): readonly IEditorIdentifier[];
+	getEditors(order: EditorsOrder, options?: { excludeSticky?: boolean; includeInactive?: boolean }): readonly IEditorIdentifier[];
 
 	/**
 	 * Open an editor in an editor group.

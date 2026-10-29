@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as domStylesheets from '../../../../base/browser/domStylesheets.js';
 import * as cssValue from '../../../../base/browser/cssValue.js';
 import { DeferredPromise, timeout, type MaybePromise } from '../../../../base/common/async.js';
@@ -527,7 +528,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 			if (!attachPersistentProcess) {
 				continue;
 			}
-			const instance = await this.createTerminal({ config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel });
+			const instance = await this.createTerminal({ terminalFirstSession: true, config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel });
 			instances.push(instance);
 		}
 		return instances;
@@ -542,14 +543,15 @@ export class TerminalService extends Disposable implements ITerminalService {
 			}
 			mark(`code/terminal/willRecreateTerminal/${attachPersistentProcess.id}-${attachPersistentProcess.pid}`);
 			lastInstance = this.createTerminal({
+				terminalFirstSession: true,
 				config: { attachPersistentProcess },
-				location: lastInstance ? { parentTerminal: lastInstance } : TerminalLocation.Panel
+				location: lastInstance && !terminalFirstEnabled ? { parentTerminal: lastInstance } : TerminalLocation.Panel
 			});
 			lastInstance.then(() => mark(`code/terminal/didRecreateTerminal/${attachPersistentProcess.id}-${attachPersistentProcess.pid}`));
 		}
 		const group = lastInstance?.then(instance => {
 			const g = this._terminalGroupService.getGroupForInstance(instance);
-			g?.resizePanes(tabLayout.terminals.map(terminal => terminal.relativeSize));
+			if (!terminalFirstEnabled) { g?.resizePanes(tabLayout.terminals.map(terminal => terminal.relativeSize)); }
 			return g;
 		});
 		return group;
@@ -973,6 +975,9 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async createTerminal(options?: ICreateTerminalOptions): Promise<ITerminalInstance> {
+		if (terminalFirstEnabled && !options?.terminalFirstSession) {
+			throw new Error(nls.localize('terminalFirst.creationBlocked', "Use the session strip to open a terminal. Integrated terminals, terminal tasks, and terminal-backed debugging are unavailable."));
+		}
 		// Await the initialization of available profiles as long as this is not a pty terminal or a
 		// local terminal in a remote workspace as profile won't be used in those cases and these
 		// terminals need to be launched before remote connections are established.
@@ -1072,6 +1077,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		this._evaluateLocalCwd(shellLaunchConfig);
 		const location = await this.resolveLocation(options?.location) || this._terminalConfigurationService.defaultLocation;
 
+		if (terminalFirstEnabled) { authorizeTerminalFirstLaunch(shellLaunchConfig); }
 		if (shellLaunchConfig.hideFromUser) {
 			const instance = this._terminalInstanceService.createInstance(shellLaunchConfig, location);
 			this._backgroundedTerminalInstances.push({ instance, terminalLocationOptions: options?.location });

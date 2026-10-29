@@ -962,6 +962,7 @@ export class TestEditorGroupsService implements IEditorGroupsService {
 }
 
 export class TestEditorGroupView implements IEditorGroupView {
+	async confirmCloseAllEditors(): Promise<boolean> { return true; }
 
 	constructor(public id: number) { }
 

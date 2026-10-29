@@ -714,7 +714,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	private canDispose(editor: EditorInput): boolean {
-		for (const groupView of this.editorPartsView.groups) {
+		for (const groupView of this.editorPartsView.allGroups ?? this.editorPartsView.groups) {
 			if (groupView instanceof EditorGroupView && groupView.model.contains(editor, {
 				strictEquals: true,						// only if this input is not shared across editor groups
 				supportSideBySide: SideBySideEditor.ANY // include any side of an opened side by side editor
@@ -1751,7 +1751,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 		// The only exception is when the same editor is opened on both sides of a side
 		// by side editor (https://github.com/microsoft/vscode/issues/138442)
 
-		if (this.editorPartsView.groups.some(groupView => {
+		if ((this.editorPartsView.allGroups ?? this.editorPartsView.groups).some(groupView => {
 			if (groupView === this) {
 				return false; // skip (we already handled our group above)
 			}
@@ -1974,6 +1974,10 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	//#endregion
+
+	async confirmCloseAllEditors(): Promise<boolean> {
+		return !await this.handleCloseConfirmation(this.editors.slice());
+	}
 
 	//#region closeAllEditors()
 

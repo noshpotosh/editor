@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { Disposable, dispose, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { isLinux, isMacintosh, isNative } from '../../../../base/common/platform.js';
@@ -292,8 +293,8 @@ export class WorkspaceChangeExtHostRelauncher extends Disposable implements IWor
 				return; // no restart when in tests: see https://github.com/microsoft/vscode/issues/66936
 			}
 
-			if (environmentService.isSessionsWindow) {
-				return; // no restart for sessions window
+			if (environmentService.isSessionsWindow || terminalFirstEnabled) {
+				return; // session folders change in place; restarting would disconnect pending shell CLI requests
 			}
 
 			if (environmentService.remoteAuthority) {

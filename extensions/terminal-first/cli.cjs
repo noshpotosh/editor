@@ -59,7 +59,7 @@ async function openFiles(args, environment = process.env, cwd = process.cwd()) {
 	if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath)) {
 		throw new Error('The window CLI pointer is invalid. Reload the window to retry.');
 	}
-	const body = JSON.stringify({ type: 'terminalFirstOpen', fileURIs, terminalSession: environment.TERMINAL_FIRST_SESSION, wait: options.wait });
+	const body = JSON.stringify({ type: 'terminalFirstOpen', fileURIs, terminalSession: environment.TERMINAL_FIRST_SESSION, wait: options.wait, cwd: pathToFileURL(cwd).href });
 	await new Promise((resolve, reject) => {
 		const request = http.request({ socketPath, path: '/', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, response => {
 			const chunks = [];

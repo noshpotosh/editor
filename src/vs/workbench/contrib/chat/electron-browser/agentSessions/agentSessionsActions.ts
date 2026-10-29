@@ -220,6 +220,7 @@ export class OpenWorkspaceInAgentsWindowTitleBarAction extends Action2 {
 				order: -1000,
 				when: ContextKeyExpr.and(
 					OPEN_AGENTS_WINDOW_PRECONDITION,
+					ContextKeyExpr.notEquals('terminalFirstEnabled', true),
 					ContextKeyExpr.notEquals(`config.${ChatConfiguration.TitleBarOpenInAgentsWindowEnabled}`, false),
 				),
 			},

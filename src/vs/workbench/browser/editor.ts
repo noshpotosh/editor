@@ -173,7 +173,7 @@ Registry.add(EditorExtensions.EditorPane, new EditorPaneRegistry());
 
 //#region Editor Close Tracker
 
-export function whenEditorClosed(accessor: ServicesAccessor, resources: URI[]): Promise<void> {
+export function whenEditorClosed(accessor: ServicesAccessor, resources: URI[], acceptClose?: (groupId: number) => boolean): Promise<void> {
 	const editorService = accessor.get(IEditorService);
 	const uriIdentityService = accessor.get(IUriIdentityService);
 	const workingCopyService = accessor.get(IWorkingCopyService);
@@ -183,6 +183,7 @@ export function whenEditorClosed(accessor: ServicesAccessor, resources: URI[]): 
 
 		// Observe any editor closing from this moment on
 		const listener = editorService.onDidCloseEditor(async event => {
+			if (acceptClose && !acceptClose(event.groupId)) { return; }
 			if (event.context === EditorCloseContext.MOVE) {
 				return; // ignore move events where the editor will open in another group
 			}

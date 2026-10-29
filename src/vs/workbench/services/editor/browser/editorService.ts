@@ -257,7 +257,7 @@ export class EditorService extends Disposable implements EditorServiceImpl {
 	}
 
 	private async handleMovedFile(source: URI, target: URI): Promise<void> {
-		for (const group of this.editorGroupsContainer.groups) {
+		for (const group of this.editorGroupsContainer.allGroups ?? this.editorGroupsContainer.groups) {
 			const replacements: (IUntypedEditorReplacement | IEditorReplacement)[] = [];
 
 			for (const editor of group.editors) {
@@ -459,22 +459,22 @@ export class EditorService extends Disposable implements EditorServiceImpl {
 		return this.getEditors(EditorsOrder.SEQUENTIAL).map(({ editor }) => editor);
 	}
 
-	getEditors(order: EditorsOrder, options?: { excludeSticky?: boolean }): IEditorIdentifier[] {
+	getEditors(order: EditorsOrder, options?: { excludeSticky?: boolean; includeInactive?: boolean }): IEditorIdentifier[] {
 		switch (order) {
 
 			// MRU
 			case EditorsOrder.MOST_RECENTLY_ACTIVE:
 				if (options?.excludeSticky) {
-					return this.editorsObserver.editors.filter(({ groupId, editor }) => !this.editorGroupsContainer.getGroup(groupId)?.isSticky(editor));
+					return this.editorsObserver.editors.filter(({ groupId, editor }) => (options?.includeInactive || this.editorGroupsContainer.groups.some(group => group.id === groupId)) && !this.editorGroupsContainer.getGroup(groupId)?.isSticky(editor));
 				}
 
-				return this.editorsObserver.editors;
+				return this.editorsObserver.editors.filter(({ groupId }) => (options?.includeInactive || this.editorGroupsContainer.groups.some(group => group.id === groupId)));
 
 			// Sequential
 			case EditorsOrder.SEQUENTIAL: {
 				const editors: IEditorIdentifier[] = [];
 
-				for (const group of this.editorGroupsContainer.getGroups(GroupsOrder.GRID_APPEARANCE)) {
+				for (const group of options?.includeInactive ? this.editorGroupsContainer.allGroups ?? this.editorGroupsContainer.groups : this.editorGroupsContainer.getGroups(GroupsOrder.GRID_APPEARANCE)) {
 					editors.push(...group.getEditors(EditorsOrder.SEQUENTIAL, options).map(editor => ({ editor, groupId: group.id })));
 				}
 
@@ -1082,7 +1082,7 @@ export class EditorService extends Disposable implements EditorServiceImpl {
 	private getAllModifiedEditors(options?: IBaseSaveRevertAllEditorOptions): IEditorIdentifier[] {
 		const editors: IEditorIdentifier[] = [];
 
-		for (const group of this.editorGroupsContainer.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE)) {
+		for (const group of this.editorGroupsContainer.allGroups ?? this.editorGroupsContainer.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE)) {
 			for (const editor of group.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)) {
 				if (!editor.isModified()) {
 					continue;

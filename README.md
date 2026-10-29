@@ -1,4 +1,4 @@
-# Terminal First
+# VS NOSH
 
 A terminal-first fork of Code - OSS for developers who want to live in the shell and open a GUI editor when they need one.
 
@@ -10,9 +10,9 @@ This is an early macOS source build aimed at becoming a personal daily driver. P
 
 - **Shell on launch.** Ordinary windows start in the terminal; explicit file launches open the editor.
 - **An editor on demand.** `e file` opens local files in the originating window, including paths with spaces and files that do not exist yet. `e --wait file` waits until the requested files close.
-- **Vim-style editing.** A pinned VSCodeVim extension provides modal editing. Its mode, pending keys, command line, and messages remain visible inside the editor while the status bar is hidden.
-- **Less permanent UI.** Sidebars, activity bar, status bar, editor tabs, terminal tabs, minimap, breadcrumbs, and command center are hidden by default. Workbench tools remain available through commands and a reveal shortcut.
-- **Several shell sessions.** Create, cycle through, and pick terminal sessions from the keyboard.
+- **Vim-style editing.** A pinned VSCodeVim extension provides modal editing. Its mode and status appear in the full editor’s status bar.
+- **Plain terminal mode.** Only the terminal and persistent session strip remain. Sidebar, panel, and workbench shortcuts cannot reveal tools until you open the editor. The title-bar layout and Open in Agents controls are removed.
+- **Independent session tabs.** Each tab retains its shell, files, diffs, unsaved buffers, and editor layout. The strip stays visible in both modes; its plus button creates a separate shell tab. The editor has no embedded terminal.
 - **An isolated profile.** Development launchers keep settings, extensions, and shared data under `.build/terminal-first`, separate from an installed VS Code profile.
 
 The editing engine is VS Code with VSCodeVim; this version does not embed a Neovim runtime. Your existing shell tools can remain at the center of navigation, builds, Git, and other development work, while VS Code's language and workbench features remain accessible.
@@ -56,7 +56,7 @@ e -- -notes.txt
 
 `e` resolves paths against the shell's current directory and opens files in that shell's window. Switching back to the terminal does not release `--wait`; closing its requested files does. Closing the last editor also returns to the shell, with the usual save/discard/cancel behavior for unsaved files.
 
-Directory arguments are not supported by `e`. Open a project with `./scripts/terminal-first.sh /path/to/project` from outside the app. Within the app's shells, `EDITOR='e --wait'` can be used by programs that invoke an external editor.
+Directory arguments are not supported by `e`; use `cd` and Open Editor to change the active editor directory. You can also open a project with `./scripts/terminal-first.sh /path/to/project` from outside the app. Within the app's shells, `EDITOR='e --wait'` can be used by programs that invoke an external editor.
 
 | Action | macOS shortcut |
 | --- | --- |
@@ -64,11 +64,10 @@ Directory arguments are not supported by `e`. Open a project with `./scripts/ter
 | New shell session | `Cmd+Option+N` |
 | Previous / next shell session | `Cmd+Option+Left` / `Cmd+Option+Right` |
 | Pick a shell session | `Cmd+Option+P` |
-| Reveal / hide workbench tools | `Cmd+Option+U` |
-| Find a file | `Cmd+P` |
-| Command Palette | `Cmd+Shift+P` |
+| Find a file (editor mode) | `Cmd+P` |
+| Command Palette (editor mode) | `Cmd+Shift+P` |
 
-When no editor is open, switching to the editor opens Quick Open. Revealing workbench tools restores conventional chrome and opens Explorer. Shell mode fills the workbench again when you return to it.
+Open Editor reveals the full workbench and Explorer rooted in the shell’s current directory. The tab strip remains visible above it. Switching tabs restores that session’s last surface. Returning to a shell preserves its process and scrollback.
 
 ## Implementation
 
@@ -78,9 +77,7 @@ See [TERMINAL_FIRST.md](TERMINAL_FIRST.md) for detailed behavior, restoration no
 
 ## Validation and current limits
 
-The implementation has passed the full development build, client type checking, lint on changed TypeScript, layer checks, 49 focused Electron workbench tests, and 7 CLI tests. The tests cover mode switching, session routing, file arguments, waiting for file closure, terminal revival, and related terminal and status-bar behavior.
-
-Visual and interactive acceptance is still pending: the Mac was locked during implementation. The interactive checklist is in [TERMINAL_FIRST.md](TERMINAL_FIRST.md#validation).
+Validation commands and the interactive checklist are in [TERMINAL_FIRST.md](TERMINAL_FIRST.md#validation).
 
 The first milestone targets local macOS shells, with zsh as the primary interactive test target. Remote development, embedded Neovim, tmux-specific integration, installers, automatic updates, and deeper removal of workbench features are deferred. Terminal reconnection and revival retain upstream VS Code's guarantees; a revived terminal may be a new process rather than the original process.
 

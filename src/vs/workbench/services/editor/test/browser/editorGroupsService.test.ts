@@ -2153,6 +2153,55 @@ suite('EditorGroupsService', () => {
 		assert.strictEqual(group.isPinned(input2), true);
 	});
 
+
+	test('terminal sessions retain live dirty groups without exposing them in active navigation', async () => {
+		const [part] = await createPart();
+		part.sessions.activate('one');
+		const first = part.activeGroup;
+		const input = createTestFileEditorInput(URI.file('/one/file.txt'), TEST_EDITOR_INPUT_ID);
+		await first.openEditor(input);
+		input.setDirty();
+		let closed = 0;
+		disposables.add(first.onDidCloseEditor(() => closed++));
+		part.sessions.activate('two');
+		const second = part.activeGroup;
+		await second.openEditor(createTestFileEditorInput(URI.file('/two/file.txt'), TEST_EDITOR_INPUT_ID));
+		assert.deepStrictEqual({ active: part.groups.map(group => group.id), retained: part.getGroup(first.id) === first, dirty: input.isDirty(), closed }, { active: [second.id], retained: true, dirty: true, closed: 0 });
+		part.sessions.activate('one');
+		assert.deepStrictEqual({ active: part.activeGroup === first, input: first.activeEditor === input, closed, groups: part.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => group.id) }, { active: true, input: true, closed: 0, groups: [first.id] });
+		await input.revert(first.id);
+	});
+
+	test('terminal sessions preserve split layouts on repeated switching', async () => {
+		const [part] = await createPart();
+		part.sessions.activate('one');
+		const first = part.activeGroup;
+		const right = part.addGroup(first, GroupDirection.RIGHT);
+		part.activateGroup(right);
+		const ids = part.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => group.id);
+		for (let i = 0; i < 3; i++) {
+			part.sessions.activate('two');
+			part.sessions.activate('one');
+		}
+		assert.deepStrictEqual({ groups: part.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => group.id), active: part.activeGroup.id }, { groups: ids, active: right.id });
+	});
+
+	test('cancelling a terminal session close preserves all of its editor groups', async () => {
+		const [part, instantiationService] = await createPart();
+		part.sessions.activate('one');
+		const left = part.activeGroup;
+		const right = part.addGroup(left, GroupDirection.RIGHT);
+		const clean = createTestFileEditorInput(URI.file('/one/clean.txt'), TEST_EDITOR_INPUT_ID);
+		const dirty = createTestFileEditorInput(URI.file('/one/dirty.txt'), TEST_EDITOR_INPUT_ID);
+		await left.openEditor(clean);
+		await right.openEditor(dirty);
+		dirty.setDirty();
+		const accessor = instantiationService.createInstance(TestServiceAccessor);
+		accessor.fileDialogService.setConfirmResult(ConfirmResult.CANCEL);
+		const closed = await part.sessions.close('one');
+		assert.deepStrictEqual([closed, left.contains(clean), right.contains(dirty), part.groups.length], [false, true, true, 2]);
+		await dirty.revert(right.id);
+	});
 	test('working sets - create / apply state', async function () {
 		const [part] = await createPart();
 

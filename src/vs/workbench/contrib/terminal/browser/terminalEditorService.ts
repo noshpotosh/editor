@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../../nls.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { Disposable, dispose, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -160,6 +162,7 @@ export class TerminalEditorService extends Disposable implements ITerminalEditor
 	}
 
 	resolveResource(instance: ITerminalInstance): URI {
+		if (terminalFirstEnabled) { throw new Error(localize('editorTerminalBlocked', "Terminals belong to the session strip and cannot be opened inside an editor.")); }
 		const resource = instance.resource;
 		const inputKey = resource.path;
 		const cachedEditor = this._editorInputs.get(inputKey);

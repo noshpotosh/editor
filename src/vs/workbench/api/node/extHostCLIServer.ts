@@ -37,6 +37,7 @@ export interface StatusPipeArgs {
 }
 
 export interface TerminalFirstOpenPipeArgs {
+	cwd?: string;
 	type: 'terminalFirstOpen';
 	fileURIs: string[];
 	terminalSession: string;
@@ -109,7 +110,7 @@ export class CLIServerBase {
 						if (!Array.isArray(data.fileURIs) || !data.fileURIs.every((value: string) => typeof value === 'string') || typeof data.terminalSession !== 'string' || typeof data.wait !== 'boolean') {
 							throw new Error('Invalid Terminal First open request');
 						}
-						await this._commands.executeCommand('_terminalFirst.openFiles', data.fileURIs, data.terminalSession, data.wait);
+						await this._commands.executeCommand('_terminalFirst.openFiles', data.fileURIs, data.terminalSession, data.wait, data.cwd);
 						break;
 					case 'open':
 						returnObj = await this.open(data);

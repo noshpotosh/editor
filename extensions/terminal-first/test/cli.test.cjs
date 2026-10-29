@@ -57,6 +57,7 @@ test('opens quoted, Unicode, special-character and new files relative to the she
 		fileURIs: files.map(file => pathToFileURL(path.join(window.directory, file)).href),
 		terminalSession: window.directory,
 		wait: false,
+		cwd: pathToFileURL(window.directory).href,
 	}]);
 });
 

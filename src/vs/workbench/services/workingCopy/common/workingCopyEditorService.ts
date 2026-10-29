@@ -76,7 +76,7 @@ export class WorkingCopyEditorService extends Disposable implements IWorkingCopy
 	}
 
 	findEditor(workingCopy: IWorkingCopy): IEditorIdentifier | undefined {
-		for (const editorIdentifier of this.editorService.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)) {
+		for (const editorIdentifier of this.editorService.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE, { includeInactive: true })) {
 			if (this.isOpen(workingCopy, editorIdentifier.editor)) {
 				return editorIdentifier;
 			}

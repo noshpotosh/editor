@@ -192,6 +192,9 @@ function validateEditorPartOptions(options: IEditorPartOptions): IEditorPartOpti
  */
 export interface IEditorPartsView {
 
+	/** Includes retained sessions for input lifetime and close confirmation. */
+	readonly allGroups?: IEditorGroupView[];
+
 	readonly mainPart: IEditorGroupsView;
 	registerPart(part: IEditorPart): IDisposable;
 
@@ -301,6 +304,8 @@ export interface IEditorGroupMenuIds {
  * A helper to access and mutate an editor group within an editor part.
  */
 export interface IEditorGroupView extends IDisposable, ISerializableView, IEditorGroup {
+	/** Resolve save/discard/cancel decisions without removing any editor tabs. */
+	confirmCloseAllEditors(): Promise<boolean>;
 
 	readonly onDidFocus: Event<void>;
 

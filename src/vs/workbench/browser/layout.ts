@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled, terminalFirstPolicy } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Event, Emitter } from '../../base/common/event.js';
 import { alert } from '../../base/browser/ui/aria/aria.js';
@@ -284,6 +285,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 
 	private titleBarPartView!: ISerializableView;
 	private bannerPartView!: ISerializableView;
+	private terminalFirstPartView: ISerializableView | undefined;
 	private activityBarPartView!: ISerializableView;
 	private sideBarPartView!: ISerializableView;
 	private panelPartView!: ISerializableView;
@@ -1628,6 +1630,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setStatusBarHidden(hidden: boolean): void {
+		if (!hidden && terminalFirstPolicy.shell) { return; }
 		this.stateModel.setRuntimeValue(LayoutStateKeys.STATUSBAR_HIDDEN, hidden);
 
 		// Adjust CSS
@@ -1644,6 +1647,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	protected createWorkbenchLayout(): void {
 		const titleBar = this.getPart(Parts.TITLEBAR_PART);
 		const bannerPart = this.getPart(Parts.BANNER_PART);
+		this.terminalFirstPartView = terminalFirstEnabled ? this.getPart(Parts.TERMINAL_FIRST_PART) : undefined;
 		const editorPart = this.getPart(Parts.EDITOR_PART);
 		const activityBar = this.getPart(Parts.ACTIVITYBAR_PART);
 		const panelPart = this.getPart(Parts.PANEL_PART);
@@ -1672,6 +1676,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			[Parts.AUXILIARYBAR_PART]: this.auxiliaryBarPartView
 		};
 
+		if (this.terminalFirstPartView) { viewMap[Parts.TERMINAL_FIRST_PART] = this.terminalFirstPartView; }
 		const fromJSON = ({ type }: { type: Parts }) => viewMap[type];
 		const workbenchGrid = SerializableGrid.deserialize(
 			this.createGridDescriptor(),
@@ -1891,6 +1896,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setActivityBarHidden(hidden: boolean): void {
+		if (!hidden && terminalFirstPolicy.shell) { return; }
 		this.stateModel.setRuntimeValue(LayoutStateKeys.ACTIVITYBAR_HIDDEN, hidden);
 		this.mainContainer.classList.toggle(LayoutClasses.ACTIVITYBAR_HIDDEN, hidden);
 		this.workbenchGrid.setViewVisible(this.activityBarPartView, !hidden);
@@ -1901,6 +1907,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setEditorHidden(hidden: boolean): void {
+		if (!hidden && terminalFirstPolicy.shell) { return; }
 		if (!hidden && this.setAuxiliaryBarMaximized(false) && this.isVisible(Parts.EDITOR_PART)) {
 			return; // return: leaving maximised auxiliary bar made this part visible
 		}
@@ -1946,6 +1953,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setSideBarHidden(hidden: boolean): void {
+		if (!hidden && terminalFirstPolicy.shell) { return; }
 		if (!hidden && this.setAuxiliaryBarMaximized(false) && this.isVisible(Parts.SIDEBAR_PART)) {
 			return; // return: leaving maximised auxiliary bar made this part visible
 		}
@@ -2008,20 +2016,20 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		const focusedPart = [Parts.PANEL_PART, Parts.SIDEBAR_PART, Parts.AUXILIARYBAR_PART].find(part => this.hasFocus(part)) as SINGLE_WINDOW_PARTS | undefined;
 
 		if (sideBarPosition === Position.LEFT) {
-			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, 0]);
+			this.workbenchGrid.moveViewTo(this.activityBarPartView, [this.terminalFirstPartView ? 3 : 2, 0]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Left : Direction.Right);
 			if (auxiliaryBarSiblingToEditor) {
 				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Right);
 			} else {
-				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [2, -1]);
+				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [this.terminalFirstPartView ? 3 : 2, -1]);
 			}
 		} else {
-			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, -1]);
+			this.workbenchGrid.moveViewTo(this.activityBarPartView, [this.terminalFirstPartView ? 3 : 2, -1]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Right : Direction.Left);
 			if (auxiliaryBarSiblingToEditor) {
 				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Left);
 			} else {
-				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [2, 0]);
+				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [this.terminalFirstPartView ? 3 : 2, 0]);
 			}
 		}
 
@@ -2085,6 +2093,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setPanelHidden(hidden: boolean, skipLayout?: boolean): void {
+		if (hidden && terminalFirstPolicy.shell) { return; }
 		if (!this.workbenchGrid) {
 			return; // Return if not initialized fully (https://github.com/microsoft/vscode/issues/105480)
 		}
@@ -2288,6 +2297,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setAuxiliaryBarHidden(hidden: boolean, skipLayout?: boolean): void {
+		if (!hidden && terminalFirstPolicy.shell) { return; }
 		if (hidden && this.setAuxiliaryBarMaximized(false) && !this.isVisible(Parts.AUXILIARYBAR_PART)) {
 			return; // return: leaving maximised auxiliary bar made this part hidden
 		}
@@ -2696,6 +2706,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			}
 		];
 
+
 		const activityBarNode: ISerializedLeafNode = {
 			type: 'leaf',
 			data: { type: Parts.ACTIVITYBAR_PART },
@@ -2745,6 +2756,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 				size: width,
 				data: [
 					...(this.shouldShowBannerFirst() ? titleAndBanner.reverse() : titleAndBanner),
+					...(this.terminalFirstPartView ? [{ type: 'leaf' as const, data: { type: Parts.TERMINAL_FIRST_PART }, size: this.terminalFirstPartView.minimumHeight, visible: true }] : []),
 					{
 						type: 'branch',
 						data: middleSection,

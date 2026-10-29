@@ -374,7 +374,7 @@ export abstract class WorkingCopyBackupTracker extends Disposable {
 
 			// Collect already opened editors for backup
 			let hasOpenedEditorForBackup = false;
-			for (const { editor } of this.editorService.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)) {
+			for (const { editor } of this.editorService.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE, { includeInactive: true })) {
 				const isUnrestoredBackupOpened = handler.isOpen(unrestoredBackup, editor);
 				if (isUnrestoredBackupOpened) {
 					openedEditorsForBackups.add(editor);

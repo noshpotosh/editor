@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled, isTerminalFirstCommandAllowed, isTerminalFirstInteraction, TerminalFirstShellContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { isKeyboardEvent, isMouseEvent, isPointerEvent, getActiveWindow } from '../../../../base/browser/dom.js';
 import { Action } from '../../../../base/common/actions.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -149,6 +150,10 @@ export function registerTerminalAction(
 	options.f1 = options.f1 ?? true;
 	options.category = options.category ?? category;
 	options.precondition = options.precondition ?? TerminalContextKeys.processSupported;
+	if (terminalFirstEnabled) {
+		const interaction = isTerminalFirstInteraction(options.id);
+		options.precondition = ContextKeyExpr.and(options.precondition, interaction ? TerminalFirstShellContext : ContextKeyExpr.false());
+	}
 	// Remove run function from options so it's not passed through to registerAction2
 	const runFunc = options.run;
 	const strictOptions: IAction2Options & { run?: (c: ITerminalServicesCollection, accessor: ServicesAccessor, args?: unknown) => void | Promise<unknown> } = options;
@@ -159,6 +164,7 @@ export function registerTerminalAction(
 			super(strictOptions as IAction2Options);
 		}
 		run(accessor: ServicesAccessor, args?: unknown, args2?: unknown) {
+			if (!isTerminalFirstCommandAllowed(options.id)) { return; }
 			return runFunc(getTerminalServices(accessor), accessor, args, args2);
 		}
 	});

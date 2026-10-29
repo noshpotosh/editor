@@ -1,0 +1,27 @@
+/* Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. */
+.monaco-workbench .part.terminal-first-sessions {
+	display: flex;
+	align-items: stretch;
+	gap: 4px;
+	background: var(--vscode-editorGroupHeader-tabsBackground);
+	color: var(--vscode-tab-inactiveForeground);
+	border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, transparent);
+	box-sizing: border-box;
+}
+.terminal-first-sessions .session-tabs { display: flex; overflow-x: auto; flex: 1; }
+.terminal-first-sessions .session-tab { display: flex; flex-shrink: 0; }
+.terminal-first-sessions button {
+	color: inherit;
+	background: transparent;
+	border: 0;
+	padding: 0 12px;
+	font: inherit;
+	cursor: pointer;
+}
+.terminal-first-sessions .active { color: var(--vscode-tab-activeForeground); background: var(--vscode-tab-activeBackground); border-top: 1px solid var(--vscode-tab-activeBorderTop, transparent); }
+.terminal-first-sessions button:hover { background: var(--vscode-toolbar-hoverBackground); }
+.terminal-first-sessions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+.terminal-first-sessions .session-toggle { flex-shrink: 0; }
+.monaco-workbench.terminal-first-shell .part.panel > .title { display: none; }
+
+.monaco-workbench.terminal-first-shell .part.titlebar .monaco-toolbar { display: none; }

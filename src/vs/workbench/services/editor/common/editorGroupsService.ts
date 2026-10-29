@@ -216,6 +216,8 @@ export interface IEditorDropTargetDelegate {
  * all opened editor parts.
  */
 export interface IEditorGroupsContainer {
+	/** Includes retained inactive session groups for saving and file operations. */
+	readonly allGroups?: readonly IEditorGroup[];
 
 	/**
 	 * An event for when the active editor group changes. The active editor
@@ -478,6 +480,14 @@ export interface IEditorGroupsContainer {
  * parts opened in multiple windows.
  */
 export interface IEditorPart extends IEditorGroupsContainer {
+	/** Retain live editor groups while another terminal session is active. */
+	readonly sessions?: {
+		activate(id: string): void;
+		owns(id: string, groupId: GroupIdentifier): boolean;
+		close(id: string): Promise<boolean>;
+		ids(): readonly string[];
+	};
+
 
 	/**
 	 * An event for when the editor part is layed out.

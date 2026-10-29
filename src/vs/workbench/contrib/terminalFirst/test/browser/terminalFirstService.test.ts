@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual, rejects, strictEqual } from 'assert';
-import { Emitter } from '../../../../../base/common/event.js';
+import { Emitter, Event } from '../../../../../base/common/event.js';
 import { toDisposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { upcastPartial } from '../../../../../base/test/common/mock.js';
@@ -15,11 +15,14 @@ import { IPath } from '../../../../../platform/window/common/window.js';
 import { EditorCloseContext, EditorInputWithOptions, IEditorCloseEvent, IEditorPane, IUntypedEditorInput, isResourceEditorInput } from '../../../../common/editor.js';
 import { ITextResourceEditorInput } from '../../../../../platform/editor/common/editor.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
-import { IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
+import { IEditorGroupsService, IEditorPart, IEditorGroup } from '../../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { TestEditorInput, TestEditorService, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
+import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { IWorkspaceContextService, IWorkspace } from '../../../../../platform/workspace/common/workspace.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 
 suite('Terminal First', () => {
@@ -60,6 +63,8 @@ suite('Terminal First', () => {
 		const addTerminal = () => {
 			const terminal = upcastPartial<ITerminalInstance>({
 				instanceId: terminals.length + 1,
+				title: `Shell ${terminals.length + 1}`,
+				capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined }),
 				shellIntegrationNonce: `session-${terminals.length + 1}`,
 				focusWhenReady: async () => { focused.fire(terminal); },
 			});
@@ -70,6 +75,8 @@ suite('Terminal First', () => {
 		instantiationService.stub(IEditorService, editors);
 		instantiationService.stub(ITerminalService, upcastPartial<ITerminalService>({
 			whenConnected: Promise.resolve(),
+			onDidDisposeInstance: Event.None,
+			onAnyInstanceTitleChange: Event.None,
 			createTerminal: async () => { const terminal = addTerminal(); created.push(terminal); return terminal; },
 			setActiveInstance: terminal => { active = terminal; },
 		}));
@@ -88,12 +95,19 @@ suite('Terminal First', () => {
 			setPanelAlignment: () => { },
 			layout: () => { },
 		}));
-		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ enforcePartOptions: () => toDisposable(() => { }) }));
+		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({}), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate }));
 		instantiationService.stub(IFileService, upcastPartial<IFileService>({ exists: async resource => !resource.path.endsWith('new.ts') }));
+		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({}));
+		instantiationService.stub(IWorkspaceContextService, upcastPartial<IWorkspaceContextService>({ getWorkspace: () => ({ id: 'test', folders: [], configuration: null }) }));
+		const managed = URI.file('/managed/vs-nosh.code-workspace');
+		const workspace = { id: 'test', folders: [] as IWorkspace['folders'], configuration: managed };
+		instantiationService.stub(IWorkspaceContextService, upcastPartial<IWorkspaceContextService>({ getWorkspace: () => workspace }));
+		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({ updateFolders: async (_index, _count, folders) => { workspace.folders = (folders ?? []).map((folder, index) => ({ uri: folder.uri, name: 'test', index, toResource: (path: string) => URI.joinPath(folder.uri, path) })); } }));
+		instantiationService.get(IStorageService).store('terminalFirst.sessions', { managedWorkspace: managed.toString(), sessions: [] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { service, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, get active() { return active; }, get maximized() { return maximized; } };
+		return { service, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
 	}
 
 	test('starts in a shell and reuses a restored terminal', async () => {
@@ -103,10 +117,10 @@ suite('Terminal First', () => {
 		deepStrictEqual([state.active === restored, state.created.length, state.maximized], [true, 0, true]);
 	});
 
-	test('starts explicit file launches in the editor without creating a shell', async () => {
+	test('starts explicit file launches in an editor session with its shell', async () => {
 		const state = fixture([{ fileUri: URI.file('/project/file.ts') }]);
 		await state.service.initialize();
-		deepStrictEqual([state.created.length, state.hidden.get(Parts.PANEL_PART)], [0, true]);
+		deepStrictEqual([state.created.length, state.hidden.get(Parts.PANEL_PART)], [1, true]);
 	});
 
 	test('switches surfaces repeatedly without closing buffers or replacing the shell', async () => {
@@ -133,6 +147,31 @@ suite('Terminal First', () => {
 		deepStrictEqual([state.active === origin, state.opened[0].map(input => input.forceUntitled)], [true, [false, true]]);
 	});
 
+
+	test('selecting a tab restores its remembered editor surface', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const first = state.service.sessions[0].id;
+		await state.service.showEditor(false);
+		await state.service.newTerminal();
+		const second = state.service.sessions[1].id;
+		await state.service.selectSession(first);
+		deepStrictEqual(state.service.sessions.map(session => [session.mode, session.active]), [['editor', true], ['shell', false]]);
+		await state.service.selectSession(second);
+		deepStrictEqual([state.maximized, state.created.length], [true, 2]);
+	});
+
+	test('CLI directories switch the active workspace without replacing shells', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const first = state.active!;
+		await state.service.openFiles(['file:///one/file.ts'], first.shellIntegrationNonce, false, 'file:///one');
+		await state.service.newTerminal();
+		const second = state.active!;
+		await state.service.openFiles(['file:///two/file.ts'], second.shellIntegrationNonce, false, 'file:///two');
+		await state.service.selectSession(first.shellIntegrationNonce);
+		deepStrictEqual([state.workspace.folders[0].uri.toString(), state.created.length, state.active === first], ['file:///one', 2, true]);
+	});
 	test('rapid toggle requests are applied in order', async () => {
 		const state = fixture();
 		await state.service.initialize();
@@ -163,7 +202,7 @@ suite('Terminal First', () => {
 	test('reveals tools in the editor and hides them while the shell fills the window', async () => {
 		const state = fixture();
 		await state.service.initialize();
-		await state.service.toggleTools();
+		await state.service.showEditor();
 		strictEqual(state.hidden.get(Parts.STATUSBAR_PART), false);
 		await state.service.showShell();
 		strictEqual(state.hidden.get(Parts.STATUSBAR_PART), true);

@@ -5,7 +5,7 @@
 
 import { mainWindow } from '../../../../base/browser/window.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
-import { isMacintosh } from '../../../../base/common/platform.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
@@ -30,16 +30,20 @@ class TerminalFirstContribution {
 	}
 }
 
-if (isMacintosh) {
+if (terminalFirstEnabled) {
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
 		overrides: {
 			'workbench.startupEditor': 'none',
-			'workbench.editor.showTabs': 'none',
+			'workbench.welcomePage.experimentalOnboarding': false,
+			'terminal.integrated.initialHint': false,
+			'workbench.editor.showTabs': 'multiple',
 			'workbench.statusBar.visible': false,
-			'workbench.activityBar.location': 'hidden',
+			'workbench.activityBar.location': 'default',
 			'workbench.secondarySideBar.defaultVisibility': 'hidden',
 			'window.commandCenter': false,
+			'workbench.layoutControl.enabled': false,
+			'chat.titleBar.openInAgentsWindow.enabled': false,
 			'editor.minimap.enabled': false,
 			'breadcrumbs.enabled': false,
 			'terminal.integrated.tabs.enabled': false,
@@ -59,12 +63,11 @@ if (isMacintosh) {
 		{ id: 'terminalFirst.nextTerminal', title: localize2('terminalFirst.nextTerminal', "Next Shell Session"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.RightArrow, run: (service: ITerminalFirstService) => service.switchTerminal(1) },
 		{ id: 'terminalFirst.previousTerminal', title: localize2('terminalFirst.previousTerminal', "Previous Shell Session"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.LeftArrow, run: (service: ITerminalFirstService) => service.switchTerminal(-1) },
 		{ id: 'terminalFirst.pickTerminal', title: localize2('terminalFirst.pickTerminal', "Switch Shell Session"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyP, run: (service: ITerminalFirstService) => service.pickTerminal() },
-		{ id: 'terminalFirst.toggleTools', title: localize2('terminalFirst.toggleTools', "Toggle Workbench Tools"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyU, run: (service: ITerminalFirstService) => service.toggleTools() },
 	];
 	for (const action of actions) {
 		registerAction2(class extends Action2 {
 			constructor() {
-				super({ id: action.id, title: action.title, category: localize2('terminalFirst.category', "Terminal First"), f1: true, keybinding: { primary: action.key, weight: KeybindingWeight.WorkbenchContrib + 1 } });
+				super({ id: action.id, title: action.title, category: localize2('terminalFirst.category', "VS NOSH"), f1: true, keybinding: { primary: action.key, weight: KeybindingWeight.WorkbenchContrib + 1 } });
 			}
 			run(accessor: ServicesAccessor): Promise<void> {
 				return action.run(accessor.get(ITerminalFirstService));
@@ -73,5 +76,5 @@ if (isMacintosh) {
 	}
 
 	CommandsRegistry.registerCommand('_terminalFirst.windowId', () => mainWindow.vscodeWindowId);
-	CommandsRegistry.registerCommand('_terminalFirst.openFiles', (accessor, fileURIs: string[], terminalSession: string, wait: boolean) => accessor.get(ITerminalFirstService).openFiles(fileURIs, terminalSession, wait));
+	CommandsRegistry.registerCommand('_terminalFirst.openFiles', (accessor, fileURIs: string[], terminalSession: string, wait: boolean, cwd?: string) => accessor.get(ITerminalFirstService).openFiles(fileURIs, terminalSession, wait, cwd));
 }

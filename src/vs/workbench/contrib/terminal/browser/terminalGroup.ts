@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { localize } from '../../../../nls.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TERMINAL_VIEW_ID } from '../common/terminal.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { IDisposable, Disposable, DisposableStore, dispose, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -300,6 +302,7 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 	}
 
 	addInstance(shellLaunchConfigOrInstance: IShellLaunchConfig | ITerminalInstance, parentTerminalId?: number): void {
+		if (terminalFirstEnabled && this._terminalInstances.length) { throw new Error(localize('splitBlocked', "Use separate session tabs instead of terminal splits.")); }
 		let instance: ITerminalInstance;
 		// if a parent terminal is provided, find it
 		// otherwise, parent is the active terminal
@@ -415,6 +418,7 @@ export class TerminalGroup extends Disposable implements ITerminalGroup {
 	}
 
 	moveInstance(instances: SingleOrMany<ITerminalInstance>, index: number, position: 'before' | 'after'): void {
+		if (terminalFirstEnabled) { throw new Error(localize('joinBlocked', "Terminals must remain in separate session tabs.")); }
 		instances = asArray(instances);
 		const hasInvalidInstance = instances.some(instance => !this.terminalInstances.includes(instance));
 		if (hasInvalidInstance) {

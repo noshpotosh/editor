@@ -715,6 +715,8 @@ export class EditorParts extends MultiWindowParts<EditorPart, IEditorPartsMement
 		return this.activePart.sideGroup;
 	}
 
+	get allGroups(): IEditorGroupView[] { return this.parts.flatMap(part => part.allGroups); }
+
 	get groups(): IEditorGroupView[] {
 		return this.getGroups();
 	}
