@@ -381,6 +381,11 @@ export class TerminalService extends Disposable implements ITerminalService {
 		if (!value) {
 			return;
 		}
+		if (value.shellLaunchConfig.terminalFirstFloating) {
+			this._activeInstance = value;
+			this._onDidChangeActiveInstance.fire(value);
+			return;
+		}
 		// If this was a hideFromUser terminal created by the API this was triggered by show,
 		// in which case we need to create the terminal group
 		if (value.shellLaunchConfig.hideFromUser) {
@@ -528,7 +533,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 			if (!attachPersistentProcess) {
 				continue;
 			}
-			const instance = await this.createTerminal({ terminalFirstSession: true, config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel });
+			const instance = await this.createTerminal({ terminalFirstSession: !terminalFirstEnabled, terminalFirstFloating: terminalFirstEnabled, config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel });
 			instances.push(instance);
 		}
 		return instances;
@@ -595,6 +600,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async revealTerminal(source: ITerminalInstance, preserveFocus?: boolean): Promise<void> {
+		if (source.shellLaunchConfig.terminalFirstFloating) { return; }
 		if (source.target === TerminalLocation.Editor) {
 			await this._terminalEditorService.revealActiveEditor(preserveFocus);
 		} else {
@@ -864,7 +870,14 @@ export class TerminalService extends Disposable implements ITerminalService {
 				this._saveState();
 			}
 		}));
-		instanceDisposables.add(instance.onDidFocus(this._onDidChangeActiveInstance.fire, this._onDidChangeActiveInstance));
+		instanceDisposables.add(instance.onDidFocus(() => {
+			if (instance.shellLaunchConfig.terminalFirstFloating) {
+				this.setActiveInstance(instance);
+				this._onDidFocusInstance.fire(instance);
+			} else {
+				this._onDidChangeActiveInstance.fire(instance);
+			}
+		}));
 		instanceDisposables.add(instance.onRequestAddInstanceToGroup(async e => await this._addInstanceToGroup(instance, e)));
 		instanceDisposables.add(instance.onDidChangeShellType(() => this._extensionService.activateByEvent(`onTerminal:${instance.shellType}`)));
 		instanceDisposables.add(Event.runAndSubscribe(instance.capabilities.onDidAddCapability, (() => {
@@ -975,7 +988,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async createTerminal(options?: ICreateTerminalOptions): Promise<ITerminalInstance> {
-		if (terminalFirstEnabled && !options?.terminalFirstSession) {
+		if (terminalFirstEnabled && !options?.terminalFirstSession && !options?.terminalFirstFloating) {
 			throw new Error(nls.localize('terminalFirst.creationBlocked', "Use the session strip to open a terminal. Integrated terminals, terminal tasks, and terminal-backed debugging are unavailable."));
 		}
 		// Await the initialization of available profiles as long as this is not a pty terminal or a
@@ -1009,8 +1022,14 @@ export class TerminalService extends Disposable implements ITerminalService {
 		}
 		const shellLaunchConfig = config && hasKey(config, { extensionIdentifier: true }) ? {} : this._terminalInstanceService.convertProfileToShellLaunchConfig(config || {});
 
+		if (options?.terminalFirstFloating) {
+			shellLaunchConfig.hideFromUser = true;
+			shellLaunchConfig.forcePersist = true;
+			shellLaunchConfig.terminalFirstFloating = true;
+		}
+
 		// Get the contributed profile if it was provided
-		const contributedProfile = options?.skipContributedProfileCheck ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
+		const contributedProfile = options?.skipContributedProfileCheck || options?.terminalFirstFloating ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
 
 		const splitActiveTerminal = typeof options?.location === 'object' && hasKey(options.location, { splitActiveTerminal: true })
 			? options.location.splitActiveTerminal
@@ -1336,6 +1355,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	public async showBackgroundTerminal(instance: ITerminalInstance, suppressSetActive?: boolean): Promise<void> {
+		if (instance.shellLaunchConfig.terminalFirstFloating) { return; }
 		const index = this._backgroundedTerminalInstances.findIndex(bg => bg.instance === instance);
 		if (index === -1) {
 			return;

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled, isTerminalFirstCommandAllowed, isTerminalFirstInteraction, TerminalFirstShellContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { terminalFirstEnabled, isTerminalFirstCommandAllowed, isTerminalFirstInteraction, TerminalFirstFloatingVisibleContext, TerminalFirstShellContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { isKeyboardEvent, isMouseEvent, isPointerEvent, getActiveWindow } from '../../../../base/browser/dom.js';
 import { Action } from '../../../../base/common/actions.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -152,7 +152,7 @@ export function registerTerminalAction(
 	options.precondition = options.precondition ?? TerminalContextKeys.processSupported;
 	if (terminalFirstEnabled) {
 		const interaction = isTerminalFirstInteraction(options.id);
-		options.precondition = ContextKeyExpr.and(options.precondition, interaction ? TerminalFirstShellContext : ContextKeyExpr.false());
+		options.precondition = ContextKeyExpr.and(options.precondition, interaction ? ContextKeyExpr.or(TerminalFirstShellContext, TerminalFirstFloatingVisibleContext) : ContextKeyExpr.false());
 	}
 	// Remove run function from options so it's not passed through to registerAction2
 	const runFunc = options.run;

@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { fail, strictEqual } from 'assert';
+import { deepStrictEqual, fail, strictEqual } from 'assert';
 import { timeout } from '../../../../../base/common/async.js';
 import { Emitter } from '../../../../../base/common/event.js';
+import { upcastPartial } from '../../../../../base/test/common/mock.js';
 import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
@@ -52,6 +53,21 @@ suite('Workbench - TerminalService', () => {
 	});
 
 	suite('background terminals', () => {
+		test('floating terminals remain backgrounded when activated or revealed', async () => {
+			const disposed = store.add(new Emitter<ITerminalInstance>());
+			const config = { terminalFirstFloating: true, hideFromUser: true, forcePersist: true };
+			const instance = upcastPartial<ITerminalInstance>({ instanceId: 100, shellLaunchConfig: config, onDisposed: disposed.event });
+			instantiationService.stub(ITerminalInstanceService, 'convertProfileToShellLaunchConfig', () => config);
+			instantiationService.stub(ITerminalInstanceService, 'createInstance', () => instance);
+			terminalService.registerProcessSupport(true);
+			await terminalService.createTerminal({ terminalFirstFloating: true, config });
+			terminalService.setActiveInstance(instance);
+			await terminalService.showBackgroundTerminal(instance);
+			deepStrictEqual([terminalService.activeInstance === instance, terminalService.instances.includes(instance), terminalService.foregroundInstances.includes(instance)], [true, true, false]);
+			disposed.fire(instance);
+			strictEqual(terminalService.instances.includes(instance), false);
+		});
+
 		test('should remove disposed hidden terminals and their listeners', async () => {
 			const disposalEmitters = Array.from({ length: 3 }, () => store.add(new Emitter<ITerminalInstance>()));
 			const instances = disposalEmitters.map((emitter, index) => ({
@@ -66,6 +82,7 @@ suite('Workbench - TerminalService', () => {
 			const backgroundedTerminalDisposables = Reflect.get(terminalService, '_backgroundedTerminalDisposables') as { size: number };
 			for (let i = 0; i < instances.length; i++) {
 				const instance = await terminalService.createTerminal({
+					terminalFirstSession: true,
 					config: { hideFromUser: true },
 					skipContributedProfileCheck: true,
 				});

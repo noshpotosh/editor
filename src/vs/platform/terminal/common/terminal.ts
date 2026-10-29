@@ -627,6 +627,8 @@ export interface IShellLaunchConfig {
 	 * launch config, like `hideFromUser`.
 	 */
 	forcePersist?: boolean;
+	/** Presented by the Terminal First floating host, never promoted into a panel. */
+	terminalFirstFloating?: boolean;
 
 	/**
 	 * Whether this terminal is not a terminal that the user directly created and uses, but rather

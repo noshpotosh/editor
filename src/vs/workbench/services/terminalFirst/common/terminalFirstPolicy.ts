@@ -8,11 +8,20 @@ import product from '../../../../platform/product/common/product.js';
 import { RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 
 export const terminalFirstEnabled = isNative && isMacintosh && product.urlProtocol === 'terminal-first';
+export const TerminalFirstFloatingEnabledContext = new RawContextKey<boolean>('terminalFirstFloatingEnabled', false);
+export const TerminalFirstFloatingVisibleContext = new RawContextKey<boolean>('terminalFirstFloatingVisible', false);
+export const TerminalFirstFloatingFocusedContext = new RawContextKey<boolean>('terminalFirstFloatingFocused', false);
+
+export const TerminalFirstBrowserVisibleContext = new RawContextKey<boolean>('terminalFirstBrowserVisible', false);
+export const TerminalFirstBrowserFocusedContext = new RawContextKey<boolean>('terminalFirstBrowserFocused', false);
+export const TerminalFirstBrowserModeContext = new RawContextKey<string>('terminalFirstBrowserMode', '');
+
 export const TerminalFirstShellContext = new RawContextKey<boolean>('terminalFirstShell', false);
 export const TerminalFirstEnabledContext = new RawContextKey<boolean>('terminalFirstEnabled', terminalFirstEnabled);
 
 /** Window-local presentation policy. Only the session controller changes the active surface. */
 export const terminalFirstPolicy = {
+	floatingVisible: false,
 	mode: 'starting' as 'starting' | 'shell' | 'editor',
 	get shell(): boolean { return terminalFirstEnabled && this.mode === 'shell'; },
 };
@@ -25,7 +34,7 @@ export function isTerminalFirstInteraction(id: string): boolean {
 export function isTerminalFirstCommandAllowed(id: string, mode = terminalFirstPolicy.mode, enabled = terminalFirstEnabled): boolean {
 	if (!enabled) { return true; }
 	if (id.startsWith('workbench.action.terminal.')) {
-		return mode !== 'editor' && isTerminalFirstInteraction(id);
+		return (mode !== 'editor' || terminalFirstPolicy.floatingVisible) && isTerminalFirstInteraction(id);
 	}
 	if (mode !== 'shell') { return true; }
 	return !id.startsWith('workbench.') || ['workbench.action.reloadWindow', 'workbench.action.closeWindow', 'workbench.action.quit', 'workbench.action.toggleFullScreen', 'workbench.action.zoomIn', 'workbench.action.zoomOut', 'workbench.action.zoomReset'].includes(id);

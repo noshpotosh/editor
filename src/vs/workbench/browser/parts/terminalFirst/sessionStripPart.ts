@@ -81,6 +81,12 @@ export class SessionStripPart extends Part {
 		}
 		button(this.stripElement, '+', localize('newSession', "New Terminal"), 'new', () => this.service.newTerminal());
 		const editor = this.service.sessions.some(session => session.active && session.mode === 'editor');
+		if (editor) {
+			const files = button(this.stripElement, localize('files', "Files"), localize('toggleFileBrowser', "Toggle Floating File Browser"), 'files', () => this.service.toggleFloatingFileBrowser());
+			files.setAttribute('aria-pressed', String(this.service.floatingFileBrowserVisible));
+			const toggle = button(this.stripElement, localize('terminal', "Terminal"), localize('toggleFloatingTerminal', "Toggle Floating Terminal"), 'floating', () => this.service.toggleFloatingTerminal());
+			toggle.setAttribute('aria-pressed', String(this.service.floatingTerminalVisible));
+		}
 		const label = editor ? localize('returnToTerminal', "Return to Terminal") : localize('openEditor', "Open Editor");
 		button(this.stripElement, label, label, 'toggle', () => this.service.toggle()).classList.add('session-toggle');
 		if (focusedId) {

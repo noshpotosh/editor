@@ -5,7 +5,7 @@
 
 import { mainWindow } from '../../../../base/browser/window.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { terminalFirstEnabled, TerminalFirstFloatingEnabledContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
@@ -58,6 +58,8 @@ if (terminalFirstEnabled) {
 	}]);
 
 	const actions = [
+		{ id: 'terminalFirst.toggleFloatingFileBrowser', title: localize2('terminalFirst.toggleFloatingFileBrowser', "Toggle Floating File Browser"), key: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyE, run: (service: ITerminalFirstService) => service.toggleFloatingFileBrowser() },
+		{ id: 'terminalFirst.toggleFloatingTerminal', title: localize2('terminalFirst.toggleFloatingTerminal', "Toggle Floating Terminal"), key: KeyMod.WinCtrl | KeyCode.Backquote, run: (service: ITerminalFirstService) => service.toggleFloatingTerminal() },
 		{ id: 'terminalFirst.toggle', title: localize2('terminalFirst.toggle', "Toggle Shell / Editor"), key: KeyMod.CtrlCmd | KeyCode.Escape, run: (service: ITerminalFirstService) => service.toggle() },
 		{ id: 'terminalFirst.newTerminal', title: localize2('terminalFirst.newTerminal', "New Shell Session"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyN, run: (service: ITerminalFirstService) => service.newTerminal() },
 		{ id: 'terminalFirst.nextTerminal', title: localize2('terminalFirst.nextTerminal', "Next Shell Session"), key: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.RightArrow, run: (service: ITerminalFirstService) => service.switchTerminal(1) },
@@ -67,7 +69,7 @@ if (terminalFirstEnabled) {
 	for (const action of actions) {
 		registerAction2(class extends Action2 {
 			constructor() {
-				super({ id: action.id, title: action.title, category: localize2('terminalFirst.category', "VS NOSH"), f1: true, keybinding: { primary: action.key, weight: KeybindingWeight.WorkbenchContrib + 1 } });
+				super({ id: action.id, title: action.title, category: localize2('terminalFirst.category', "VS NOSH"), precondition: (action.id === 'terminalFirst.toggleFloatingTerminal' || action.id === 'terminalFirst.toggleFloatingFileBrowser') ? TerminalFirstFloatingEnabledContext : undefined, f1: true, keybinding: { primary: action.key, weight: KeybindingWeight.WorkbenchContrib + 1 } });
 			}
 			run(accessor: ServicesAccessor): Promise<void> {
 				return action.run(accessor.get(ITerminalFirstService));

@@ -26,9 +26,11 @@ The setup script installs the pinned, checksum-verified VSCodeVim `1.32.4` VSIX 
 | Block until the requested files close | `e --wait COMMIT_EDITMSG` |
 | Open a filename beginning with a dash | `e -- -notes.txt` |
 | Switch shell / editor | `Cmd+Escape` |
+| Toggle floating terminal (editor mode) | `Ctrl+Backtick` |
 | New shell session | `Cmd+Option+N` |
 | Previous / next shell | `Cmd+Option+Left` / `Cmd+Option+Right` |
 | Pick shell session | `Cmd+Option+P` |
+| Browse files with preview (editor mode) | `Cmd+Shift+E` |
 | Find a file (editor mode) | `Cmd+P` |
 | Command Palette (editor mode) | `Cmd+Shift+P` |
 
@@ -42,11 +44,25 @@ The window uses a managed `.code-workspace` file in its own workspace storage. U
 
 Editor groups remain alive while inactive and are excluded from active navigation. Save All, backups, and shutdown still include retained editors. Files opened in multiple sessions share the underlying document model. Session metadata uses persisted shell integration nonces; editor layouts use normal editor serialization and dirty-buffer backups. Reload/restart uses upstream terminal reconnection or revival. If a terminal cannot reconnect, its editor state is retained and a replacement shell is created when needed. A revived shell may be a new process.
 
-## Terminal ownership and future floating terminals
+## Floating terminal and terminal ownership
 
-The outer session controller is the only user-facing terminal creator. Integrated terminal creation, splits, terminal editors, terminal-backed tasks/debugging, and extension-created terminals are blocked. Other editor features, including debugging without a terminal, remain available. Guards exist at command, view-opening, layout, and terminal-creation boundaries, with context keys controlling terminal actions.
+In editor mode, press **Ctrl+Backtick**, click **Terminal** in the session strip, or run **Toggle Floating Terminal** to open a centered companion shell over the editor. Each outer session owns one companion shell, separate from its main shell. The first open uses the editor session’s directory and configured local terminal profile. Later opens preserve the shell’s process, directory, and scrollback.
 
-A future floating terminal should be a separate presentation host owned by the active editor session, with an explicit creation capability distinct from `terminalFirstSession`. Extend the terminal-creation policy with that capability, add its lifecycle/restore state to the session controller, and route only approved task/debug requests into that host. Keep the outer tab strip and shell-mode restrictions intact. Tests must cover closing the float, switching sessions, running processes, restoration, and CLI waits. No floating terminal is implemented in this version.
+The **Hide** button, shortcut, or a click in the editor outside the overlay hides it without terminating its process. Switching sessions or shell/editor modes also hides it. Plain Escape and Ctrl+C/D/R keep their terminal behavior; terminal find, copy/paste, scrolling, and selection remain available. The overlay follows the editor area when the window or sidebar is resized; it cannot be dragged or manually resized.
+
+`e` from either shell opens files in its owning editor session and hides the overlay. `e --wait` still waits for the requested files to close, not for a mode change or dismissal. A companion shell’s `cd` alone does not update Explorer; an explicit `e` request uses its invoking directory as usual.
+
+Reload/restart uses upstream terminal persistence and reconnection for both shells; the overlay always starts hidden. If the companion exits or cannot reconnect, the next toggle creates a replacement. Closing an outer session disposes both shells after save/discard/cancel decisions and configured running-process confirmation. Hiding the overlay never asks to kill a process.
+
+The session controller owns terminal creation. The floating host has its own creation capability and keeps its shells outside the panel and outer tab strip. Integrated terminal creation, splits, terminal editors, terminal-backed tasks/debugging, and extension-created terminals remain blocked. Other editor features, including debugging without a terminal, remain available. Multiple companion shells, floating tabs/splits, dragging, resizing, and task/debug routing are deferred.
+
+## Floating file browser
+
+In editor mode, **Cmd+Shift+E**, the session strip’s **Files** button, or **Toggle Floating File Browser** opens a Telescope-inspired browser at the editor session’s directory. Cmd+P remains Quick Open. The browser and companion terminal are mutually exclusive; switching sessions or returning to shell mode dismisses the browser.
+
+Type to fuzzy-filter the current folder. Up/Down or Ctrl+J/K selects a result, Enter enters a folder or opens a pinned editor, and Backspace on an empty filter goes to the parent. Escape enters normal mode: j/k selects, h goes to the parent, l opens, w returns to the session directory, . toggles dotfiles, and i or / returns to filtering. Escape or q in normal mode closes the browser. Header buttons and mouse navigation are also available.
+
+Previews are read-only and include unsaved text from existing models. Binary, unreadable, and files larger than 1 MiB show a placeholder and can still be opened. The preview hides in narrow editor areas. Browsing outside the initial directory does not change the workspace or shell directory. Dotfiles start hidden; other ignored or excluded files remain visible. Each opening resets the browser. File operations, recursive search, and multi-selection are not included.
 
 ## Branding
 
@@ -57,10 +73,10 @@ The displayed app name is **VS NOSH**, with generated artwork at `resources/darw
 ```sh
 node --test extensions/terminal-first/test/cli.test.cjs
 npm run build-fast -- --client-only
-./scripts/test.sh --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstPolicy.test --run vs/workbench/services/editor/test/browser/editorGroupsService.test --run vs/workbench/services/editor/test/browser/editorService.test
+./scripts/test.sh --run vs/workbench/contrib/terminalFirst/test/browser/fileBrowserModel.test --run vs/workbench/contrib/terminalFirst/test/browser/floatingFileBrowser.test --run vs/workbench/contrib/terminalFirst/test/browser/floatingTerminal.test --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstPolicy.test --run vs/workbench/services/editor/test/browser/editorGroupsService.test --run vs/workbench/services/editor/test/browser/editorService.test
 ```
 
-For interactive acceptance, launch two windows and open files from both. Exercise new files, quoted paths, unsaved close cancellation, repeated toggles, multiple sessions, Vim `:w` / `:q` / search, `e --wait`, per-tab directories, blocked sidebar/terminal commands, cancelled session closes, and window reload. Check a long-running shell command and its PID before and after toggling. Plain Escape and Ctrl+C/D/R must retain their shell behavior. Also check light, dark, and high contrast themes.
+For interactive acceptance, launch two windows and open files from both. Exercise new files, quoted paths, unsaved close cancellation, repeated toggles, multiple sessions, Vim `:w` / `:q` / search, `e --wait`, per-tab directories, blocked sidebar/terminal commands, cancelled session closes, and window reload. Check a long-running shell command and its PID before and after toggling. Exercise the floating terminal’s shortcut, Hide control, editor click dismissal, shell exit/recreation, and `e --wait` from its companion shell. Confirm a companion PID survives dismissal, session switches, and reload without adding outer tabs. Plain Escape and Ctrl+C/D/R must retain their shell behavior. Also check light, dark, and high contrast themes.
 
 On a first launch, complete VS Code's normal workspace trust prompt before starting a shell. Terminal First preserves that upstream behavior.
 

@@ -31,10 +31,12 @@ import { IWorkbenchEnvironmentService } from '../../../services/environment/comm
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IWorkbenchLayoutService, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { ITerminalFirstService, ITerminalFirstSession } from '../../../services/terminalFirst/common/terminalFirst.js';
-import { TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IWorkspaceEditingService } from '../../../services/workspaces/common/workspaceEditing.js';
 import { ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
+import { FloatingFileBrowser } from './floatingFileBrowser.js';
+import { FloatingTerminal } from './floatingTerminal.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -45,12 +47,15 @@ interface Session {
 	mode: 'shell' | 'editor';
 	cwd?: string;
 	terminal?: ITerminalInstance;
+	floatingTerminal?: ITerminalInstance;
+	floatingNonce?: string;
+	floatingCwd?: string;
 }
 
 interface StoredSessions {
 	active?: string;
 	managedWorkspace?: string;
-	sessions: Omit<Session, 'terminal'>[];
+	sessions: Omit<Session, 'terminal' | 'floatingTerminal'>[];
 }
 
 /** Owns terminal sessions and serializes every change of the visible surface. */
@@ -67,6 +72,17 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChangeSessions = this.changed.event;
 	private readonly shellContext;
+	private readonly floatingEnabledContext;
+	private readonly floatingVisibleContext;
+	private readonly floatingFocusedContext;
+	private browserHost: FloatingFileBrowser | undefined;
+	private browserVisible = false;
+	private browserGeneration = 0;
+	private readonly browserVisibleContext;
+	get floatingFileBrowserVisible(): boolean { return this.browserVisible; }
+	private floatingHost: FloatingTerminal | undefined;
+	private floatingVisible = false;
+	get floatingTerminalVisible(): boolean { return this.floatingVisible; }
 
 	get sessions(): readonly ITerminalFirstSession[] {
 		return this.sessionList.map(session => ({ id: session.id, title: session.terminal?.title || session.title, mode: session.mode, active: session === this.active }));
@@ -95,7 +111,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	) {
 		super();
 		TerminalFirstEnabledContext.bindTo(contextKeyService);
+		this.browserVisibleContext = TerminalFirstBrowserVisibleContext.bindTo(contextKeyService);
 		this.shellContext = TerminalFirstShellContext.bindTo(contextKeyService);
+		this.floatingEnabledContext = TerminalFirstFloatingEnabledContext.bindTo(contextKeyService);
+		this.floatingVisibleContext = TerminalFirstFloatingVisibleContext.bindTo(contextKeyService);
+		this.floatingFocusedContext = TerminalFirstFloatingFocusedContext.bindTo(contextKeyService);
 		this._register(storageService.onWillSaveState(() => this.saveSessions()));
 		this._register(terminalService.onAnyInstanceTitleChange(() => this.changed.fire()));
 		this._register(editorService.onDidCloseEditor(() => {
@@ -107,6 +127,13 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			});
 		}));
 		this._register(terminalService.onDidDisposeInstance(terminal => {
+			const owner = this.sessionList.find(session => session.floatingTerminal === terminal);
+			if (owner) {
+				owner.floatingTerminal = undefined;
+				owner.floatingNonce = undefined;
+				if (owner === this.active) { this.hideFloating(true); }
+				this.saveSessions();
+			}
 			const session = this.sessionList.find(session => session.terminal === terminal);
 			if (session) {
 				session.terminal = undefined;
@@ -133,7 +160,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		await this.terminalService.whenConnected;
 		if (stored) {
 			for (const session of stored.sessions) {
-				this.sessionList.push({ ...session, terminal: this.terminalGroupService.instances.find(instance => instance.shellIntegrationNonce === session.nonce) });
+				this.sessionList.push({
+					...session,
+					terminal: this.terminalGroupService.instances.find(instance => instance.shellIntegrationNonce === session.nonce),
+					floatingTerminal: this.terminalService.instances.find(instance => instance.shellLaunchConfig.terminalFirstFloating && instance.shellIntegrationNonce === session.floatingNonce),
+				});
 			}
 		}
 		for (const terminal of this.terminalGroupService.instances) {
@@ -178,12 +209,115 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		const state: StoredSessions = {
 			active: this.active?.id,
 			managedWorkspace: this.managedWorkspace?.toString(),
-			sessions: this.sessionList.map(({ terminal, ...session }) => {
+			sessions: this.sessionList.map(({ id, nonce, title, mode, cwd: savedCwd, terminal, floatingTerminal, floatingNonce, floatingCwd }) => {
 				const cwd = terminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd();
-				return { ...session, title: terminal?.title || session.title, cwd: cwd ? URI.file(cwd).toString() : session.cwd || (terminal?.initialCwd ? URI.file(terminal.initialCwd).toString() : undefined) };
+				return {
+					id, nonce, mode, title: terminal?.title || title,
+					cwd: cwd ? URI.file(cwd).toString() : savedCwd || (terminal?.initialCwd ? URI.file(terminal.initialCwd).toString() : undefined),
+					floatingNonce,
+					floatingCwd: floatingTerminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd() || floatingCwd,
+				};
 			}),
 		};
 		this.storageService.store(TerminalFirstService.STORAGE_KEY, state, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+	}
+
+	toggleFloatingFileBrowser(): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.active;
+			if (!session || session.mode !== 'editor') { return; }
+			if (this.browserVisible) { this.hideBrowser(true); return; }
+			const root = session.cwd ? URI.parse(session.cwd) : this.workspaceContextService.getWorkspace().folders[0]?.uri ?? (session.terminal?.initialCwd ? URI.file(session.terminal.initialCwd) : undefined);
+			if (!root) { throw new Error(localize('browserDirectoryUnavailable', "The session directory is not available yet. Try again after the shell starts.")); }
+			this.hideFloating();
+			this.browserHost ??= this._register(this.instantiationService.createInstance(FloatingFileBrowser,
+				(focus: boolean) => { void this.hideFloatingFileBrowser(focus).catch(error => this.logService.error(error)); },
+				(resource: URI) => {
+					const owner = this.active;
+					const generation = this.browserGeneration;
+					return this.transitions.queue(async () => {
+						if (!this.browserVisible || this.browserGeneration !== generation || this.active !== owner || owner?.mode !== 'editor') { return false; }
+						const editor = await this.editorService.openEditor({ resource, options: { pinned: true } });
+						if (!editor) { throw new Error(localize('fileOpenCancelled', "The file could not be opened.")); }
+						this.hideBrowser(true);
+						return true;
+					});
+				}));
+			this.browserVisible = true;
+			this.browserVisibleContext.set(true);
+			this.changed.fire();
+			try { this.browserHost.show(root); }
+			catch (error) { this.hideBrowser(true); throw error; }
+		});
+	}
+
+	hideFloatingFileBrowser(focusEditor = true): Promise<void> {
+		return this.transitions.queue(async () => this.hideBrowser(focusEditor));
+	}
+
+	private hideBrowser(focusEditor = false): void {
+		if (!this.browserVisible) { return; }
+		this.browserGeneration++;
+		this.browserHost?.hideBrowser();
+		this.browserVisible = false;
+		this.browserVisibleContext.set(false);
+		this.changed.fire();
+		if (focusEditor) { this.editorGroupsService.activeGroup.focus(); }
+	}
+
+	toggleFloatingTerminal(): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.active;
+			if (!session || session.mode !== 'editor') { return; }
+			if (this.floatingVisible) { this.hideFloating(true); return; }
+			this.hideBrowser();
+			if (!session.floatingTerminal) {
+				const terminal = await this.terminalService.createTerminal({
+					location: TerminalLocation.Panel,
+					terminalFirstFloating: true,
+					cwd: session.floatingCwd || (session.cwd ? URI.parse(session.cwd).fsPath : session.terminal?.initialCwd),
+				});
+				session.floatingTerminal = terminal;
+				session.floatingNonce = terminal.shellIntegrationNonce;
+				session.floatingCwd = terminal.initialCwd;
+			}
+			this.floatingHost ??= this._register(this.instantiationService.createInstance(FloatingTerminal,
+				(focusEditor: boolean) => { void this.hideFloatingTerminal(focusEditor).catch(error => this.logService.error(error)); },
+				(focused: boolean) => {
+					this.floatingFocusedContext.set(focused);
+				}));
+			try {
+				this.floatingHost.show(session.floatingTerminal);
+				this.floatingVisible = true;
+				terminalFirstPolicy.floatingVisible = true;
+				this.floatingVisibleContext.set(true);
+				this.terminalService.setActiveInstance(session.floatingTerminal);
+				this.saveSessions();
+				this.changed.fire();
+				await session.floatingTerminal.focusWhenReady();
+			} catch (error) {
+				this.hideFloating(true);
+				throw error;
+			}
+		});
+	}
+
+	hideFloatingTerminal(focusEditor = true): Promise<void> {
+		return this.transitions.queue(async () => this.hideFloating(focusEditor));
+	}
+
+	private hideFloating(focusEditor = false): void {
+		const wasVisible = this.floatingVisible;
+		this.floatingHost?.hideTerminal();
+		this.floatingVisible = false;
+		this.floatingVisibleContext.set(false);
+		this.floatingFocusedContext.set(false);
+		terminalFirstPolicy.floatingVisible = false;
+		if (wasVisible) {
+			if (this.active?.terminal) { this.terminalService.setActiveInstance(this.active.terminal); }
+			if (focusEditor) { this.editorGroupsService.activeGroup.focus(); }
+			this.changed.fire();
+		}
 	}
 
 	toggle(): Promise<void> { return this.transitions.queue(() => this.present(this.active!, this.active?.mode === 'shell' ? 'editor' : 'shell')); }
@@ -193,6 +327,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private async present(session: Session, mode: 'shell' | 'editor', focus = true, cwd?: string): Promise<void> {
 		if (!session) { return; }
 		this.changingSession = true;
+		this.hideBrowser();
+		this.hideFloating();
 		try {
 			const terminal = await this.ensureTerminal(session);
 			if (mode === 'editor') { await this.updateDirectory(session, cwd); }
@@ -201,6 +337,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			session.mode = mode;
 			terminalFirstPolicy.mode = mode;
 			this.shellContext.set(mode === 'shell');
+			this.floatingEnabledContext.set(mode === 'editor');
 			this.terminalService.setActiveInstance(terminal);
 			this.layoutService.mainContainer.classList.toggle('terminal-first-shell', mode === 'shell');
 			this.layoutService.mainContainer.classList.remove('terminal-first-minimal');
@@ -293,7 +430,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			const session = this.sessionList.find(session => session.id === id);
 			if (!session) { return; }
 			const confirm = this.configurationService.getValue<string>('terminal.integrated.confirmOnKill');
-			if (session.terminal?.hasChildProcesses && (confirm === 'always' || confirm === 'panel')) {
+			if ((session.terminal?.hasChildProcesses || session.floatingTerminal?.hasChildProcesses) && (confirm === 'always' || confirm === 'panel')) {
 				const result = await this.dialogService.confirm({ message: localize('closeRunning', "Close this terminal and its running processes?"), primaryButton: localize('close', "Close") });
 				if (!result.confirmed) { return; }
 			}
@@ -306,6 +443,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 					return;
 				}
 				this.sessionList.splice(this.sessionList.indexOf(session), 1);
+				if (session === this.active) { this.hideBrowser(); this.hideFloating(); }
+				session.floatingTerminal?.dispose(TerminalExitReason.User);
 				session.terminal?.dispose(TerminalExitReason.User);
 				if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 				const next = this.active === session ? this.sessionList[0] : this.active!;
@@ -322,7 +461,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		const resources = fileURIs.map(value => URI.parse(value));
 		let closed: Promise<void> | undefined;
 		await this.transitions.queue(async () => {
-			const session = this.sessionList.find(session => session.terminal?.shellIntegrationNonce === terminalSession);
+			const session = this.sessionList.find(session => session.terminal?.shellIntegrationNonce === terminalSession || session.floatingTerminal?.shellIntegrationNonce === terminalSession);
 			if (!session) { throw new Error(localize('missingSession', "This shell session is no longer attached to the window. Open a new shell session and retry.")); }
 			await this.present(session, 'editor', false, cwd);
 			const editors = await Promise.all(resources.map(async resource => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true } })));

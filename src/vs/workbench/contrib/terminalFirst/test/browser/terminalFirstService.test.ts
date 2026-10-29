@@ -23,6 +23,10 @@ import { ITerminalGroupService, ITerminalInstance, ITerminalService } from '../.
 import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService, IWorkspace } from '../../../../../platform/workspace/common/workspace.js';
+import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
+import { TestDialogService } from '../../../../../platform/dialogs/test/common/testDialogService.js';
+import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 
 suite('Terminal First', () => {
@@ -36,6 +40,14 @@ suite('Terminal First', () => {
 		const focused = store.add(new Emitter<ITerminalInstance>());
 		const created: ITerminalInstance[] = [];
 		const terminals: ITerminalInstance[] = [];
+		const allTerminals: ITerminalInstance[] = [];
+		const disposed = store.add(new Emitter<ITerminalInstance>());
+		const dialog = new TestDialogService();
+		const config = new TestConfigurationService();
+		let failCreation = false;
+		let editorFocusCount = 0;
+		let cancelEditorClose = false;
+		const disposedIds: number[] = [];
 		let active: ITerminalInstance | undefined;
 		let maximized = false;
 		const hidden = new Map<Parts, boolean>();
@@ -60,24 +72,39 @@ suite('Terminal First', () => {
 			}
 		}
 		const editors = store.add(new Editors());
-		const addTerminal = () => {
+		const addTerminal = (floating = false) => {
+			const id = allTerminals.length + 1;
 			const terminal = upcastPartial<ITerminalInstance>({
-				instanceId: terminals.length + 1,
-				title: `Shell ${terminals.length + 1}`,
+				instanceId: id,
+				shellLaunchConfig: { terminalFirstFloating: floating },
+				onTitleChanged: Event.None,
+				attachToElement: () => { },
+				detachFromElement: () => { },
+				setVisible: () => { },
+				layout: () => { },
+				dispose: () => {
+					disposedIds.push(id);
+					const index = terminals.indexOf(terminal);
+					if (index >= 0) { terminals.splice(index, 1); }
+					disposed.fire(terminal);
+				},
+				title: `Shell ${id}`,
 				capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined }),
-				shellIntegrationNonce: `session-${terminals.length + 1}`,
+				shellIntegrationNonce: `session-${id}`,
 				focusWhenReady: async () => { focused.fire(terminal); },
 			});
-			terminals.push(terminal);
+			allTerminals.push(terminal);
+			if (!floating) { terminals.push(terminal); }
 			active = terminal;
 			return terminal;
 		};
 		instantiationService.stub(IEditorService, editors);
 		instantiationService.stub(ITerminalService, upcastPartial<ITerminalService>({
 			whenConnected: Promise.resolve(),
-			onDidDisposeInstance: Event.None,
+			instances: allTerminals,
+			onDidDisposeInstance: disposed.event,
 			onAnyInstanceTitleChange: Event.None,
-			createTerminal: async () => { const terminal = addTerminal(); created.push(terminal); return terminal; },
+			createTerminal: async options => { if (failCreation) { throw new Error('launch failed'); } const terminal = addTerminal(options?.terminalFirstFloating); created.push(terminal); return terminal; },
 			setActiveInstance: terminal => { active = terminal; },
 		}));
 		instantiationService.stub(ITerminalGroupService, upcastPartial<ITerminalGroupService>({
@@ -88,6 +115,8 @@ suite('Terminal First', () => {
 		instantiationService.stub(IWorkbenchLayoutService, upcastPartial<IWorkbenchLayoutService>({
 			whenRestored: Promise.resolve(),
 			mainContainer: document.createElement('div'),
+			onDidLayoutMainContainer: Event.None,
+			getContainer: () => document.createElement('div'),
 			setPartHidden: (value, part) => { hidden.set(part, value); },
 			isPanelMaximized: () => maximized,
 			toggleMaximizedPanel: () => { maximized = !maximized; },
@@ -95,20 +124,156 @@ suite('Terminal First', () => {
 			setPanelAlignment: () => { },
 			layout: () => { },
 		}));
-		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({}), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { } }), enforcePartOptions: () => toDisposable(() => { }) }));
+		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({ onDidLayout: Event.None, sessions: { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose } }), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate }));
-		instantiationService.stub(IFileService, upcastPartial<IFileService>({ exists: async resource => !resource.path.endsWith('new.ts') }));
+		instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('new.ts'));
 		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({}));
-		instantiationService.stub(IWorkspaceContextService, upcastPartial<IWorkspaceContextService>({ getWorkspace: () => ({ id: 'test', folders: [], configuration: null }) }));
 		const managed = URI.file('/managed/vs-nosh.code-workspace');
 		const workspace = { id: 'test', folders: [] as IWorkspace['folders'], configuration: managed };
-		instantiationService.stub(IWorkspaceContextService, upcastPartial<IWorkspaceContextService>({ getWorkspace: () => workspace }));
+		instantiationService.stub(IWorkspaceContextService, 'getWorkspace', () => workspace);
 		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({ updateFolders: async (_index, _count, folders) => { workspace.folders = (folders ?? []).map((folder, index) => ({ uri: folder.uri, name: 'test', index, toResource: (path: string) => URI.joinPath(folder.uri, path) })); } }));
 		instantiationService.get(IStorageService).store('terminalFirst.sessions', { managedWorkspace: managed.toString(), sessions: [] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		instantiationService.stub(IDialogService, dialog);
+		instantiationService.stub(IConfigurationService, config);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { service, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
+		return { service, disposedIds, cancelEditorClose: () => { cancelEditorClose = true; }, dialog, config, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
 	}
+
+	test('file browser is editor-only, excludes terminal overlay, and leaves session directory unchanged', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.toggleFloatingFileBrowser();
+		strictEqual(state.service.floatingFileBrowserVisible, false);
+		await state.service.openFiles(['file:///project/app.ts'], state.active!.shellIntegrationNonce, false, 'file:///project');
+		await state.service.toggleFloatingTerminal();
+		await state.service.toggleFloatingFileBrowser();
+		deepStrictEqual([state.service.floatingFileBrowserVisible, state.service.floatingTerminalVisible, state.workspace.folders.map(folder => folder.uri.path)], [true, false, ['/project']]);
+		await state.service.toggleFloatingTerminal();
+		deepStrictEqual([state.service.floatingFileBrowserVisible, state.service.floatingTerminalVisible], [false, true]);
+		await state.service.toggleFloatingFileBrowser();
+		const count = state.editorFocusCount;
+		await state.service.hideFloatingFileBrowser();
+		strictEqual(state.editorFocusCount, count + 1);
+		await state.service.toggleFloatingFileBrowser();
+		await state.service.newTerminal();
+		strictEqual(state.service.floatingFileBrowserVisible, false);
+		await state.service.selectSession(state.service.sessions[0].id);
+		await state.service.toggleFloatingFileBrowser();
+		await state.service.showShell();
+		strictEqual(state.service.floatingFileBrowserVisible, false);
+	});
+
+	test('floating shell is lazy, independent, and reused through rapid toggles', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.toggleFloatingTerminal();
+		strictEqual(state.created.length, 1);
+		await state.service.showEditor();
+		await Promise.all([state.service.toggleFloatingTerminal(), state.service.toggleFloatingTerminal(), state.service.toggleFloatingTerminal()]);
+		deepStrictEqual([state.created.length, state.terminals.length, state.service.sessions.length, state.service.floatingTerminalVisible, state.active === state.created[1]], [2, 1, 1, true, true]);
+		await state.service.hideFloatingTerminal(false);
+		const focusCount = state.editorFocusCount;
+		await state.service.toggleFloatingTerminal();
+		await state.service.hideFloatingTerminal();
+		deepStrictEqual([state.created.length, state.editorFocusCount - focusCount, state.active === state.created[0]], [2, 1, true]);
+	});
+
+	test('session and surface switches hide floats and retain separate companion shells', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const first = state.service.sessions[0].id;
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		const companion = state.active;
+		await state.service.newTerminal();
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		await state.service.selectSession(first);
+		strictEqual(state.service.floatingTerminalVisible, false);
+		await state.service.toggleFloatingTerminal();
+		strictEqual(state.active, companion);
+		await state.service.showShell();
+		deepStrictEqual([state.service.floatingTerminalVisible, state.created.length, state.service.sessions.length], [false, 4, 2]);
+	});
+
+	test('companion CLI requests reveal their owning editor and preserve waits', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		const companion = state.active!;
+		const owner = state.service.sessions[0].id;
+		await state.service.newTerminal();
+		let completed = false;
+		const pending = state.service.openFiles(['file:///companion/file.ts'], companion.shellIntegrationNonce, true, 'file:///companion').then(() => { completed = true; });
+		await state.service.showEditor(false);
+		await state.service.toggleFloatingTerminal();
+		await state.service.hideFloatingTerminal();
+		deepStrictEqual([state.service.sessions.find(session => session.active)?.id, state.workspace.folders[0].uri.toString(), completed], [owner, 'file:///companion', false]);
+		const editor = state.editors.editors[0];
+		state.editors.editors = [];
+		state.closed.fire({ editor, groupId: 0, context: EditorCloseContext.UNKNOWN, index: 0, sticky: false });
+		await pending;
+	});
+
+	test('exited companion is recreated only on the next toggle', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		state.active!.dispose();
+		deepStrictEqual([state.service.floatingTerminalVisible, state.created.length], [false, 2]);
+		await state.service.toggleFloatingTerminal();
+		deepStrictEqual([state.service.floatingTerminalVisible, state.created.length], [true, 3]);
+	});
+
+	test('creation failure leaves the editor usable and the float hidden', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		state.failCreation();
+		await rejects(state.service.toggleFloatingTerminal(), /launch failed/);
+		deepStrictEqual([state.service.floatingTerminalVisible, state.service.sessions[0].mode, state.created.length], [false, 'editor', 1]);
+	});
+
+	test('restores the companion without adding an outer tab or reopening the overlay', async () => {
+		const state = fixture();
+		const shell = state.addTerminal();
+		const companion = state.addTerminal(true);
+		state.storage.store('terminalFirst.sessions', { managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [{ id: shell.shellIntegrationNonce, nonce: shell.shellIntegrationNonce, title: 'Shell', mode: 'editor', floatingNonce: companion.shellIntegrationNonce }] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		await state.service.initialize();
+		deepStrictEqual([state.service.sessions.length, state.service.floatingTerminalVisible, state.created.length], [1, false, 0]);
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		strictEqual(state.active, companion);
+	});
+
+	test('closing a session checks companion processes and cancellation preserves both shells', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		Object.defineProperty(state.active!, 'hasChildProcesses', { value: true });
+		await state.config.setUserConfiguration('terminal.integrated.confirmOnKill', 'always');
+		state.dialog.setConfirmResult({ confirmed: false });
+		const id = state.service.sessions[0].id;
+		await state.service.closeSession(id);
+		deepStrictEqual([state.service.sessions.length, state.service.floatingTerminalVisible, state.created.length], [1, true, 2]);
+		state.dialog.setConfirmResult({ confirmed: true });
+		await state.service.closeSession(id);
+		deepStrictEqual([state.service.sessions.length, state.service.floatingTerminalVisible, state.created.length, state.disposedIds], [1, false, 3, [2, 1]]);
+	});
+
+	test('cancelled dirty-editor close preserves both shells and the visible float', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		await state.service.toggleFloatingTerminal();
+		state.cancelEditorClose();
+		await state.service.closeSession(state.service.sessions[0].id);
+		deepStrictEqual([state.disposedIds, state.service.floatingTerminalVisible, state.service.sessions.length], [[], true, 1]);
+	});
 
 	test('starts in a shell and reuses a restored terminal', async () => {
 		const state = fixture();
