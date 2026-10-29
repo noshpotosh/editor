@@ -31,6 +31,7 @@ export const IExtensionStatusBarItemService = createDecorator<IExtensionStatusBa
 
 export interface IExtensionStatusBarItemChangeEvent {
 	readonly added?: ExtensionStatusBarEntry;
+	readonly updated?: ExtensionStatusBarEntry;
 	readonly removed?: string;
 }
 
@@ -152,6 +153,7 @@ class ExtensionStatusBarItemService implements IExtensionStatusBarItemService {
 			// Otherwise update
 			existingEntry.accessor.update(entry);
 			existingEntry.entry = entry;
+			this._onDidChange.fire({ updated: [entryId, { entry, alignment, priority }] });
 			return StatusBarUpdateKind.DidUpdate;
 		}
 	}

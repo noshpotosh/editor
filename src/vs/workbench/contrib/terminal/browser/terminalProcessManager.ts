@@ -551,6 +551,10 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 
 		const env = await this._resolveEnvironment(backend, variableResolver, shellLaunchConfig);
 
+		// The nonce is restored with persistent terminals, so CLI requests can find their shell
+		// even when renderer instance IDs change across a window reload.
+		env.TERMINAL_FIRST_SESSION = this.shellIntegrationNonce;
+
 		const options: ITerminalProcessOptions = {
 			shellIntegration: {
 				enabled: this._configurationService.getValue(TerminalSettingId.ShellIntegrationEnabled),

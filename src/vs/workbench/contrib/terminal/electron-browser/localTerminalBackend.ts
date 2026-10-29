@@ -346,6 +346,7 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 				mark('code/terminal/willGetReviveEnvironments');
 				await Promise.all(reviveBufferState.map(async state => {
 					const { env, environmentVariableCollections } = await this._resolveEnvironmentForRevive(variableResolver, state.shellLaunchConfig);
+					env.TERMINAL_FIRST_SESSION = state.processLaunchConfig.options.shellIntegration.nonce;
 					state.processLaunchConfig.env = env;
 					state.processLaunchConfig.options.environmentVariableCollections = environmentVariableCollections;
 				}));

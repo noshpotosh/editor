@@ -168,7 +168,7 @@ suite('LocalTerminalBackend', () => {
 					env: { PATH: '/stale/bin:/foreign/bin' },
 					executableEnv: {},
 					options: {
-						shellIntegration: { enabled: false, suggestEnabled: false, nonce: '' },
+						shellIntegration: { enabled: false, suggestEnabled: false, nonce: 'session-before-restart' },
 						windowsUseConptyDll: false,
 						environmentVariableCollections: staleOptions,
 						isScreenReaderOptimized: false
@@ -193,11 +193,12 @@ suite('LocalTerminalBackend', () => {
 		deepStrictEqual({
 			env: {
 				PATH: revivedState[0].processLaunchConfig.env.PATH,
+				TERMINAL_FIRST_SESSION: revivedState[0].processLaunchConfig.env.TERMINAL_FIRST_SESSION,
 				SHARED_VALUE: revivedState[0].processLaunchConfig.env.SHARED_VALUE
 			},
 			collections: revivedState[0].processLaunchConfig.options.environmentVariableCollections
 		}, {
-			env: { PATH: '/base/bin', SHARED_VALUE: 'available' },
+			env: { PATH: '/base/bin', TERMINAL_FIRST_SESSION: 'session-before-restart', SHARED_VALUE: 'available' },
 			collections: [[
 				'foreign.extension',
 				[['shared-value', { variable: 'SHARED_VALUE', value: 'available', type: EnvironmentVariableMutatorType.Replace }]],

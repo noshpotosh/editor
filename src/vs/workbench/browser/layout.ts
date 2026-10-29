@@ -2330,6 +2330,8 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 
 	setPartHidden(hidden: boolean, part: Parts): void {
 		switch (part) {
+			case Parts.STATUSBAR_PART:
+				return this.setStatusBarHidden(hidden);
 			case Parts.ACTIVITYBAR_PART:
 				return this.setActivityBarHidden(hidden);
 			case Parts.SIDEBAR_PART:

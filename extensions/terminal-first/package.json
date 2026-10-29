@@ -1,0 +1,17 @@
+{
+	"name": "terminal-first",
+	"publisher": "vscode",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"engines": { "vscode": "^1.144.0" },
+	"main": "./extension.cjs",
+	"extensionKind": ["ui"],
+	"activationEvents": ["onStartupFinished", "onCommand:terminalFirst.initializeShell"],
+	"capabilities": {
+		"untrustedWorkspaces": { "supported": true },
+		"virtualWorkspaces": { "supported": false }
+	}
+}

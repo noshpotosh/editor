@@ -1,0 +1,10 @@
+#!/bin/sh
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License. See License.txt in the project root for license information.
+
+if [ -z "$TERMINAL_FIRST_NODE" ]; then
+	printf '%s\n' 'e: open a Terminal First shell before using this command.' >&2
+	exit 1
+fi
+
+ELECTRON_RUN_AS_NODE=1 exec "$TERMINAL_FIRST_NODE" "$(dirname "$0")/../cli.cjs" "$@"

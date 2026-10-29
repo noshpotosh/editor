@@ -36,6 +36,13 @@ export interface StatusPipeArgs {
 	type: 'status';
 }
 
+export interface TerminalFirstOpenPipeArgs {
+	type: 'terminalFirstOpen';
+	fileURIs: string[];
+	terminalSession: string;
+	wait: boolean;
+}
+
 export interface ExtensionManagementPipeArgs {
 	type: 'extensionManagement';
 	list?: { showVersions?: boolean; category?: string };
@@ -44,7 +51,7 @@ export interface ExtensionManagementPipeArgs {
 	force?: boolean;
 }
 
-export type PipeCommand = OpenCommandPipeArgs | StatusPipeArgs | OpenExternalCommandPipeArgs | ExtensionManagementPipeArgs;
+export type PipeCommand = OpenCommandPipeArgs | StatusPipeArgs | OpenExternalCommandPipeArgs | ExtensionManagementPipeArgs | TerminalFirstOpenPipeArgs;
 
 export interface ICommandsExecuter {
 	executeCommand<T>(id: string, ...args: unknown[]): Promise<T>;
@@ -98,6 +105,12 @@ export class CLIServerBase {
 				const data: PipeCommand | any = JSON.parse(chunks.join(''));
 				let returnObj: string | undefined;
 				switch (data.type) {
+					case 'terminalFirstOpen':
+						if (!Array.isArray(data.fileURIs) || !data.fileURIs.every((value: string) => typeof value === 'string') || typeof data.terminalSession !== 'string' || typeof data.wait !== 'boolean') {
+							throw new Error('Invalid Terminal First open request');
+						}
+						await this._commands.executeCommand('_terminalFirst.openFiles', data.fileURIs, data.terminalSession, data.wait);
+						break;
 					case 'open':
 						returnObj = await this.open(data);
 						break;

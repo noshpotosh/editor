@@ -1,0 +1,25 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.terminal-first-vim-status {
+	display: none;
+}
+
+.terminal-first-minimal .terminal-first-vim-status:not(:empty) {
+	display: block;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 4px 8px;
+	color: var(--vscode-editorWidget-foreground);
+	background: var(--vscode-editorWidget-background);
+	font-family: var(--monaco-monospace-font);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	pointer-events: none;
+}
+
+.terminal-first-vim-status.error {
+	color: var(--vscode-errorForeground);
+}
