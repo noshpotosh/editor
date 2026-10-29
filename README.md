@@ -1,76 +1,93 @@
-# Visual Studio Code - Open Source ("Code - OSS")
-[![Feature Requests](https://img.shields.io/github/issues/microsoft/vscode/feature-request.svg)](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
-[![Bugs](https://img.shields.io/github/issues/microsoft/vscode/bug.svg)](https://github.com/microsoft/vscode/issues?utf8=✓&q=is%3Aissue+is%3Aopen+label%3Abug)
+# Terminal First
 
-## The Repository
+A terminal-first fork of Code - OSS for developers who want to live in the shell and open a GUI editor when they need one.
 
-This repository ("`Code - OSS`") is where we (Microsoft) develop the [Visual Studio Code](https://code.visualstudio.com) product together with the community. Not only do we work on code and issues here, but we also publish our [roadmap](https://github.com/microsoft/vscode/wiki/Roadmap), [monthly iteration plans](https://github.com/microsoft/vscode/wiki/Iteration-Plans), and our [endgame plans](https://github.com/microsoft/vscode/wiki/Running-the-Endgame). This source code is available to everyone under the standard [MIT license](https://github.com/microsoft/vscode/blob/main/LICENSE.txt).
+The app opens into a full-window terminal. Run `e src/app.ts` to edit a file with VS Code's editor and Vim-style modal editing, then press `Cmd+Escape` to return to the same shell. Your buffers, editor splits, shell processes, and scrollback stay in place as you switch.
 
-## Visual Studio Code
+This is an early macOS source build aimed at becoming a personal daily driver. Packaged releases and automatic updates are not available yet.
 
-<p align="center">
-  <img alt="VS Code in action" src="https://github.com/user-attachments/assets/56af271c-949d-454c-a3ea-16188c063414">
-</p>
+## The experience
 
-[Visual Studio Code](https://code.visualstudio.com) is a distribution of the `Code - OSS` repository with Microsoft-specific customizations released under a traditional [Microsoft product license](https://code.visualstudio.com/License/).
+- **Shell on launch.** Ordinary windows start in the terminal; explicit file launches open the editor.
+- **An editor on demand.** `e file` opens local files in the originating window, including paths with spaces and files that do not exist yet. `e --wait file` waits until the requested files close.
+- **Vim-style editing.** A pinned VSCodeVim extension provides modal editing. Its mode, pending keys, command line, and messages remain visible inside the editor while the status bar is hidden.
+- **Less permanent UI.** Sidebars, activity bar, status bar, editor tabs, terminal tabs, minimap, breadcrumbs, and command center are hidden by default. Workbench tools remain available through commands and a reveal shortcut.
+- **Several shell sessions.** Create, cycle through, and pick terminal sessions from the keyboard.
+- **An isolated profile.** Development launchers keep settings, extensions, and shared data under `.build/terminal-first`, separate from an installed VS Code profile.
 
-[Visual Studio Code](https://code.visualstudio.com) combines the simplicity of a code editor with what developers need for their core edit-build-debug cycle. It provides comprehensive code editing, navigation, and understanding support along with lightweight debugging, a rich extensibility model, and lightweight integration with existing tools.
+The editing engine is VS Code with VSCodeVim; this version does not embed a Neovim runtime. Your existing shell tools can remain at the center of navigation, builds, Git, and other development work, while VS Code's language and workbench features remain accessible.
 
-Visual Studio Code is updated monthly with new features and bug fixes. You can download it for Windows, macOS, and Linux on the [Visual Studio Code website](https://code.visualstudio.com/Download). To get the latest releases every day, install the [Insiders build](https://code.visualstudio.com/insiders).
+## Build and run
 
-## Contributing
+Prerequisites: macOS, Node.js `24.22.1` as specified in [.nvmrc](.nvmrc), npm, and the Xcode command line tools. Additional native build requirements follow [upstream's contribution guide](https://github.com/microsoft/vscode/wiki/How-to-Contribute).
 
-There are many ways in which you can participate in this project, for example:
+```sh
+git clone --branch terminal-first https://github.com/noshpotosh/editor.git
+cd editor
+npm run install-fast
+npm run build-fast
+./scripts/setup-terminal-first-vim.sh
+./scripts/terminal-first.sh /path/to/project
+```
 
-* [Submit bugs and feature requests](https://github.com/microsoft/vscode/issues), and help us verify them as they are checked in
-* Review [source code changes](https://github.com/microsoft/vscode/pulls)
-* Review the [documentation](https://github.com/microsoft/vscode-docs) and make pull requests for anything from typos to new content.
+The setup script installs VSCodeVim `1.32.4` from its GitHub release and verifies its SHA-256 checksum. The initial launch downloads the development Electron runtime and prepares upstream built-in extensions. Complete the normal workspace trust prompt before starting a shell in a new workspace.
 
-If you are interested in fixing issues and contributing directly to the codebase, please see the document [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute), which covers the following:
+The launcher does not install a global command or edit shell dotfiles. To install another extension from a VSIX:
 
-* [How to build and run from source](https://github.com/microsoft/vscode/wiki/How-to-Contribute)
-* [The development workflow, including debugging and running tests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#debugging)
-* [Coding guidelines](https://github.com/microsoft/vscode/wiki/Coding-Guidelines)
-* [Submitting pull requests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#pull-requests)
-* [Finding an issue to work on](https://github.com/microsoft/vscode/wiki/How-to-Contribute#where-to-contribute)
-* [Contributing to translations](https://aka.ms/vscodeloc)
+```sh
+./scripts/terminal-first-cli.sh --install-extension /path/to/extension.vsix
+```
 
-## Feedback
+## Everyday workflow
 
-* Ask a question on [Stack Overflow](https://stackoverflow.com/questions/tagged/vscode)
-* [Request a new feature](CONTRIBUTING.md)
-* Upvote [popular feature requests](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
-* [File an issue](https://github.com/microsoft/vscode/issues)
-* Connect with the extension author community on [GitHub Discussions](https://github.com/microsoft/vscode-discussions/discussions) or [Slack](https://aka.ms/vscode-dev-community)
-* Follow [@code](https://x.com/code) and let us know what you think!
+Inside the app's shell:
 
-See our [wiki](https://github.com/microsoft/vscode/wiki/Feedback-Channels) for a description of each of these channels and information on some other available community-driven channels.
+```sh
+# Open one or several files in the GUI editor.
+e src/app.ts
+e src/app.ts 'notes with spaces.txt'
 
-## Related Projects
+# Wait for the requested file to close.
+e --wait COMMIT_EDITMSG
 
-Many of the core components and extensions to VS Code live in their own repositories on GitHub. For example, the [node debug adapter](https://github.com/microsoft/vscode-node-debug) and the [mono debug adapter](https://github.com/microsoft/vscode-mono-debug) repositories are separate from each other. For a complete list, please visit the [Related Projects](https://github.com/microsoft/vscode/wiki/Related-Projects) page on our [wiki](https://github.com/microsoft/vscode/wiki).
+# Pass filenames beginning with a dash.
+e -- -notes.txt
+```
 
-## Bundled Extensions
+`e` resolves paths against the shell's current directory and opens files in that shell's window. Switching back to the terminal does not release `--wait`; closing its requested files does. Closing the last editor also returns to the shell, with the usual save/discard/cancel behavior for unsaved files.
 
-VS Code includes a set of built-in extensions located in the [extensions](extensions) folder, including grammars and snippets for many languages. Extensions that provide rich language support (inline suggestions, Go to Definition) for a language have the suffix `language-features`. For example, the `json` extension provides coloring for `JSON` and the `json-language-features` extension provides rich language support for `JSON`.
+Directory arguments are not supported by `e`. Open a project with `./scripts/terminal-first.sh /path/to/project` from outside the app. Within the app's shells, `EDITOR='e --wait'` can be used by programs that invoke an external editor.
 
-## Development Container
+| Action | macOS shortcut |
+| --- | --- |
+| Switch shell / editor | `Cmd+Escape` |
+| New shell session | `Cmd+Option+N` |
+| Previous / next shell session | `Cmd+Option+Left` / `Cmd+Option+Right` |
+| Pick a shell session | `Cmd+Option+P` |
+| Reveal / hide workbench tools | `Cmd+Option+U` |
+| Find a file | `Cmd+P` |
+| Command Palette | `Cmd+Shift+P` |
 
-This repository includes a Visual Studio Code Dev Containers / GitHub Codespaces development container.
+When no editor is open, switching to the editor opens Quick Open. Revealing workbench tools restores conventional chrome and opens Explorer. Shell mode fills the workbench again when you return to it.
 
-* For [Dev Containers](https://aka.ms/vscode-remote/download/containers), use the **Dev Containers: Clone Repository in Container Volume...** command, which creates a Docker volume for better disk I/O on macOS and Windows.
-  * If you already have VS Code and Docker installed, you can also click [here](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/microsoft/vscode) to get started. This will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
+## Implementation
 
-* For Codespaces, install the [GitHub Codespaces](https://marketplace.visualstudio.com/items?itemName=GitHub.codespaces) extension in VS Code, and use the **Codespaces: Create New Codespace** command.
+The fork keeps VS Code's existing editor, terminal, extension host, and restoration machinery. The workbench controller changes layout and focus rather than recreating terminal processes or closing buffers. The built-in shell integration routes `e` through a window-scoped CLI connection and uses a persisted session identifier to return focus to the right terminal. A small editor overlay mirrors VSCodeVim's status entries.
 
-Docker / the Codespace should have at least **4 cores and 6 GB of RAM (8 GB recommended)** to run a full build. See the [development container README](.devcontainer/README.md) for more information.
+See [TERMINAL_FIRST.md](TERMINAL_FIRST.md) for detailed behavior, restoration notes, validation steps, and limitations. The main additions live in the [workbench contribution](src/vs/workbench/contrib/terminalFirst) and [shell integration extension](extensions/terminal-first).
 
-## Code of Conduct
+## Validation and current limits
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information, see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+The implementation has passed the full development build, client type checking, lint on changed TypeScript, layer checks, 49 focused Electron workbench tests, and 7 CLI tests. The tests cover mode switching, session routing, file arguments, waiting for file closure, terminal revival, and related terminal and status-bar behavior.
 
-## License
+Visual and interactive acceptance is still pending: the Mac was locked during implementation. The interactive checklist is in [TERMINAL_FIRST.md](TERMINAL_FIRST.md#validation).
 
-Copyright (c) Microsoft Corporation. All rights reserved.
+The first milestone targets local macOS shells, with zsh as the primary interactive test target. Remote development, embedded Neovim, tmux-specific integration, installers, automatic updates, and deeper removal of workbench features are deferred. Terminal reconnection and revival retain upstream VS Code's guarantees; a revived terminal may be a new process rather than the original process.
 
-Licensed under the [MIT](LICENSE.txt) license.
+## Upstream and license
+
+Based on [microsoft/vscode](https://github.com/microsoft/vscode), release `1.144.0`, commit `2c33b50b16c472efe58357d1d2a8a5414bc23fbf`. This repository contains the Code - OSS source, with the terminal-first changes maintained on the `terminal-first` branch. In the development checkout, `origin` points to `noshpotosh/editor` and `upstream` points to `microsoft/vscode`.
+
+VSCodeVim is maintained by [VSCodeVim/Vim](https://github.com/VSCodeVim/Vim) and installed separately by the setup script. This is an independent source fork, not Microsoft's Visual Studio Code distribution.
+
+Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the [MIT license](LICENSE.txt); third-party notices remain in [ThirdPartyNotices.txt](ThirdPartyNotices.txt).
