@@ -198,7 +198,8 @@ export class TileService extends Disposable {
 			picks.push({
 				label: entry.label,
 				description: entry.description,
-				iconClasses: ThemeIcon.isThemeIcon(entry.icon) ? ThemeIcon.asClassNameArray(entry.icon) : undefined,
+				// `iconClass` renders a glyph beside the label; `iconClasses` would restyle the label itself as a file icon.
+				iconClass: ThemeIcon.isThemeIcon(entry.icon) ? ThemeIcon.asClassName(entry.icon) : undefined,
 				iconPath: ThemeIcon.isThemeIcon(entry.icon) ? undefined : entry.icon,
 				keybinding: entry.command ? this.keybindings.lookupKeybinding(entry.command) : undefined,
 				target: entry.target,

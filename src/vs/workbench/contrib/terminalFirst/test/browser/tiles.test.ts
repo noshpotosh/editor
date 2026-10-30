@@ -328,12 +328,12 @@ suite('Terminal First Tiles', () => {
 				const shown = picks[0] ?? [];
 				const groups = shown.filter(item => item.type === 'separator').map(item => item.label);
 				const groupOf = (label: string) => { let group: string | undefined; for (const item of shown) { if (item.type === 'separator') { group = item.label; } else if (item.label === label) { return group; } } return undefined; };
-				const row = (label: string) => { const item = shown.find((item): item is IQuickPickItem => item.type !== 'separator' && item.label === label); return item && [item.description, !!(item.iconClasses?.length || item.iconPath)]; };
+				const row = (label: string) => { const item = shown.find((item): item is IQuickPickItem => item.type !== 'separator' && item.label === label); return item && [item.description, !!(item.iconClass || item.iconPath)]; };
 				deepStrictEqual({
 					groups,
 					editor: row('Editor'), terminal: row('Terminal'), jira: row('Jira Board'),
 					tool: [row('Picker Tool'), groupOf('Picker Tool')], extension: [row('Picker Extension'), groupOf('Picker Extension')], untitled: [row('Named by View'), groupOf('Named by View')],
-					allRowsHaveIconAndDescription: shown.filter((item): item is IQuickPickItem => item.type !== 'separator').every(item => !!item.label && !!item.description && !!(item.iconClasses?.length || item.iconPath)),
+					allRowsHaveIconAndDescription: shown.filter((item): item is IQuickPickItem => item.type !== 'separator').every(item => !!item.label && !!item.description && !!(item.iconClass || item.iconPath)),
 				}, {
 					groups: ['Workspace', 'Tools', 'Web', 'Extensions'],
 					editor: ['Empty editor tile', true], terminal: ['Shell in the session directory', true], jira: ['Asks for the URL the first time', true],
