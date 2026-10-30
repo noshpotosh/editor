@@ -37,10 +37,10 @@ These are hard-coded when the gate is on, not settings:
 
 | Key | VS NOSH | Upstream meaning displaced |
 | --- | --- | --- |
-| `Cmd+A` (file editor focused) | Add File to Jump List | Select All |
-| `Cmd+J` | Toggle Floating Jump List | Toggle Panel |
-| `Cmd+E` | Toggle Floating File Browser | Use Selection for Find |
-| `Cmd+T` | Toggle Floating Terminal | Go to Symbol in Workspace |
+| `Cmd+Shift+A` (file editor focused), leader `j a` | Add File to Jump List | (none) |
+| `Cmd+Shift+J`, leader `j j` | Toggle Floating Jump List | (none) |
+| `Cmd+Shift+E`, leader `f b` | Toggle Floating File Browser | Focus Explorer (which in VS NOSH opens the Explorer tile; use Ctrl+Option+E or `f e`) |
+| `Cmd+Shift+T`, leader `t t` | Toggle Floating Terminal | Reopen Closed Editor |
 | `Cmd+Option+N` / `P` / `←` / `→` | Session new / pick / previous / next | (none significant) |
 
 ## Behavior: branding and identity
@@ -62,7 +62,7 @@ The fork modifies about 60 upstream files. Every one of them is listed, with its
 ## Known gaps and risks
 
 - **No release pipeline.** There is no signed or notarized `.app`, no DMG publishing, no auto-update feed (`product.json` has no update URL), no crash reporting, and no CI. Only the source build is exercised.
-- **Keybinding displacement** (table above). `Cmd+A` is the most serious.
+- **Keybinding displacement** (table above) is limited to two `Cmd+Shift` chords; `Cmd+A`, `Cmd+J`, `Cmd+E`, and `Cmd+T` keep their upstream meaning.
 - **Hard removals are not reversible by users** (S7.2–S7.5). A user who wants the SCM commit box or Outline view cannot turn it back on. Consider settings or `when` clauses instead of conditional registration.
 - The status bar default (hidden) conflicts with `present()` showing it in editor mode (spec 1).
 - `reportIssueUrl` still points at `microsoft/vscode`, so Report Issue would file VS NOSH bugs upstream. `product.json` configures no extension gallery, so extensions can only be installed from VSIX files. Review both before any public release.

@@ -12,7 +12,7 @@ Explorer lives in a sidebar that VS NOSH keeps hidden. The user needs a keyboard
 
 ### Opening and layout
 
-- **S4.1** `Cmd+E` or the **Toggle Floating File Browser** command opens the browser over the editor area at 80% of its width and height. It is mutually exclusive with the other overlays, and it closes on a session or surface change.
+- **S4.1** `Cmd+Shift+E`, leader `f b`, or the **Toggle Floating File Browser** command opens the browser over the editor area at 80% of its width and height. It is mutually exclusive with the other overlays, and it closes on a session or surface change.
 - **S4.2** The browser opens at the session's remembered folder, falling back to the session directory if the folder is missing. Each session remembers its last folder, browser root, and hidden-file preference in memory only. Reopening clears the filter and marks.
 - **S4.3** Results rise from a bottom prompt, with the best match nearest the prompt. A preview pane sits alongside and is hidden when the overlay is narrower than 600 px.
 - **S4.4** Browsing never changes the workspace folder or the shell cwd.
@@ -83,7 +83,7 @@ Bindings use weight `ExternalExtension + 1001`, scoped to `terminalFirstBrowserF
 ## Known gaps and risks
 
 - **Inconsistent keys between engines.** In normal mode, `h` toggles hidden files and `g` goes to the parent, but with native Vim `h` is parent, `.` is hidden, and `g` starts `gg`. The help picker labels `gg`/`G` "(Native Vim)" but shows `g` and `h` with their non-Vim meanings. Choose one vocabulary.
-- `Cmd+E` replaces macOS "Use Selection for Find".
+- `Cmd+Shift+E` replaces "Focus Explorer"; the Explorer tile stays on Ctrl+Option+E and `f e`. `Cmd+E` keeps its upstream meaning.
 - There is no recursive *file* search; `Cmd+P` is the fallback.
 - Per-session state is not persisted across restarts.
 - A batch that fails partway can leave a partly applied state. Undo covers files but may not cover folder deletion.

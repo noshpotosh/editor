@@ -38,7 +38,7 @@ When that check is false, the fork behaves like upstream VS Code. Upstream files
 These items affect several features. Each one is also covered in the relevant spec.
 
 1. **Global leader acceptance.** Ctrl+Space now enters the editor (`e`) and returns to shell (`q`/Escape), preserving dirty buffers; verify across Vim engines and keyboard layouts.
-2. **Keybinding collisions with macOS conventions.** `Cmd+A` (Select All) is taken over by Add File to Jump List whenever a file editor has focus. `Cmd+T` and `Cmd+E` are also rebound. See spec 5 and spec 7.
+2. **Keybinding collisions with macOS conventions.** Resolved: the fork's overlays use `Cmd+Shift+A/J/E/T` and leader routes; `Cmd+A`, `Cmd+J`, `Cmd+E`, and `Cmd+T` keep their upstream meaning. See spec 7.
 3. **`code` shadows the real VS Code CLI** inside VS NOSH shells (spec 2).
 4. **Documentation drift.** User-facing workflow shortcuts have been reconciled with the new leader controls.
 5. **Native Vim acceptance.** The engine reads the full document text on every key and has not been accepted for IME, large files, or shared models (spec 6).
@@ -47,7 +47,7 @@ These items affect several features. Each one is also covered in the relevant sp
 
 ## Documentation alignment
 
-The workflow guide now documents title-bar tabs, `code`/`e`, Ctrl+Space navigation, copy mode, `Cmd+T` for the floating terminal, `Cmd+E` for the file browser, and deferred trust prompting. The former Cmd+Escape toggle and visible Hide/surface-toggle buttons remain removed.
+The workflow guide now documents title-bar tabs, `code`/`e`, Ctrl+Space navigation, copy mode, `Cmd+Shift+T` for the floating terminal, `Cmd+Shift+E` for the file browser, and deferred trust prompting. The former Cmd+Escape toggle and visible Hide/surface-toggle buttons remain removed.
 
 ## Validation entry points
 

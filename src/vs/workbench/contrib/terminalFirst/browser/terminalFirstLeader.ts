@@ -26,6 +26,7 @@ interface ModalAction { keys: string; label: string; command: string; repeat?: b
 const editorActions: readonly ModalAction[] = [
 	{ keys: 'ff', label: localize('findFile', "Find File"), command: 'workbench.action.quickOpen' },
 	{ keys: 'fe', label: localize('browse', "Browse Directory"), command: 'terminalFirst.tile.explorer' },
+	{ keys: 'fb', label: localize('fileBrowser', "Browse Files"), command: 'terminalFirst.toggleFloatingFileBrowser' },
 	{ keys: 'fs', label: localize('save', "Save File"), command: 'workbench.action.files.save' },
 	{ keys: 'bb', label: localize('buffers', "Pick Buffer in Pane"), command: 'workbench.action.showEditorsInActiveGroup' },
 	{ keys: 'bn', label: localize('nextBuffer', "Next Buffer in Pane"), command: 'workbench.action.nextEditorInGroup' },

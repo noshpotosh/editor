@@ -578,7 +578,7 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | A6 manifest + sync | done | (see git log) | `build/fork/upstream-patches.json`, `build/fork/upstream-check.ts`, `scripts/upstream-check.sh`, `scripts/upstream-sync.sh`, `docs/upstream/{SYNC,PATCHES}.md`, `.github/workflows/upstream-drift.yml`; dry run against `upstream/main` shows zero conflicts in documented patches |
 | B keyboard model | done | (see git log) | `tileListNavigation.ts`, `tileListActions.ts`, deterministic `ViewTileEditor.focus()`, tile-scoped `terminalFirstViewTile` and `listTypeNavigationMode`; manual checklist in the B verification section still to run in the app |
 | C picker | done | (see git log) | `tileCatalog.ts`; `ViewTileInput` name/icon fallbacks; empty-workspace button with icon and chord hover |
-| D1 key collisions | todo | | |
+| D1 key collisions | done | (see git log) | `Cmd+Shift+A/J/E/T` plus leader `j a`, `j j`, `f b`, `t t`; no automated keybinding test because the bindings register inside the gated contribution module |
 | D2.1 … D2.14 hardening | todo | | one row per item when started |
 
 ## Definition of done (whole plan)

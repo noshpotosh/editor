@@ -128,7 +128,7 @@ export class FloatingJumpList extends Disposable {
 	private render(index: number): void {
 		this.list.splice(0, this.list.length, [...this.model.entries]);
 		this.select(index);
-		this.message.textContent = this.list.length ? '' : localize('emptyJumpList', "No files yet. Focus a file editor and press Cmd+A to add it.");
+		this.message.textContent = this.list.length ? '' : localize('emptyJumpList', "No files yet. Focus a file editor and press Cmd+Shift+A to add it.");
 		this.layout();
 	}
 

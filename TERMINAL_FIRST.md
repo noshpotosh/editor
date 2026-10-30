@@ -26,13 +26,13 @@ Native Vim controls are built in and enabled by default. For optional VSCodeVim 
 | Block until the requested files close | `e --wait COMMIT_EDITMSG` |
 | Open a filename beginning with a dash | `e -- -notes.txt` |
 | Open editor / return to shell | `Ctrl+Space e` / `Ctrl+Space q` |
-| Toggle floating terminal (editor mode) | `Cmd+T` |
+| Toggle floating terminal (editor mode) | `Cmd+Shift+T` or leader `t t` |
 | New shell session | `Cmd+Option+N` |
 | Previous / next shell | `Cmd+Option+Left` / `Cmd+Option+Right` |
 | Pick shell session | `Cmd+Option+P` |
-| Browse files with preview (editor mode) | `Cmd+E` |
-| Add current file to jump list | `Cmd+A` |
-| Toggle jump list | `Cmd+J` |
+| Browse files with preview (editor mode) | `Cmd+Shift+E` or leader `f b` |
+| Add current file to jump list | `Cmd+Shift+A` or leader `j a` |
+| Toggle jump list | `Cmd+Shift+J` or leader `j j` |
 | Find a file (editor mode) | `Cmd+P` |
 | Command Palette (editor mode) | `Cmd+Shift+P` |
 
@@ -48,7 +48,7 @@ Editor groups remain alive while inactive and are excluded from active navigatio
 
 ## Tiling code workspace
 
-Code mode uses a separate rounded, bordered card for each editor, view, or terminal tile. Gutters separate the cards and retain draggable resize dividers. The active tile uses the focus border. When the pointer rests on a tile, that tile becomes active and receives keyboard focus. Passing over a tile does not change focus, and neither does hovering while a menu, dialog, quick input, suggest, find, rename, or parameter-hint widget is open. Set `terminalFirst.tiles.focusFollowsMouse` to `false` to focus tiles only by click or keyboard. The activity bar is hidden. **New Tile** appears at the bottom-right of an empty code workspace. Leader `w a` opens the tile picker at any time. Leader `f e` opens or focuses Explorer. The floating file browser remains available with Cmd+E.
+Code mode uses a separate rounded, bordered card for each editor, view, or terminal tile. Gutters separate the cards and retain draggable resize dividers. The active tile uses the focus border. When the pointer rests on a tile, that tile becomes active and receives keyboard focus. Passing over a tile does not change focus, and neither does hovering while a menu, dialog, quick input, suggest, find, rename, or parameter-hint widget is open. Set `terminalFirst.tiles.focusFollowsMouse` to `false` to focus tiles only by click or keyboard. The activity bar is hidden. **New Tile** appears at the bottom-right of an empty code workspace. Leader `w a` opens the tile picker at any time. Leader `f e` opens or focuses Explorer. The floating file browser remains available with Cmd+Shift+E or leader `f b`.
 
 New tiles split the focused tile equally: right when it is wider than tall, below otherwise. If that direction cannot fit, automatic placement tries the other direction. Explicit `w v` and `w s` splits keep their requested direction. If neither half can remain usable, the command explains why and leaves the layout unchanged. Files and diffs open in the most recently focused editor tile, creating one when needed; tool and terminal tiles do not accept unrelated file tabs.
 
@@ -91,11 +91,11 @@ Resizing moves an edge, not a size. If there is a neighbor on that side, the til
 
 Layout commands restore a maximized tile first. Closing a tile focuses the neighbor that takes over its space. Directional focus stops at the workspace edge unless `terminalFirst.tiles.wrapFocus` is enabled. These shortcuts leave the main shell, floating tools, and quick input alone. The commands are also available under **VS NOSH** in the Command Palette. Editors retain their file tabs. Closing the final tile leaves an empty code workspace; use leader `q` to return to the shell.
 
-Tile arrangements, sizes, inputs, and active groups use the existing per-session editor persistence. Old layouts restore as editor tiles. Switching sessions or returning to shell mode retains buffers and terminal processes. Terminal tiles use the session directory and normal terminal profiles, close confirmations, and reconnection behavior. Their `e` and `e --wait` commands return to the owning session. The floating terminal remains a separate companion shell on Cmd+T.
+Tile arrangements, sizes, inputs, and active groups use the existing per-session editor persistence. Old layouts restore as editor tiles. Switching sessions or returning to shell mode retains buffers and terminal processes. Terminal tiles use the session directory and normal terminal profiles, close confirmations, and reconnection behavior. Their `e` and `e --wait` commands return to the owning session. The floating terminal remains a separate companion shell on Cmd+Shift+T or leader `t t`.
 
 ## Floating terminal and terminal ownership
 
-In editor mode, press **Cmd+T**, use leader `t t`, or run **Toggle Floating Terminal** to open a centered companion shell over the editor. Each outer session owns one companion shell, separate from its main shell. The first open uses the editor session’s directory and configured local terminal profile. Later opens preserve the shell’s process, directory, and scrollback.
+In editor mode, press **Cmd+Shift+T**, use leader `t t`, or run **Toggle Floating Terminal** to open a centered companion shell over the editor. Each outer session owns one companion shell, separate from its main shell. The first open uses the editor session’s directory and configured local terminal profile. Later opens preserve the shell’s process, directory, and scrollback.
 
 The shortcut or a click in the editor outside the overlay hides it without terminating its process. Switching sessions or shell/editor modes also hides it. Plain Escape and Ctrl+C/D/R keep their terminal behavior; terminal find, copy/paste, scrolling, and selection remain available. The overlay follows the editor area when the window or sidebar is resized; it cannot be dragged or manually resized.
 
@@ -107,7 +107,7 @@ The session controller owns terminal creation. The floating host has its own cre
 
 ## Floating file browser
 
-In editor mode, **Cmd+E** or **Toggle Floating File Browser** opens a Telescope-style file manager. Cmd+P remains Quick Open. The browser and other floating tools are mutually exclusive; switching sessions or returning to shell mode dismisses the browser.
+In editor mode, **Cmd+Shift+E**, leader `f b`, or **Toggle Floating File Browser** opens a Telescope-style file manager. Cmd+P remains Quick Open. The browser and other floating tools are mutually exclusive; switching sessions or returning to shell mode dismisses the browser.
 
 Results rise from a bottom prompt, with the best match nearest the prompt and a file or directory preview alongside. Type to fuzzy-filter the current folder. Up/Down or Ctrl+J/K moves the cursor; Enter enters the focused folder or opens the file in a pinned editor. Backspace on an empty prompt goes to the parent. Escape enters normal mode, where j/k moves, g goes to the parent, e goes home, w returns to the browser root, t changes that root, f toggles the recursive folder finder, and h toggles dotfiles. Use i or / to resume filtering; q or a second Escape closes.
 

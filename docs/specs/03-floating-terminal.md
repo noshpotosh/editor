@@ -2,7 +2,7 @@
 
 ## Status
 
-Committed in `b1a5c38c84b`. The working tree removes the **Hide** button, moves the shortcut from `Ctrl+Backtick` to `Cmd+T`, and moves the shared overlay chrome into `floatingOverlay.css`. Available only in editor mode.
+Committed in `b1a5c38c84b`. The working tree removes the **Hide** button, moves the shortcut from `Ctrl+Backtick` to `Cmd+Shift+T` (leader `t t`), and moves the shared overlay chrome into `floatingOverlay.css`. Available only in editor mode.
 
 ## Problem and goals
 
@@ -10,7 +10,7 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 
 ## Behavior
 
-- **S3.1** In editor mode, `Cmd+T` or the **Toggle Floating Terminal** command shows a centered overlay terminal over the editor area. The same keys hide it again.
+- **S3.1** In editor mode, `Cmd+Shift+T`, leader `t t`, or the **Toggle Floating Terminal** command shows a centered overlay terminal over the editor area. The same keys hide it again.
 - **S3.2** Each session owns at most one companion shell, separate from its main shell. It never appears as a strip tab or panel terminal.
 - **S3.3** The first open starts in the session's stored floating cwd, then the session's editor directory, then the main shell's initial cwd, using the configured local terminal profile. Contributed (extension) profiles are skipped.
 - **S3.4** Later opens reuse the same process, so cwd, scrollback, and running jobs persist.
@@ -26,7 +26,7 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 
 | Item | Value |
 | --- | --- |
-| Command | `terminalFirst.toggleFloatingTerminal`, "Toggle Floating Terminal", `Cmd+T`, precondition `terminalFirstFloatingEnabled` |
+| Command | `terminalFirst.toggleFloatingTerminal`, "Toggle Floating Terminal", `Cmd+Shift+T`, precondition `terminalFirstFloatingEnabled` |
 | Context keys | `terminalFirstFloatingVisible`, `terminalFirstFloatingFocused` |
 | Launch flag | `IShellLaunchConfig.terminalFirstFloating` (hidden from user, force-persisted) |
 
@@ -44,7 +44,7 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 
 ## Known gaps and risks
 
-- `Cmd+T` replaces the familiar "Go to Symbol in Workspace" binding, and conflicts with "new tab" muscle memory.
+- `Cmd+Shift+T` replaces "Reopen Closed Editor"; `Cmd+T` keeps its upstream meaning.
 - With the Hide button gone, mouse-only users can dismiss the overlay only by clicking the editor.
 - The overlay has no visible indication of its owning session or cwd beyond the terminal title.
 - No support for multiple companions, tabs, splits, dragging, or resizing.
@@ -53,7 +53,7 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 ## Open questions
 
 1. Should the overlay be resizable, or remember a size?
-2. Should `Cmd+T` stay, given the conflict with upstream symbol search?
+2. Resolved: `Cmd+T` is back on Go to Symbol in Workspace; the floating terminal uses `Cmd+Shift+T` and leader `t t`.
 3. Should tasks run in the companion terminal instead of being blocked?
 
 ## Release acceptance

@@ -2,7 +2,7 @@
 
 A terminal-first fork of Code - OSS for developers who want to live in the shell and open a GUI editor when they need one.
 
-The app opens into a full-window terminal. Run `e src/app.ts` to edit a file with VS Code's editor and Vim-style modal editing, then press `Cmd+Escape` to return to the same shell. Your buffers, editor splits, shell processes, and scrollback stay in place as you switch.
+The app opens into a full-window terminal. Run `e src/app.ts` to edit a file with VS Code's editor and Vim-style modal editing, then press `Ctrl+Space q` to return to the same shell. Your buffers, editor splits, shell processes, and scrollback stay in place as you switch.
 
 This is an early macOS source build aimed at becoming a personal daily driver. Packaged releases and automatic updates are not available yet.
 
@@ -60,7 +60,7 @@ Directory arguments are not supported by `e`; use `cd` and Open Editor to change
 
 | Action | macOS shortcut |
 | --- | --- |
-| Switch shell / editor | `Cmd+Escape` |
+| Open editor / return to shell | `Ctrl+Space e` / `Ctrl+Space q` |
 | New shell session | `Cmd+Option+N` |
 | Previous / next shell session | `Cmd+Option+Left` / `Cmd+Option+Right` |
 | Pick a shell session | `Cmd+Option+P` |
