@@ -53,7 +53,7 @@ import { MicrotaskDelay } from '../../../../base/common/symbols.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { hasNativeContextMenu } from '../../../../platform/window/common/window.js';
 import { hasKey } from '../../../../base/common/types.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalPolicy } from './terminalPolicy.js';
 
 export class TerminalViewPane extends ViewPane {
 	private _parentDomElement: HTMLElement | undefined;
@@ -155,8 +155,7 @@ export class TerminalViewPane extends ViewPane {
 				}
 			}
 
-			// The terminal-first session controller owns shell creation.
-			let shouldCreate = !terminalFirstEnabled && this._terminalGroupService.groups.length === 0;
+			let shouldCreate = TerminalPolicy.get()?.autoCreateInView !== false && this._terminalGroupService.groups.length === 0;
 			// When triggered just after reconnection, also check there are no groups that could be
 			// getting restored currently
 			if (checkRestoredTerminals) {

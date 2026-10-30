@@ -41,6 +41,7 @@ import { INativeWorkbenchEnvironmentService } from '../../../services/environmen
 import { shouldUseEnvironmentVariableCollection } from '../../../../platform/terminal/common/terminalEnvironment.js';
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { serializeEnvironmentVariableCollections } from '../../../../platform/terminal/common/environmentVariableShared.js';
+import { TerminalPolicy } from '../browser/terminalPolicy.js';
 
 export class LocalTerminalBackendContribution implements IWorkbenchContribution {
 
@@ -346,7 +347,7 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 				mark('code/terminal/willGetReviveEnvironments');
 				await Promise.all(reviveBufferState.map(async state => {
 					const { env, environmentVariableCollections } = await this._resolveEnvironmentForRevive(variableResolver, state.shellLaunchConfig);
-					env.TERMINAL_FIRST_SESSION = state.processLaunchConfig.options.shellIntegration.nonce;
+					TerminalPolicy.get()?.decorateEnvironment(env, state.processLaunchConfig.options.shellIntegration.nonce);
 					state.processLaunchConfig.env = env;
 					state.processLaunchConfig.options.environmentVariableCollections = environmentVariableCollections;
 				}));

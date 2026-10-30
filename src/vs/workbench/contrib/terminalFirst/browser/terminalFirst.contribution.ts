@@ -24,6 +24,8 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ITerminalFirstService, TerminalFirstService } from './terminalFirstService.js';
 import './viewPruning.js';
+import { createTerminalFirstTerminalPolicy } from './terminalPolicy.js';
+import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';
 
 registerSingleton(ITerminalFirstService, TerminalFirstService, InstantiationType.Delayed);
 
@@ -38,6 +40,7 @@ class TerminalFirstContribution {
 }
 
 if (terminalFirstEnabled) {
+	TerminalPolicy.set(createTerminalFirstTerminalPolicy());
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({ id: 'terminalFirst.terminal', title: localize('terminalSettings', "Terminal First"), type: 'object', properties: {
 		'terminalFirst.terminal.padding': { type: 'number', default: 12, minimum: 0, maximum: 100, description: localize('padding', "Terminal padding in pixels.") },
 	} });

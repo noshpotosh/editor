@@ -46,6 +46,7 @@ import { IWorkspaceEditingService } from '../../../services/workspaces/common/wo
 import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
 import { FloatingFileBrowser } from './floatingFileBrowser.js';
 import { FloatingTerminal } from './floatingTerminal.js';
+import { TerminalFirstLaunch } from './terminalPolicy.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -207,7 +208,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 				this.sessionList.push({
 					...session,
 					terminal: this.terminalGroupService.instances.find(instance => instance.shellIntegrationNonce === session.nonce),
-					floatingTerminal: this.terminalService.instances.find(instance => instance.shellLaunchConfig.terminalFirstFloating && instance.shellIntegrationNonce === session.floatingNonce),
+					floatingTerminal: this.terminalService.instances.find(instance => TerminalFirstLaunch.isDetached(instance) && instance.shellIntegrationNonce === session.floatingNonce),
 				});
 			}
 		}
@@ -260,7 +261,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	private createTerminal(cwd?: string): Promise<ITerminalInstance> {
-		return this.terminalService.createTerminal({ location: TerminalLocation.Panel, terminalFirstSession: true, cwd, config: { env: this.shellEnvironment() } });
+		return this.terminalService.createTerminal(TerminalFirstLaunch.session({ location: TerminalLocation.Panel, cwd, config: { env: this.shellEnvironment() } }));
 	}
 
 	private async ensureTerminal(session: Session): Promise<ITerminalInstance> {
@@ -411,12 +412,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			this.hideBrowser();
 			this.hideJumpList();
 			if (!session.floatingTerminal) {
-				const terminal = await this.terminalService.createTerminal({
+				const terminal = await this.terminalService.createTerminal(TerminalFirstLaunch.floating({
 					location: TerminalLocation.Panel,
-					terminalFirstFloating: true,
 					config: { env: this.shellEnvironment() },
 					cwd: session.floatingCwd || (session.cwd ? URI.parse(session.cwd).fsPath : session.terminal?.initialCwd),
-				});
+				}));
 				session.floatingTerminal = terminal;
 				session.floatingNonce = terminal.shellIntegrationNonce;
 				session.floatingCwd = terminal.initialCwd;
@@ -609,11 +609,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			const session = this.active;
 			const group = this.editorGroupsService.mainPart.groups.find(group => group.id === groupId);
 			if (this.changingSession || !session || session.mode !== 'editor' || !group) { return false; }
-			const terminal = await this.terminalService.createTerminal({
-				terminalFirstTile: true, location: TerminalLocation.Editor,
+			const terminal = await this.terminalService.createTerminal(TerminalFirstLaunch.tile({
+				location: TerminalLocation.Editor,
 				cwd: session.cwd ? URI.parse(session.cwd).fsPath : session.terminal?.initialCwd,
 				config: { env: this.shellEnvironment(), forcePersist: true },
-			});
+			}));
 			try {
 				await this.terminalEditorService.openEditor(terminal, { viewColumn: groupId });
 				(session.tileNonces ??= []).push(terminal.shellIntegrationNonce);

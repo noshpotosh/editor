@@ -57,7 +57,7 @@ import { isAuxiliaryWindow, mainWindow } from '../../../../base/browser/window.j
 import { GroupIdentifier } from '../../../common/editor.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { hasKey, isString } from '../../../../base/common/types.js';
-import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalPolicy } from './terminalPolicy.js';
 
 interface IBackgroundTerminal {
 	instance: ITerminalInstance;
@@ -381,7 +381,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		if (!value) {
 			return;
 		}
-		if (value.shellLaunchConfig.terminalFirstFloating) {
+		if (TerminalPolicy.get()?.isDetached(value)) {
 			this._activeInstance = value;
 			this._onDidChangeActiveInstance.fire(value);
 			return;
@@ -533,7 +533,8 @@ export class TerminalService extends Disposable implements ITerminalService {
 			if (!attachPersistentProcess) {
 				continue;
 			}
-			const instance = await this.createTerminal({ terminalFirstSession: !terminalFirstEnabled, terminalFirstFloating: terminalFirstEnabled, config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel });
+			const options: ICreateTerminalOptions = { config: { attachPersistentProcess, hideFromUser: true, forcePersist: true }, location: TerminalLocation.Panel };
+			const instance = await this.createTerminal(TerminalPolicy.get()?.prepareReconnect(options, 'background') ?? options);
 			instances.push(instance);
 		}
 		return instances;
@@ -547,16 +548,18 @@ export class TerminalService extends Disposable implements ITerminalService {
 				continue;
 			}
 			mark(`code/terminal/willRecreateTerminal/${attachPersistentProcess.id}-${attachPersistentProcess.pid}`);
-			lastInstance = this.createTerminal({
-				terminalFirstSession: true,
+			const options: ICreateTerminalOptions = {
 				config: { attachPersistentProcess },
-				location: lastInstance && !terminalFirstEnabled ? { parentTerminal: lastInstance } : TerminalLocation.Panel
-			});
+				location: lastInstance && TerminalPolicy.get()?.restoreGroupLayout !== false ? { parentTerminal: lastInstance } : TerminalLocation.Panel
+			};
+			lastInstance = this.createTerminal(TerminalPolicy.get()?.prepareReconnect(options, 'group') ?? options);
 			lastInstance.then(() => mark(`code/terminal/didRecreateTerminal/${attachPersistentProcess.id}-${attachPersistentProcess.pid}`));
 		}
 		const group = lastInstance?.then(instance => {
 			const g = this._terminalGroupService.getGroupForInstance(instance);
-			if (!terminalFirstEnabled) { g?.resizePanes(tabLayout.terminals.map(terminal => terminal.relativeSize)); }
+			if (TerminalPolicy.get()?.restoreGroupLayout !== false) {
+				g?.resizePanes(tabLayout.terminals.map(terminal => terminal.relativeSize));
+			}
 			return g;
 		});
 		return group;
@@ -600,7 +603,9 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async revealTerminal(source: ITerminalInstance, preserveFocus?: boolean): Promise<void> {
-		if (source.shellLaunchConfig.terminalFirstFloating) { return; }
+		if (TerminalPolicy.get()?.isDetached(source)) {
+			return;
+		}
 		if (source.target === TerminalLocation.Editor) {
 			await this._terminalEditorService.revealActiveEditor(preserveFocus);
 		} else {
@@ -871,7 +876,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 			}
 		}));
 		instanceDisposables.add(instance.onDidFocus(() => {
-			if (instance.shellLaunchConfig.terminalFirstFloating) {
+			if (TerminalPolicy.get()?.isDetached(instance)) {
 				this.setActiveInstance(instance);
 				this._onDidFocusInstance.fire(instance);
 			} else {
@@ -988,9 +993,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async createTerminal(options?: ICreateTerminalOptions): Promise<ITerminalInstance> {
-		if (terminalFirstEnabled && !options?.terminalFirstSession && !options?.terminalFirstFloating && !options?.terminalFirstTile) {
-			throw new Error(nls.localize('terminalFirst.creationBlocked', "Use the session strip to open a terminal. Integrated terminals, terminal tasks, and terminal-backed debugging are unavailable."));
-		}
+		TerminalPolicy.get()?.beforeCreate(options);
 		// Await the initialization of available profiles as long as this is not a pty terminal or a
 		// local terminal in a remote workspace as profile won't be used in those cases and these
 		// terminals need to be launched before remote connections are established.
@@ -1021,15 +1024,10 @@ export class TerminalService extends Disposable implements ITerminalService {
 			config = this._terminalProfileService.getDefaultProfile();
 		}
 		const shellLaunchConfig = config && hasKey(config, { extensionIdentifier: true }) ? {} : this._terminalInstanceService.convertProfileToShellLaunchConfig(config || {});
-
-		if (options?.terminalFirstFloating) {
-			shellLaunchConfig.hideFromUser = true;
-			shellLaunchConfig.forcePersist = true;
-			shellLaunchConfig.terminalFirstFloating = true;
-		}
+		TerminalPolicy.get()?.prepareLaunchConfig(shellLaunchConfig, options);
 
 		// Get the contributed profile if it was provided
-		const contributedProfile = options?.skipContributedProfileCheck || options?.terminalFirstFloating || options?.terminalFirstTile ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
+		const contributedProfile = options?.skipContributedProfileCheck || TerminalPolicy.get()?.skipContributedProfile(options) ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
 
 		const splitActiveTerminal = typeof options?.location === 'object' && hasKey(options.location, { splitActiveTerminal: true })
 			? options.location.splitActiveTerminal
@@ -1096,7 +1094,6 @@ export class TerminalService extends Disposable implements ITerminalService {
 		this._evaluateLocalCwd(shellLaunchConfig);
 		const location = await this.resolveLocation(options?.location) || this._terminalConfigurationService.defaultLocation;
 
-		if (terminalFirstEnabled) { authorizeTerminalFirstLaunch(shellLaunchConfig); }
 		if (shellLaunchConfig.hideFromUser) {
 			const instance = this._terminalInstanceService.createInstance(shellLaunchConfig, location);
 			this._backgroundedTerminalInstances.push({ instance, terminalLocationOptions: options?.location });
@@ -1250,7 +1247,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		let instance;
 		if (location === TerminalLocation.Editor) {
 			instance = this._terminalInstanceService.createInstance(shellLaunchConfig, TerminalLocation.Editor);
-			if (!shellLaunchConfig.hideFromUser && !options?.terminalFirstTile) {
+			if (!shellLaunchConfig.hideFromUser && TerminalPolicy.get()?.opensEditorFor(options) !== false) {
 				const editorOptions = this._getEditorOptions(options?.location);
 				this._terminalEditorService.openEditor(instance, editorOptions);
 			}
@@ -1355,7 +1352,9 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	public async showBackgroundTerminal(instance: ITerminalInstance, suppressSetActive?: boolean): Promise<void> {
-		if (instance.shellLaunchConfig.terminalFirstFloating) { return; }
+		if (TerminalPolicy.get()?.isDetached(instance)) {
+			return;
+		}
 		const index = this._backgroundedTerminalInstances.findIndex(bg => bg.instance === instance);
 		if (index === -1) {
 			return;

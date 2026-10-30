@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from '../../../../nls.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { Disposable, dispose, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -20,7 +19,7 @@ import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService, ACTIVE_GROUP, SIDE_GROUP } from '../../../services/editor/common/editorService.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
-import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalPolicy } from './terminalPolicy.js';
 
 export class TerminalEditorService extends Disposable implements ITerminalEditorService {
 	declare _serviceBrand: undefined;
@@ -162,7 +161,7 @@ export class TerminalEditorService extends Disposable implements ITerminalEditor
 	}
 
 	resolveResource(instance: ITerminalInstance): URI {
-		if (terminalFirstEnabled && instance.target !== TerminalLocation.Editor) { throw new Error(localize('editorTerminalBlocked', "Use New Tile to open an editor terminal.")); }
+		TerminalPolicy.get()?.assertCanOpenEditor(instance);
 		const resource = instance.resource;
 		const inputKey = resource.path;
 		const cachedEditor = this._editorInputs.get(inputKey);
@@ -241,7 +240,7 @@ export class TerminalEditorService extends Disposable implements ITerminalEditor
 	reviveInput(deserializedInput: IDeserializedTerminalEditorInput): EditorInput {
 		const newDeserializedInput = { ...deserializedInput, findRevivedId: true };
 		const config = { attachPersistentProcess: newDeserializedInput };
-		if (terminalFirstEnabled) { authorizeTerminalFirstLaunch(config); }
+		TerminalPolicy.get()?.prepareLaunchConfig(config, undefined);
 		const instance = this._terminalInstanceService.createInstance(config, TerminalLocation.Editor);
 		const input = this._instantiationService.createInstance(TerminalEditorInput, instance.resource, instance);
 		this._registerInstance(instance.resource.path, input, instance);

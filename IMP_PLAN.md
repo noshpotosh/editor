@@ -570,8 +570,8 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | --- | --- | --- | --- |
 | A0 baseline | done | 16731bb1f9c | tag `fork/pre-seams`, `upstream` remote added and fetched |
 | A1 gating | done | (see git log) | `TERMINAL_FIRST_SESSION` env gating deferred to A3 (needs the policy seam so the test can register it); `whenEditorClosed(acceptClose)` kept as a 2-line additive hook instead of duplicating 60 lines; `viewsService.ts` helper shrink skipped (call sites differ) |
-| A4 view pruning | todo | | |
-| A3 terminal policy seam | todo | | |
+| A4 view pruning | done | 7a874eaabb6 | `chatSetupContributions`, `relauncher`, `remoteAgentHost`, `agentHostService` keep their small gated edits |
+| A3 terminal policy seam | done | (see git log) | `ICreateTerminalOptions`/`IShellLaunchConfig` fork fields removed; `TERMINAL_FIRST_SESSION` now set via `decorateEnvironment`; upstream terminal tests pristine |
 | A2.1 routing + layout hooks | todo | | |
 | A2.2 sessions extension | todo | | |
 | A5 titlebar | todo | | |

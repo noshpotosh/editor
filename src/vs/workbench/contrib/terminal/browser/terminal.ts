@@ -757,12 +757,6 @@ export interface IDeserializedTerminalEditorInput extends ITerminalEditorInputOb
 export type ITerminalLocationOptions = TerminalLocation | TerminalEditorLocation | { parentTerminal: MaybePromise<ITerminalInstance> } | { splitActiveTerminal: boolean };
 
 export interface ICreateTerminalOptions {
-	/** Owned by the top-level Terminal First session controller. */
-	terminalFirstSession?: boolean;
-	/** Editor tile owned by a Terminal First session. */
-	terminalFirstTile?: boolean;
-	/** Companion shell owned and presented by an editor session. */
-	terminalFirstFloating?: boolean;
 	/**
 	 * The shell launch config or profile to launch with, when not specified the default terminal
 	 * profile will be used.

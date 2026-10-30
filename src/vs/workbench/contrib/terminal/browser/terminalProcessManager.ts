@@ -48,6 +48,7 @@ import { BugIndicatingError } from '../../../../base/common/errors.js';
 import type { MaybePromise } from '../../../../base/common/async.js';
 import { isString } from '../../../../base/common/types.js';
 import { IHostService } from '../../../services/host/browser/host.js';
+import { TerminalPolicy } from './terminalPolicy.js';
 
 const enum ProcessConstants {
 	/**
@@ -550,10 +551,7 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 		);
 
 		const env = await this._resolveEnvironment(backend, variableResolver, shellLaunchConfig);
-
-		// The nonce is restored with persistent terminals, so CLI requests can find their shell
-		// even when renderer instance IDs change across a window reload.
-		env.TERMINAL_FIRST_SESSION = this.shellIntegrationNonce;
+		TerminalPolicy.get()?.decorateEnvironment(env, this.shellIntegrationNonce);
 
 		const options: ITerminalProcessOptions = {
 			shellIntegration: {

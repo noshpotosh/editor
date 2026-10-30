@@ -21,7 +21,7 @@ import { IEditorGroupsService, IEditorPart, IEditorGroup } from '../../../../ser
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { TestEditorInput, TestEditorService, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
-import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
+import { ICreateTerminalOptions, ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService, IWorkspace } from '../../../../../platform/workspace/common/workspace.js';
@@ -31,6 +31,8 @@ import { TestDialogService } from '../../../../../platform/dialogs/test/common/t
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
+import { createTerminalFirstTerminalPolicy, TerminalFirstLaunch } from '../../browser/terminalPolicy.js';
+import { IShellLaunchConfig } from '../../../../../platform/terminal/common/terminal.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -78,11 +80,15 @@ suite('Terminal First', () => {
 			}
 		}
 		const editors = store.add(new Editors());
-		const addTerminal = (floating = false) => {
+		const policy = createTerminalFirstTerminalPolicy();
+		const addTerminal = (options?: ICreateTerminalOptions) => {
 			const id = allTerminals.length + 1;
+			const shellLaunchConfig: IShellLaunchConfig = {};
+			policy.prepareLaunchConfig(shellLaunchConfig, options);
+			const floating = shellLaunchConfig.hideFromUser === true;
 			const terminal = upcastPartial<ITerminalInstance>({
 				instanceId: id,
-				shellLaunchConfig: { terminalFirstFloating: floating },
+				shellLaunchConfig,
 				onTitleChanged: Event.None,
 				attachToElement: () => { },
 				detachFromElement: () => { },
@@ -111,7 +117,7 @@ suite('Terminal First', () => {
 			instances: allTerminals,
 			onDidDisposeInstance: disposed.event,
 			onAnyInstanceTitleChange: Event.None,
-			createTerminal: async options => { if (failCreation) { throw new Error('launch failed'); } const terminal = addTerminal(options?.terminalFirstFloating); created.push(terminal); return terminal; },
+			createTerminal: async options => { if (failCreation) { throw new Error('launch failed'); } const terminal = addTerminal(options); created.push(terminal); return terminal; },
 			setActiveInstance: terminal => { active = terminal; },
 		}));
 		instantiationService.stub(ITerminalGroupService, upcastPartial<ITerminalGroupService>({
@@ -346,7 +352,7 @@ suite('Terminal First', () => {
 	test('restores the companion without adding an outer tab or reopening the overlay', async () => {
 		const state = fixture();
 		const shell = state.addTerminal();
-		const companion = state.addTerminal(true);
+		const companion = state.addTerminal(TerminalFirstLaunch.floating({}));
 		state.storage.store('terminalFirst.sessions', { managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [{ id: shell.shellIntegrationNonce, nonce: shell.shellIntegrationNonce, title: 'Shell', mode: 'editor', floatingNonce: companion.shellIntegrationNonce }] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		await state.service.initialize();
 		deepStrictEqual([state.service.sessions.length, state.service.floatingTerminalVisible, state.created.length], [1, false, 0]);
