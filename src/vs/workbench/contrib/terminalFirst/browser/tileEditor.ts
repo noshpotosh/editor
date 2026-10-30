@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './tiles.css';
-import { $, addDisposableListener, append, Dimension, EventHelper, EventType, getActiveElement, isActiveElement, isAncestor, isAncestorOfActiveElement } from '../../../../base/browser/dom.js';
+import { $, addDisposableListener, append, Dimension, EventHelper, EventType, getActiveElement, getWindow, isActiveElement, isAncestor, isAncestorOfActiveElement } from '../../../../base/browser/dom.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { combinedDisposable, Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { disposableTimeout, IntervalTimer } from '../../../../base/common/async.js';
