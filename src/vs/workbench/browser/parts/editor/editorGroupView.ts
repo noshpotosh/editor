@@ -18,7 +18,7 @@ import { EditorInput } from '../../../common/editor/editorInput.js';
 import { SideBySideEditorInput } from '../../../common/editor/sideBySideEditorInput.js';
 import { Emitter, Event, Relay } from '../../../../base/common/event.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { Dimension, trackFocus, addDisposableListener, EventType, EventHelper, findParentWithClass, isAncestor, IDomNodePagePosition, isMouseEvent, isActiveElement, getWindow, getActiveElement, $ } from '../../../../base/browser/dom.js';
+import { DisposableResizeObserver, Dimension, trackFocus, addDisposableListener, EventType, EventHelper, findParentWithClass, isAncestor, IDomNodePagePosition, isMouseEvent, isActiveElement, getWindow, getActiveElement, $ } from '../../../../base/browser/dom.js';
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ProgressBar } from '../../../../base/browser/ui/progressbar/progressbar.js';
@@ -240,6 +240,11 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 
 			// Title control
 			this.titleControl = this._register(this.scopedInstantiationService.createInstance(EditorTitleControl, this.titleContainer, this.editorPartsView, this.groupsView, this, this.model, options?.menuIds, options?.showHeader === true, options?.reserveHeaderSpace, options?.useModernUITabs === true));
+
+			if (terminalFirstEnabled) {
+				const observer = this._register(new DisposableResizeObserver('terminalFirstTileHeader', () => this.updateTileClosePosition(), getWindow(this.element)));
+				this._register(observer.observe(this.titleContainer));
+			}
 
 			// Editor container
 			this.editorContainer = $('.editor-container');
@@ -2329,6 +2334,9 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 			container: new Dimension(titleWidth, height),
 			available: new Dimension(titleWidth, height - this.editorPane.minimumHeight)
 		}, Math.min(titleWidth, contentWidth));
+		if (terminalFirstEnabled) {
+			this.updateTileClosePosition();
+		}
 
 		// Update progress bar location
 		this.progressBar.getContainer().style.top = `${Math.max(this.titleHeight.offset - 2, 0)}px`;
@@ -2339,6 +2347,11 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 		this.editorContainer.style.width = `${contentWidth}px`;
 		this.editorContainer.style.height = `${editorHeight}px`;
 		this.editorPane.layout({ width: contentWidth, height: editorHeight, top: top + this.titleHeight.total, left });
+	}
+
+	private updateTileClosePosition(): void {
+		// A restored header can be hidden during layout. Observe it becoming visible too.
+		this.element.style.setProperty('--terminal-first-close-center', `${this.titleControl.getActionRowCenter() ?? 16}px`);
 	}
 
 	/**

@@ -30,6 +30,11 @@ const OVERLAY_DEFINITIONS: ReadonlyArray<{ className: string; type: BrowserOverl
 	{ className: 'notifications-center', type: BrowserOverlayType.Notification },
 	{ className: 'notification-toast-container', type: BrowserOverlayType.Notification },
 	{ className: 'spotlight-overlay', type: BrowserOverlayType.Unknown },
+	// VS NOSH floating overlays and the leader menu
+	{ className: 'terminal-first-floating', type: BrowserOverlayType.Unknown },
+	{ className: 'terminal-first-file-browser', type: BrowserOverlayType.Unknown },
+	{ className: 'terminal-first-jump-list', type: BrowserOverlayType.Unknown },
+	{ className: 'native-vim-leader', type: BrowserOverlayType.Unknown },
 	// Context view is very generic, so treat the content as unknown
 	{ className: 'context-view', type: BrowserOverlayType.Unknown }
 ];
@@ -236,7 +241,8 @@ export class BrowserOverlayManager extends Disposable implements IBrowserOverlay
 				// Start observing this element
 				observer.observe(overlay.element, {
 					attributes: true,
-					attributeFilter: ['style', 'class'],
+					// Some overlays show and hide by toggling the `hidden` attribute
+					attributeFilter: ['style', 'class', 'hidden'],
 					childList: true,
 					subtree: true
 				});

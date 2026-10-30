@@ -78,6 +78,21 @@ suite('BrowserOverlayManager', () => {
 		assert.deepStrictEqual(overlays.map(o => o.type), [BrowserOverlayType.Unknown]);
 	});
 
+	test('detects a VS NOSH floating overlay only while it is shown', () => {
+		const browserContainer = addElement('browser-container', {
+			position: 'absolute', left: '0px', top: '0px', width: '300px', height: '300px'
+		});
+		const floating = addElement('terminal-first-floating', {
+			position: 'fixed', left: '50px', top: '50px', width: '200px', height: '200px', zIndex: '30'
+		});
+		floating.hidden = true;
+		const hidden = manager.getOverlappingOverlays(browserContainer).map(o => o.type);
+		floating.hidden = false;
+		const shown = manager.getOverlappingOverlays(browserContainer).map(o => o.type);
+
+		assert.deepStrictEqual({ hidden, shown }, { hidden: [], shown: [BrowserOverlayType.Unknown] });
+	});
+
 	test('detects an overlay beneath detached webview content', () => {
 		const browserContainer = addElement('browser-container', {
 			position: 'absolute', left: '0px', top: '0px', width: '300px', height: '300px'

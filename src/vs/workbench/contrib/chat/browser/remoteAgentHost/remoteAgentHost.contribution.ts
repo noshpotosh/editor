@@ -26,6 +26,7 @@ import { IRemoteAgentHostConnectionCustomizationService, RemoteAgentHostConnecti
 import { IAgentHostAdvertisedAuthenticationResolver } from '../../../../../platform/agentHost/common/agentHostAdvertisedAuthentication.js';
 import { RemoteAgentHostAuthenticationResolver } from './remoteAgentHostAuthenticationResolver.js';
 import { MissionControlAvailabilityService } from './missionControlAvailabilityService.js';
+import { terminalFirstEnabled } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 class MissionControlContribution {
 	static readonly ID = 'workbench.contrib.missionControl';
@@ -45,9 +46,11 @@ registerSingleton(IMissionControlAvailabilityService, MissionControlAvailability
 registerSingleton(IRemoteAgentHostConnectionCustomizationService, RemoteAgentHostConnectionCustomizationService, InstantiationType.Delayed);
 registerSingleton(IAgentHostAdvertisedAuthenticationResolver, RemoteAgentHostAuthenticationResolver, InstantiationType.Delayed);
 
-registerWorkbenchContribution2(RemoteAgentHostContribution.ID, RemoteAgentHostContribution, WorkbenchPhase.AfterRestored);
-registerWorkbenchContribution2(EditorCloudSandboxContribution.ID, EditorCloudSandboxContribution, WorkbenchPhase.AfterRestored);
-registerWorkbenchContribution2(MissionControlContribution.ID, MissionControlContribution, WorkbenchPhase.AfterRestored);
+// VS NOSH opens into a shell; start agent connections once startup is idle so the shell appears first.
+const agentHostStartupPhase = terminalFirstEnabled ? WorkbenchPhase.Eventually : WorkbenchPhase.AfterRestored;
+registerWorkbenchContribution2(RemoteAgentHostContribution.ID, RemoteAgentHostContribution, agentHostStartupPhase);
+registerWorkbenchContribution2(EditorCloudSandboxContribution.ID, EditorCloudSandboxContribution, agentHostStartupPhase);
+registerWorkbenchContribution2(MissionControlContribution.ID, MissionControlContribution, agentHostStartupPhase);
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 	properties: {

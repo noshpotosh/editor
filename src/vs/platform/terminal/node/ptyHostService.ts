@@ -56,6 +56,14 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 		}
 	}
 
+	/**
+	 * Starts the pty host now instead of waiting for the first window connection, so it boots in
+	 * parallel with window loading.
+	 */
+	warmUp(): void {
+		this._ensurePtyHost();
+	}
+
 	private readonly _resolveVariablesRequestStore: RequestStore<string[], { workspaceId: string; originalText: string[] }>;
 	private _wasQuitRequested = false;
 	private _restartCount = 0;

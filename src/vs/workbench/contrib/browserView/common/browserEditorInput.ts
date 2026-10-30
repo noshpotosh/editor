@@ -57,6 +57,7 @@ export function reviveBrowserEditorViewState(value: object | undefined): IBrowse
 		favicon: isString(state.favicon) ? state.favicon : undefined,
 		session: reviveBrowserViewSession(state.session),
 		...(state.isDefaultLinkOpen === true ? { isDefaultLinkOpen: true } : {}),
+		...(state.chromeless === true ? { chromeless: true } : {}),
 	};
 }
 
@@ -213,6 +214,11 @@ export class BrowserEditorInput extends EditorInput {
 	 */
 	get isDefaultLinkOpen(): boolean {
 		return !!this._initialData.isDefaultLinkOpen;
+	}
+
+	/** Whether the editor hides its navigation bar and page frame. */
+	get chromeless(): boolean {
+		return !!this._initialData.chromeless;
 	}
 
 	get isSharingAvailable(): boolean {
@@ -379,6 +385,7 @@ export class BrowserEditorInput extends EditorInput {
 			title: this.title,
 			favicon: this.favicon,
 			session: this._initialData.session,
+			...(this.chromeless ? { chromeless: true } : {}),
 			associatedResource: this._associatedResource
 		});
 	}
@@ -436,6 +443,7 @@ export class BrowserEditorInput extends EditorInput {
 				title: this._model.title,
 				favicon: this._model.favicon,
 				session: this._initialData.session,
+				...(this.chromeless ? { chromeless: true } : {}),
 			};
 			this._model.dispose();
 			this._model = undefined;
@@ -456,6 +464,7 @@ export class BrowserEditorInput extends EditorInput {
 			title: this.title,
 			favicon: this.favicon,
 			session: this.session,
+			...(this.chromeless ? { chromeless: true } : {}),
 		};
 	}
 }
@@ -476,7 +485,7 @@ export class BrowserEditorSerializer implements IEditorSerializer {
 	deserialize(instantiationService: IInstantiationService, serializedEditor: string): EditorInput | undefined {
 		try {
 			const data: IBrowserEditorInputData = JSON.parse(serializedEditor);
-			const { url, title, favicon, session } = reviveBrowserEditorViewState(data);
+			const { url, title, favicon, session, chromeless } = reviveBrowserEditorViewState(data);
 			return instantiationService.invokeFunction((accessor) => {
 				const browserViewWorkbenchService = accessor.get(IBrowserViewWorkbenchService);
 				return browserViewWorkbenchService.getOrCreateLazy({
@@ -485,6 +494,7 @@ export class BrowserEditorSerializer implements IEditorSerializer {
 					title,
 					favicon,
 					session,
+					...(chromeless ? { chromeless } : {}),
 					associatedResource: URI.revive(data.associatedResource)
 				});
 			});

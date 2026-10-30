@@ -360,6 +360,25 @@
 		}
 	}
 
+	/* Chromeless views present a single web app: no navigation bar and no page frame. */
+	&.chromeless {
+		.browser-navbar {
+			display: none;
+		}
+
+		.browser-container {
+			border-radius: 0;
+
+			&::before {
+				display: none;
+			}
+
+			&::after {
+				border-radius: 0;
+			}
+		}
+	}
+
 	.browser-container-wrapper {
 		flex: 1 1 auto;
 		min-height: 0;

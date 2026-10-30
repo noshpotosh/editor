@@ -196,6 +196,10 @@ export class EditorTitleControl extends Themable {
 		return new Dimension(dimensions.container.width, this.getHeight().total);
 	}
 
+	getActionRowCenter(): number | undefined {
+		return this.editorTabsControl.getActionRowCenter();
+	}
+
 	getHeight(): IEditorGroupTitleHeight {
 		const tabsControlHeight = this.editorTabsControl.getHeight();
 

@@ -29,6 +29,7 @@ import { IWorkbenchAssignmentService } from '../../assignment/common/assignmentS
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 import { AccountPolicyGateUnsatisfiedReason, IAccountPolicyGateService } from '../../policies/common/accountPolicyService.js';
 import { EditorRemoteAgentHostServiceClient } from '../browser/editorRemoteAgentHostServiceClient.js';
+import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirstPolicy.js';
 
 /**
  * DI shim: picks between the local utility-process agent host and the
@@ -153,4 +154,5 @@ registerSingleton(
 	InstantiationType.Delayed,
 );
 
-registerWorkbenchContribution2(AgentHostPrewarmContribution.ID, AgentHostPrewarmContribution, WorkbenchPhase.BlockRestore);
+// VS NOSH opens into a shell; prewarm only once startup is idle so the shell appears first.
+registerWorkbenchContribution2(AgentHostPrewarmContribution.ID, AgentHostPrewarmContribution, terminalFirstEnabled ? WorkbenchPhase.Eventually : WorkbenchPhase.BlockRestore);

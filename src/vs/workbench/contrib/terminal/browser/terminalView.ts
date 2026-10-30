@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as nls from '../../../../nls.js';
 import * as dom from '../../../../base/browser/dom.js';
 import * as domStylesheetsJs from '../../../../base/browser/domStylesheets.js';
@@ -154,7 +155,8 @@ export class TerminalViewPane extends ViewPane {
 				}
 			}
 
-			let shouldCreate = this._terminalGroupService.groups.length === 0;
+			// The terminal-first session controller owns shell creation.
+			let shouldCreate = !terminalFirstEnabled && this._terminalGroupService.groups.length === 0;
 			// When triggered just after reconnection, also check there are no groups that could be
 			// getting restored currently
 			if (checkRestoredTerminals) {

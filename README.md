@@ -25,9 +25,10 @@ Prerequisites: macOS, Node.js `24.22.1` as specified in [.nvmrc](.nvmrc), npm, a
 git clone --branch terminal-first https://github.com/noshpotosh/editor.git
 cd editor
 npm run install-fast
-npm run build-fast
-./scripts/terminal-first.sh /path/to/project
+./scripts/terminal-first-app.sh --build /path/to/project
 ```
+
+The packaged app is the everyday launcher: it loads a bundled, minified build and opens to a shell much faster than a development build. After the first `--build`, run `./scripts/terminal-first-app.sh /path/to/project` to launch, and add `--build` again after changing sources. While iterating on code, `npm run build-fast` followed by `./scripts/terminal-first.sh /path/to/project` runs the unbundled development build instead, which needs no packaging step but starts several seconds slower.
 
 For optional VSCodeVim support, run `./scripts/setup-terminal-first-vim.sh` and set `"terminalFirst.vim.engine": "extension"`. The setup script installs VSCodeVim `1.32.4` from its GitHub release and verifies its SHA-256 checksum. The initial launch downloads the development Electron runtime and prepares upstream built-in extensions. Complete the normal workspace trust prompt before starting a shell in a new workspace.
 

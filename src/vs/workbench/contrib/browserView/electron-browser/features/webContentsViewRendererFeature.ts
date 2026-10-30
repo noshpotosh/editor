@@ -30,7 +30,8 @@ class WebContentsViewRendererFeature extends BrowserEditorContribution {
 
 	override beforeContainerLayout(): IContainerLayoutOverride {
 		return {
-			padding: { top: 3, right: 3, bottom: 3, left: 3 },
+			// The inset leaves room for the page border, which chromeless views do not draw.
+			padding: this.editor.chromeless ? undefined : { top: 3, right: 3, bottom: 3, left: 3 },
 			compute: (current, pane): IContainerLayout => {
 				const zoomFactor = getZoomFactor(this.editor.window);
 				const snap = (value: number) => Math.floor(value * zoomFactor) / zoomFactor;

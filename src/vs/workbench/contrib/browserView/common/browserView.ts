@@ -213,6 +213,8 @@ export interface IBrowserEditorViewState {
 	readonly session?: IBrowserViewSessionRequest;
 	/** Set when the default localhost link opener opens a tab. Never saved. */
 	readonly isDefaultLinkOpen?: boolean;
+	/** Hides the navigation bar and page frame, for a view that presents a single web app. Saved with the view. */
+	readonly chromeless?: boolean;
 }
 
 export const IBrowserViewWorkbenchService = createDecorator<IBrowserViewWorkbenchService>('browserViewWorkbenchService');

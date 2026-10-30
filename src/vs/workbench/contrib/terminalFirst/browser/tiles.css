@@ -36,6 +36,7 @@
 
 /* Each grid cell is its own card; the sash remains in the gutter between cards. */
 .monaco-workbench .part.editor > .content .editor-group-container.terminal-first-tile {
+	position: relative;
 	margin: var(--vscode-spacing-size40);
 	width: calc(100% - 2 * var(--vscode-spacing-size40));
 	height: calc(100% - 2 * var(--vscode-spacing-size40));
@@ -97,7 +98,7 @@
 
 .monaco-workbench .terminal-first-close-tile {
 	position: absolute;
-	top: var(--vscode-spacing-size40);
+	top: max(0px, calc(var(--terminal-first-close-center, 16px) - 12px));
 	right: var(--vscode-spacing-size40);
 	z-index: 10;
 	display: flex;

@@ -479,11 +479,30 @@ export function packageCopilotExtensionStream(): Stream {
 	const productionDependencies = getProductionDependencies('extensions/copilot');
 	const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat();
 
+	// build/.moduleignore strips @github/copilot for the core app, but the extension
+	// needs its SDK. Re-add the same files the extension's .vscodeignore ships in a VSIX.
+	const copilotSdkBase = 'extensions/copilot/node_modules/@github/copilot';
+	const copilotSdkSrc = [
+		'package.json',
+		'sdk/**/package.json',
+		'sdk/*.js',
+		'sdk/worker/*.js',
+		'sdk/sharp/**',
+		'sdk/builtin-skills/*/*.yaml',
+		'sdk/definitions/*.yaml',
+		'sdk/definitions/sidekick/*.yaml',
+		'sdk/prebuilds/*/*.node',
+		'sdk/prebuilds/*/spawn-helper',
+		'sdk/prebuilds/*/conpty/**',
+		'sdk/tgrep/bin/*/**',
+	].map(file => `${copilotSdkBase}/${file}`);
+
 	return es.merge(
 		localExtensionsStream,
 		gulp.src(dependenciesSrc, { base: '.' })
 			.pipe(util2.cleanNodeModules(path.join(root, 'build', '.moduleignore')))
-			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`)))
+			.pipe(util2.cleanNodeModules(path.join(root, 'build', `.moduleignore.${process.platform}`))),
+		gulp.src(copilotSdkSrc, { base: '.' })
 	).pipe(util2.setExecutableBit(['**/*.sh']));
 }
 

@@ -432,6 +432,7 @@ export class BrowserEditor extends EditorPane {
 
 	// -- State ----------------------------------------------------------
 
+	private _root!: HTMLElement;
 	private _browserContainerWrapper!: HTMLElement;
 	private _browserContainer!: HTMLElement;
 	get browserContainer(): HTMLElement { return this._browserContainer; }
@@ -443,6 +444,9 @@ export class BrowserEditor extends EditorPane {
 	private _currentPadding: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 };
 
 	override get input(): BrowserEditorInput | undefined { return super.input as BrowserEditorInput | undefined; }
+
+	/** Whether the current input hides the navigation bar and page frame. */
+	get chromeless(): boolean { return !!this.input?.chromeless; }
 
 	constructor(
 		group: IEditorGroup,
@@ -478,7 +482,7 @@ export class BrowserEditor extends EditorPane {
 		}
 
 		// Create root container
-		const root = $('.browser-root');
+		const root = this._root = $('.browser-root');
 		root.tabIndex = -1; // Click focusable (for kb shortcuts), but not in tab order
 		parent.appendChild(root);
 
@@ -550,6 +554,7 @@ export class BrowserEditor extends EditorPane {
 		}
 
 		this._inputDisposables.clear();
+		this._root.classList.toggle('chromeless', input.chromeless);
 
 		let model = input.model;
 		const isNew = !model;

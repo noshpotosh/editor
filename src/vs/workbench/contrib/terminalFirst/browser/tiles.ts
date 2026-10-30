@@ -6,9 +6,12 @@
 import { Queue } from '../../../../base/common/async.js';
 import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { isEqual } from '../../../../base/common/resources.js';
+import { URI } from '../../../../base/common/uri.js';
 import { ILocalizedString, localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { BrowserViewUri } from '../../../../platform/browserView/common/browserViewUri.js';
+import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { createDecorator, IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
@@ -36,11 +39,48 @@ import { dockedNavigation } from './terminalFirstNavigation.js';
 
 type TileKind = 'editor' | 'terminal' | { readonly container: string };
 
+/** A web app shown without browser chrome in an integrated browser tile. */
+interface IWebAppTile {
+	/** The browser view; a stable ID lets reopening find it and restores it after a restart. */
+	readonly resource: URI;
+	/** The setting that holds the app's URL. */
+	readonly setting: string;
+	readonly label: string;
+	readonly prompt: string;
+	readonly placeHolder: string;
+}
+
+type WebAppTileId = 'jira' | 'bitbucket';
+
+export const webAppTiles: Readonly<Record<WebAppTileId, IWebAppTile>> = {
+	jira: {
+		resource: BrowserViewUri.forId('vs-nosh-jira'),
+		setting: 'terminalFirst.jira.boardUrl',
+		label: localize('jiraBoard', "Jira Board"),
+		prompt: localize('jiraBoardPrompt', "Enter the URL of your Jira board"),
+		placeHolder: 'https://your-site.atlassian.net/jira/software/projects/KEY/boards/1',
+	},
+	bitbucket: {
+		resource: BrowserViewUri.forId('vs-nosh-bitbucket'),
+		setting: 'terminalFirst.bitbucket.url',
+		label: localize('bitbucket', "Bitbucket"),
+		prompt: localize('bitbucketPrompt', "Enter the Bitbucket page to show, such as your pull requests or a repository"),
+		placeHolder: 'https://bitbucket.org/your-workspace/your-repo/pull-requests/',
+	},
+};
+
+/** Returns the trimmed URL when it is an http(s) address, which is all a web app tile loads. */
+function parseWebAppUrl(value: string): string | undefined {
+	const url = URL.parse(value.trim());
+	return url && (url.protocol === 'https:' || url.protocol === 'http:') ? url.toString() : undefined;
+}
+
 /** View container locations whose containers open as tiles; the terminal container stays the shell surface. */
 const tiledLocations = [ViewContainerLocation.Sidebar, ViewContainerLocation.Panel, ViewContainerLocation.AuxiliaryBar] as const;
 
 interface ITilePick extends IQuickPickItem {
 	readonly tile?: TileKind;
+	readonly app?: WebAppTileId;
 	/** A single view, which may move into a container of its own. */
 	readonly view?: string;
 }
@@ -164,9 +204,40 @@ export class TileService extends Disposable {
 			{ type: 'separator', label: localize('tiles', "Tiles") },
 			{ label: localize('editor', "Editor"), tile: 'editor' },
 			{ label: localize('terminal', "Terminal"), tile: 'terminal' },
+			...Object.entries(webAppTiles).map(([app, { label }]) => ({ label, app: app as WebAppTileId })),
 		];
 		const selection = await this.quickInput.pick<ITilePick>([...tiles, ...this.viewPicks()], { placeHolder: viewsOnly ? localize('openViewTile', "Open View as Tile") : localize('newTile', "New Tile"), matchOnDescription: true });
-		if (selection?.view) { await this.openView(selection.view, direction); } else if (selection?.tile) { await this.open(selection.tile, direction); }
+		if (selection?.view) { await this.openView(selection.view, direction); } else if (selection?.app) { await this.openWebApp(selection.app, direction); } else if (selection?.tile) { await this.open(selection.tile, direction); }
+	}
+
+	/**
+	 * Shows a web app (Jira, Bitbucket) in a chromeless integrated browser tile, asking for its URL
+	 * the first time. Opening it again focuses the existing tile.
+	 */
+	async openWebApp(id: WebAppTileId, direction?: GroupDirection): Promise<IEditorGroup | undefined> {
+		const app = webAppTiles[id];
+		const existing = this.part.groups.find(group => group.editors.some(input => isEqual(input.resource, app.resource)));
+		if (existing) { existing.focus(); return existing; }
+		const url = await this.webAppUrl(app);
+		if (!url) { return undefined; }
+		const group = await this.open('editor', direction);
+		if (!group) { return undefined; }
+		await this.editors.openEditor({ resource: app.resource, options: { pinned: true, viewState: { url, chromeless: true } } }, group);
+		return group;
+	}
+
+	private async webAppUrl(app: IWebAppTile): Promise<string | undefined> {
+		const configured = parseWebAppUrl(this.configuration.getValue<string>(app.setting) ?? '');
+		if (configured) { return configured; }
+		const value = await this.quickInput.input({
+			prompt: app.prompt,
+			placeHolder: app.placeHolder,
+			ignoreFocusLost: true,
+			validateInput: async value => value.trim() && !parseWebAppUrl(value) ? localize('webAppUrlInvalid', "Enter an http or https URL.") : undefined,
+		});
+		const url = value && parseWebAppUrl(value);
+		if (url) { await this.configuration.updateValue(app.setting, url, ConfigurationTarget.USER); }
+		return url;
 	}
 
 	/** Opens a tile beside the focused tile and resolves to it, or `undefined` when nothing opened. */
@@ -337,6 +408,12 @@ if (terminalFirstEnabled) {
 			'terminalFirst.tiles.resizeStep': { type: 'number', default: 40, minimum: 4, maximum: 400, description: localize('resizeStep', "Pixels to move a tile edge for each resize command.") },
 		}
 	});
+	Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
+		id: 'terminalFirst.webApps', title: localize('webAppSettings', "Web App Tiles"), type: 'object', properties: {
+			[webAppTiles.jira.setting]: { type: 'string', default: '', format: 'uri', description: localize('jiraBoardUrl', "The Jira board to show in the Jira Board tile. When empty, Open Jira Board asks for it.") },
+			[webAppTiles.bitbucket.setting]: { type: 'string', default: '', format: 'uri', description: localize('bitbucketUrl', "The Bitbucket page to show in the Bitbucket tile, such as your pull requests or a repository. When empty, Open Bitbucket asks for it.") },
+		}
+	});
 	// Hyprland-style modifier: Ctrl+Alt on every platform (physical Control on macOS).
 	const mod = (key: number) => ({ primary: KeyMod.CtrlCmd | KeyMod.Alt | key, mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | key } });
 	const swap = (key: KeyCode) => ({ primary: KeyChord(KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyX, key), mac: { primary: KeyChord(KeyMod.WinCtrl | KeyMod.Alt | KeyCode.KeyX, key) } });
@@ -346,6 +423,8 @@ if (terminalFirstEnabled) {
 		{ id: 'explorer', title: localize2('files', "Open Explorer Tile"), run: service => service.openView(tileViewIds.explorer), keys: mod(KeyCode.KeyE) },
 		{ id: 'scm', title: localize2('git', "Open Git Changes Tile"), run: service => service.openView(tileViewIds.scm), keys: mod(KeyCode.KeyG) },
 		{ id: 'terminal', title: localize2('shell', "Open Terminal Tile"), run: service => service.open('terminal'), keys: mod(KeyCode.KeyT) },
+		{ id: 'jira', title: localize2('jira', "Open Jira Board"), run: service => service.openWebApp('jira'), keys: mod(KeyCode.KeyB) },
+		{ id: 'bitbucket', title: localize2('openBitbucket', "Open Bitbucket"), run: service => service.openWebApp('bitbucket'), keys: mod(KeyCode.KeyC) },
 		{ id: 'splitRight', title: localize2('splitRight', "New Tile to the Right"), run: service => service.pick(GroupDirection.RIGHT) },
 		{ id: 'splitDown', title: localize2('splitDown', "New Tile Below"), run: service => service.pick(GroupDirection.DOWN) },
 		{ id: 'splitEditorRight', title: localize2('splitEditorRight', "Split Editor Tile Right"), run: service => service.splitEditor(GroupDirection.RIGHT) },

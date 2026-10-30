@@ -1305,6 +1305,10 @@ export class CodeApplication extends Disposable {
 			this.loggerService
 		);
 		services.set(ILocalPtyService, ptyHostService);
+		// VS NOSH opens straight into a shell, so boot the pty host alongside the first window.
+		if (this.productService.urlProtocol === 'terminal-first') {
+			ptyHostService.warmUp();
+		}
 
 		// External terminal
 		if (isWindows) {

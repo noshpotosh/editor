@@ -18,8 +18,8 @@ import { tileSplitDirection } from '../../../../services/editor/common/editorTil
 import { ITerminalFirstService } from '../../../../services/terminalFirst/common/terminalFirst.js';
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { EditorGroupView } from '../../../../browser/parts/editor/editorGroupView.js';
-import { createEditorParts, TestViewsService, workbenchInstantiationService, workbenchTeardown } from '../../../../test/browser/workbenchTestServices.js';
-import { TileService } from '../../browser/tiles.js';
+import { createEditorParts, TestFileEditorInput, TestViewsService, workbenchInstantiationService, workbenchTeardown } from '../../../../test/browser/workbenchTestServices.js';
+import { TileService, webAppTiles } from '../../browser/tiles.js';
 import { IViewTileComposites, ViewTileComposites, ViewTileEditor, ViewTileInput, ViewTileSerializer } from '../../browser/tileEditor.js';
 import { ViewContainerHostRegistry } from '../../../../services/views/browser/viewContainerHost.js';
 import { localize2 } from '../../../../../nls.js';
@@ -36,7 +36,8 @@ import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../../browser/e
 import { EditorExtensions } from '../../../../common/editor.js';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
-import { IEditorOptions } from '../../../../../platform/editor/common/editor.js';
+import { IEditorOptions, IResourceEditorInput } from '../../../../../platform/editor/common/editor.js';
+import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
 
 suite('Terminal First Tiles', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -140,11 +141,17 @@ suite('Terminal First Tiles', () => {
 			/** Tile container elements in grid order. */
 			elements(): HTMLElement[];
 			notifications: string[];
-		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean } = {}): Promise<void> {
+			/** Settings written, web app URL prompts shown, and browser views opened. */
+			web: { written: [string, unknown][]; prompts: number; opened: IResourceEditorInput[] };
+		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean; jiraBoardUrl?: string; webAppAnswer?: string } = {}): Promise<void> {
 			const instantiation = workbenchInstantiationService(undefined, store);
 			const contexts = instantiation.get(IContextKeyService);
 			instantiation.stub(IContextKeyService, 'getContext', () => upcastPartial<IContext>({ getValue: key => contexts.getContextKeyValue(key) }));
-			instantiation.stub(IConfigurationService, new TestConfigurationService({ terminalFirst: { tiles: { resizeStep: 40, focusFollowsMouse: options.focusFollowsMouse ?? true } } }));
+			const configuration = new TestConfigurationService({ terminalFirst: { tiles: { resizeStep: 40, focusFollowsMouse: options.focusFollowsMouse ?? true }, jira: { boardUrl: options.jiraBoardUrl ?? '' } } });
+			const web: { written: [string, unknown][]; prompts: number; opened: IResourceEditorInput[] } = { written: [], prompts: 0, opened: [] };
+			configuration.updateValue = async (key: string, value: unknown) => { web.written.push([key, value]); };
+			instantiation.stub(IConfigurationService, configuration);
+			instantiation.stub(IQuickInputService, 'input', async () => { web.prompts++; return options.webAppAnswer; });
 			const parts = await createEditorParts(instantiation, store.add(new DisposableStore()));
 			instantiation.stub(IEditorGroupsService, parts);
 			const notifications: string[] = [];
@@ -155,7 +162,14 @@ suite('Terminal First Tiles', () => {
 				openTerminalTile: async () => options.terminalOpens ?? true,
 			}));
 			// The test editor service does not open editors; tiles only open into an explicit group.
-			instantiation.stub(IEditorService, upcastPartial<IEditorService>({ openEditor: ((input: EditorInput, options: IEditorOptions, group: IEditorGroup) => group.openEditor(input, options)) as IEditorService['openEditor'] }));
+			// Browser views stand in as file inputs on the same resource, since the browser editor is desktop-only.
+			instantiation.stub(IEditorService, upcastPartial<IEditorService>({
+				openEditor: ((input: EditorInput | IResourceEditorInput, options: IEditorOptions | IEditorGroup, group: IEditorGroup) => {
+					if (input instanceof EditorInput) { return group.openEditor(input, options as IEditorOptions); }
+					web.opened.push(input);
+					return (options as IEditorGroup).openEditor(store.add(new TestFileEditorInput(input.resource!, 'testBrowser')), input.options);
+				}) as IEditorService['openEditor'],
+			}));
 			// No pane composites are registered, so view tiles show their placeholder.
 			instantiation.stub(IPaneCompositePartService, 'getPaneComposite', () => undefined);
 			// Views are active only when their context matches, which the mock context key service never does.
@@ -167,7 +181,7 @@ suite('Terminal First Tiles', () => {
 			const names = new Map<number, string>([[parts.mainPart.activeGroup.id, 'a']]);
 			try {
 				await run({
-					service, groups: parts, notifications,
+					service, groups: parts, notifications, web,
 					name: (group, label) => { if (group) { names.set(group.id, label); } },
 					layout: (width, height) => parts.testMainPart.layout(width, height, 0, 0),
 					elements: () => parts.testMainPart.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => parts.testMainPart.groups.find(view => view.id === group.id)!.element),
@@ -289,6 +303,45 @@ suite('Terminal First Tiles', () => {
 			const opened = await service.open({ container: 'workbench.view.explorer' }, GroupDirection.RIGHT, false);
 			deepStrictEqual({ opened, shape: shape(), notifications }, { opened: undefined, shape: { tiles: [['a', 300, 250]], active: 'a', maximized: false }, notifications: [] });
 		}));
+
+		test('the Jira board asks for its URL once, opens a browser tile, and reopening focuses it', () => withTiles(async ({ service, groups, shape, name, web }) => {
+			name(await service.openWebApp('jira', GroupDirection.RIGHT), 'jira');
+			groups.mainPart.groups.find(group => group !== groups.mainPart.activeGroup)!.focus();
+			const again = await service.openWebApp('jira');
+			deepStrictEqual({ web, shape: shape(), reused: again === groups.mainPart.activeGroup }, {
+				web: {
+					written: [['terminalFirst.jira.boardUrl', 'https://example.atlassian.net/jira/software/projects/KEY/boards/1']],
+					prompts: 1,
+					opened: [{ resource: webAppTiles.jira.resource, options: { pinned: true, viewState: { url: 'https://example.atlassian.net/jira/software/projects/KEY/boards/1', chromeless: true } } }],
+				},
+				shape: { tiles: [['a', 540, 800], ['jira', 540, 800]], active: 'jira', maximized: false },
+				reused: true,
+			});
+		}, { webAppAnswer: ' https://example.atlassian.net/jira/software/projects/KEY/boards/1 ' }));
+
+		test('a configured Jira board opens without asking', () => withTiles(async ({ service, web }) => {
+			await service.openWebApp('jira');
+			deepStrictEqual({ prompts: web.prompts, written: web.written, urls: web.opened.map(input => (input.options?.viewState as { url: string }).url) }, { prompts: 0, written: [], urls: ['https://example.atlassian.net/board'] });
+		}, { jiraBoardUrl: 'https://example.atlassian.net/board' }));
+
+		test('Bitbucket gets its own tile and setting beside a configured Jira board', () => withTiles(async ({ service, shape, name, web }) => {
+			name(await service.openWebApp('jira', GroupDirection.RIGHT), 'jira');
+			name(await service.openWebApp('bitbucket', GroupDirection.DOWN), 'bitbucket');
+			await service.openWebApp('jira');
+			deepStrictEqual({ written: web.written, prompts: web.prompts, opened: web.opened.map(input => input.resource?.toString()), shape: shape() }, {
+				written: [['terminalFirst.bitbucket.url', 'https://bitbucket.org/team/repo/pull-requests/']],
+				prompts: 1,
+				opened: [webAppTiles.jira.resource.toString(), webAppTiles.bitbucket.resource.toString()],
+				shape: { tiles: [['a', 540, 800], ['jira', 540, 400], ['bitbucket', 540, 400]], active: 'jira', maximized: false },
+			});
+		}, { jiraBoardUrl: 'https://example.atlassian.net/board', webAppAnswer: 'https://bitbucket.org/team/repo/pull-requests/' }));
+
+		for (const answer of [undefined, 'not a url', 'file:///etc/passwd']) {
+			test(`a Jira board URL of ${answer ?? 'nothing'} opens nothing and saves nothing`, () => withTiles(async ({ service, shape, web }) => {
+				const opened = await service.openWebApp('jira', GroupDirection.RIGHT);
+				deepStrictEqual({ opened, web, shape: shape() }, { opened: undefined, web: { written: [], prompts: 1, opened: [] }, shape: { tiles: [['a', 1080, 800]], active: 'a', maximized: false } });
+			}, { webAppAnswer: answer }));
+		}
 
 		for (const enabled of [true, false]) {
 			test(`focus ${enabled ? 'follows' : 'ignores'} a pointer that rests on a tile`, () => withTiles(async ({ service, shape, name, elements }) => {

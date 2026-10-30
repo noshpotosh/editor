@@ -18,11 +18,11 @@ build_app() {
 if [[ "${1:-}" == --build ]]; then
 	shift
 	build_app
-elif [[ ! -f "$TERMINAL_FIRST_STAMP" || ! -x "$TERMINAL_FIRST_APP/Contents/MacOS/Electron" ]]; then
+elif [[ ! -f "$TERMINAL_FIRST_STAMP" || ! -x "$TERMINAL_FIRST_APP/Contents/MacOS/VS NOSH" ]]; then
 	build_app
 fi
 unset VSCODE_DEV ELECTRON_RUN_AS_NODE
-exec "$TERMINAL_FIRST_APP/Contents/MacOS/Electron" \
+exec "$TERMINAL_FIRST_APP/Contents/MacOS/VS NOSH" \
 	--user-data-dir "$TERMINAL_FIRST_ROOT/.build/terminal-first/user-data" \
 	--extensions-dir "$TERMINAL_FIRST_ROOT/.build/terminal-first/extensions" \
 	--shared-data-dir "$TERMINAL_FIRST_ROOT/.build/terminal-first/shared-data" \

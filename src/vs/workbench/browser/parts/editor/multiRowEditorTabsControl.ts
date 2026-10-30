@@ -212,6 +212,10 @@ export class MultiRowEditorControl extends Disposable implements IEditorTabsCont
 		);
 	}
 
+	getActionRowCenter(): number | undefined {
+		return this.stickyEditorTabsControl.getActionRowCenter() ?? this.unstickyEditorTabsControl.getActionRowCenter();
+	}
+
 	getHeight(): number {
 		return this.stickyEditorTabsControl.getHeight() + this.unstickyEditorTabsControl.getHeight();
 	}

@@ -17,6 +17,7 @@ User-facing documentation lives in [`TERMINAL_FIRST.md`](../../TERMINAL_FIRST.md
 | 7 | Workbench simplification, branding, and distribution | Mixed | [07-workbench-branding-distribution.md](07-workbench-branding-distribution.md) |
 | 8 | Terminal configuration roadmap | Planned | [08-terminal-configuration-roadmap.md](08-terminal-configuration-roadmap.md) |
 | 9 | Tiling code workspace (tiles, layout commands, chords, focus-follows-mouse) | Uncommitted | [09-tiling-workspace.md](09-tiling-workspace.md) |
+| 10 | Web app tiles: Jira board and Bitbucket (chromeless integrated browser tiles) | Uncommitted | [10-jira-board.md](10-jira-board.md) |
 
 ## Product summary
 

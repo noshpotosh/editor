@@ -93,6 +93,8 @@ export interface IEditorTabsControl extends IDisposable {
 	updateEditorDirty(editor: EditorInput): void;
 	layout(dimensions: IEditorTitleControlDimensions): Dimension;
 	getHeight(): number;
+	/** Vertical center of the rendered action row, relative to the editor group. */
+	getActionRowCenter(): number | undefined;
 }
 
 export abstract class EditorTabsControl extends Themable implements IEditorTabsControl {
@@ -216,6 +218,16 @@ export abstract class EditorTabsControl extends Themable implements IEditorTabsC
 		parent.appendChild(this.editorLayoutActionsToolbarContainer);
 
 		this.handleEditorLayoutActionsToolBarVisibility(this.editorLayoutActionsToolbarContainer);
+	}
+
+	getActionRowCenter(): number | undefined {
+		const row = this.editorActionsToolbarContainer?.parentElement;
+		const bounds = row?.getBoundingClientRect();
+		if (!bounds?.height) {
+			return undefined;
+		}
+		const group = this.groupView.element;
+		return bounds.top - group.getBoundingClientRect().top - group.clientTop + bounds.height / 2;
 	}
 
 	protected createAddTabControl(parent: HTMLElement, menuId: MenuId, before?: HTMLElement, onDidChangeVisibility?: () => void): HTMLElement {

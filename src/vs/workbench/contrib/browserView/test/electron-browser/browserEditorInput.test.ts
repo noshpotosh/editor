@@ -31,7 +31,7 @@ class TestBrowserViewWorkbenchService implements IBrowserViewWorkbenchService {
 	readonly isSharingAvailable = false;
 	readonly known = new Map<string, BrowserEditorInput>();
 	input: BrowserEditorInput | undefined;
-	lastCreate: { id: string; url: string | undefined; associatedResource: string | undefined; session: IBrowserViewSessionRequest | undefined } | undefined;
+	lastCreate: { id: string; url: string | undefined; associatedResource: string | undefined; session: IBrowserViewSessionRequest | undefined; chromeless?: boolean } | undefined;
 
 	resolveNetwork(): undefined {
 		return undefined;
@@ -83,6 +83,7 @@ class TestBrowserViewWorkbenchService implements IBrowserViewWorkbenchService {
 			url: data.url,
 			associatedResource: data.associatedResource?.toString(),
 			session: data.session,
+			...(data.chromeless ? { chromeless: true } : {}),
 		};
 		if (!this.input) {
 			throw new Error('No browser editor input configured for test.');
@@ -239,6 +240,31 @@ suite('BrowserEditorInput', () => {
 			unknownScope: undefined,
 			malformedFields: { scope: BrowserViewStorageScope.Ephemeral },
 			roundTrip: session,
+		});
+	});
+
+	test('keeps a chromeless view chromeless through reopen, copy, and restore', () => {
+		const serializer = new BrowserEditorSerializer();
+		const input = createInput({ id: 'app', url: 'https://app.example/', chromeless: true });
+		const untyped = input.toUntyped();
+		input.copy();
+		const copied = browserViewWorkbenchService.lastCreate?.chromeless;
+		serializer.deserialize(instantiationService, serializer.serialize(input)!);
+		const restored = browserViewWorkbenchService.lastCreate?.chromeless;
+		serializer.deserialize(instantiationService, JSON.stringify({ id: 'saved', chromeless: 'yes' }));
+
+		assert.deepStrictEqual({
+			chromeless: input.chromeless,
+			viewState: untyped.options?.viewState,
+			copied,
+			restored,
+			malformed: browserViewWorkbenchService.lastCreate?.chromeless,
+		}, {
+			chromeless: true,
+			viewState: { url: 'https://app.example/', title: undefined, favicon: undefined, session: undefined, chromeless: true },
+			copied: true,
+			restored: true,
+			malformed: undefined,
 		});
 	});
 
