@@ -36,7 +36,9 @@ export class NativeTitlebarPart extends BrowserTitlebarPart {
 	//#region IView
 
 	override get minimumHeight(): number {
-		if (terminalFirstEnabled && !this.isAuxiliary) { return TERMINAL_FIRST_TITLEBAR_HEIGHT / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1); }
+		if (terminalFirstEnabled && this.getId() === Parts.TITLEBAR_PART) {
+			return TERMINAL_FIRST_TITLEBAR_HEIGHT / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1); // room for the session strip
+		}
 		if (!isMacintosh) {
 			return super.minimumHeight;
 		}

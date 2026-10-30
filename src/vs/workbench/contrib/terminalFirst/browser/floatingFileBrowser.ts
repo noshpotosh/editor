@@ -37,7 +37,7 @@ import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser
 import { TerminalFirstBrowserFocusedContext, TerminalFirstBrowserModeContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { FileBrowserEntry, FileBrowserModel } from './fileBrowserModel.js';
-import { fileBrowserMarkedIcon, fileBrowserPromptIcon } from '../../../browser/parts/terminalFirst/terminalFirstIcons.js';
+import { fileBrowserMarkedIcon, fileBrowserPromptIcon } from './terminalFirstIcons.js';
 
 const fileBrowserActions: { id: string; label: string; keys: string }[] = [];
 /** Matches the workbench list row height so file rows read like the Explorer. */

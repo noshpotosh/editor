@@ -25,6 +25,7 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/
 import { ITerminalFirstService, TerminalFirstService } from './terminalFirstService.js';
 import './viewPruning.js';
 import { createTerminalFirstTerminalPolicy } from './terminalPolicy.js';
+import { SessionStripContribution } from './sessionStripContribution.js';
 import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';
 
 registerSingleton(ITerminalFirstService, TerminalFirstService, InstantiationType.Delayed);
@@ -45,6 +46,7 @@ if (terminalFirstEnabled) {
 		'terminalFirst.terminal.padding': { type: 'number', default: 12, minimum: 0, maximum: 100, description: localize('padding', "Terminal padding in pixels.") },
 	} });
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
+	registerWorkbenchContribution2(SessionStripContribution.ID, SessionStripContribution, WorkbenchPhase.BlockRestore);
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
 		overrides: {
 			'window.titleBarStyle': 'custom',

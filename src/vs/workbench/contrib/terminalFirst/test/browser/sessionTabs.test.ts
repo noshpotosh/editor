@@ -11,7 +11,7 @@ import { upcastPartial } from '../../../../../base/test/common/mock.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { ITerminalFirstService, ITerminalFirstSession } from '../../../../services/terminalFirst/common/terminalFirst.js';
-import { SessionTabsWidget } from '../../../../browser/parts/terminalFirst/sessionStripPart.js';
+import { SessionTabsWidget } from '../../browser/sessionStripPart.js';
 import { NotificationService } from '../../../../services/notification/common/notificationService.js';
 import { workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 

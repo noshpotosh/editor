@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/titlebarpart.css';
-import { SessionTabsWidget } from '../terminalFirst/sessionStripPart.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MultiWindowParts, Part } from '../../part.js';
 import { ITitleService } from '../../../services/title/browser/titleService.js';
@@ -59,7 +58,6 @@ import { safeIntl } from '../../../../base/common/date.js';
 import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { WORKBENCH_MENU_MOTION_CLASS, workbenchMenuCloseAnimation } from '../../actions/menuMotion.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export interface ITitleVariable {
 	readonly name: string;
@@ -298,7 +296,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private titleBarStyle: TitlebarStyle;
 	private activeWindowId: number | undefined;
 
-	protected readonly isAuxiliary: boolean;
+	private readonly isAuxiliary: boolean;
 	private isCompact = false;
 
 	private readonly isCompactContextKey: IContextKey<boolean>;
@@ -473,10 +471,6 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		this.titleBarToolBarOverflowScheduler = this._register(new AnimationFrameScheduler(this.rootContainer, () => this.updateTitleBarToolBarOverflow()));
 
 		this.leftContent = append(this.rootContainer, $('.titlebar-left'));
-		if (terminalFirstEnabled && !this.isAuxiliary) {
-			this.rootContainer.classList.add('terminal-first-titlebar');
-			this._register(this.instantiationService.createInstance(SessionTabsWidget, append(this.leftContent, $('.titlebar-sessions.terminal-first-sessions'))));
-		}
 		this.centerContent = append(this.rootContainer, $('.titlebar-center'));
 		this.rightContent = append(this.rootContainer, $('.titlebar-right'));
 
@@ -500,7 +494,6 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 		// Title
 		this.title = append(this.centerContent, $('div.window-title'));
-		this.title.classList.toggle('terminal-first-title', terminalFirstEnabled);
 		this.createTitle();
 
 		// Center-Adjacent Toolbar
@@ -902,7 +895,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	}
 
 	private get layoutControlEnabled(): boolean {
-		return !terminalFirstEnabled && this.configurationService.getValue<boolean>(LayoutSettings.LAYOUT_ACTIONS) !== false;
+		return this.configurationService.getValue<boolean>(LayoutSettings.LAYOUT_ACTIONS) !== false;
 	}
 
 	protected get isCommandCenterVisible() {

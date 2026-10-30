@@ -574,7 +574,7 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | A3 terminal policy seam | done | (see git log) | `ICreateTerminalOptions`/`IShellLaunchConfig` fork fields removed; `TERMINAL_FIRST_SESSION` now set via `decorateEnvironment`; upstream terminal tests pristine |
 | A2.1 routing + layout hooks | done | (see git log) | `editorGroupRouting.ts`, `editorPartHooks.ts` seams; `tileRouting.ts`, `tileLayoutHook.ts`, `tileChrome.ts` in the fork; `getActionRowCenter` additions to the tab controls dropped (chrome reads the DOM) |
 | A2.2 sessions extension | done | (see git log) | `EditorPartSessions` extension with `for()`/`attach()`; `IEditorPart.sessions`/`swapGroups` removed; upstream editor tests pristine |
-| A5 titlebar | todo | | |
+| A5 titlebar | done | (see git log) | `SessionStripContribution` injects the strip; browser `titlebarPart.ts` pristine; electron-browser part keeps a 4-line `minimumHeight` hunk |
 | A6 manifest + sync | todo | | |
 | B keyboard model | todo | | |
 | C picker | todo | | |
