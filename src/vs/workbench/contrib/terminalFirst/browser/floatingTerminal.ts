@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './floatingOverlay.css';
 import './floatingTerminal.css';
 import { $, append, addDisposableListener, EventType, getWindow, trackFocus } from '../../../../base/browser/dom.js';
 import { onUnexpectedError } from '../../../../base/common/errors.js';
@@ -42,9 +43,6 @@ export class FloatingTerminal extends Disposable {
 		this.element.setAttribute('aria-label', localize('floatingTerminal', "Floating Terminal"));
 		const header = append(this.element, $('.floating-terminal-header'));
 		this.title = append(header, $('span'));
-		const hideButton = append(header, $<HTMLButtonElement>('button'));
-		hideButton.textContent = localize('hide', "Hide");
-		this._register(addDisposableListener(hideButton, EventType.CLICK, () => this.hide(true)));
 		this.body = append(this.element, $('.floating-terminal-body.terminal-editor'));
 		const menu = this._register(menuService.createMenu(MenuId.TerminalInstanceContext, contextKeyService));
 		let cancelContextMenu = false;

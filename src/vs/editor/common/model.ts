@@ -1237,6 +1237,13 @@ export interface ITextModel {
 	pushStackElement(): void;
 
 	/**
+	 * Keep edits in one undo element until disposed. Nested transactions share the element.
+	 * The owner must end the transaction before undo, model switching, or disposal.
+	 * @internal
+	 */
+	beginUndoRedoTransaction(): IDisposable;
+
+	/**
 	 * Open the current undo-redo element.
 	 * This offers a way to remove the current undo/redo stop point.
 	 */

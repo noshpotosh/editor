@@ -1,0 +1,16 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+.native-vim-status {
+	color: var(--vscode-editorWidget-foreground);
+	background: var(--vscode-editorWidget-background);
+	border: 1px solid var(--vscode-editorWidget-border, transparent);
+	border-radius: var(--vscode-cornerRadius-large, 8px);
+	padding: 8px 12px;
+	margin: 8px;
+	max-width: 80%;
+	white-space: pre-wrap;
+	pointer-events: none;
+}
+.native-vim-status.error { color: var(--vscode-errorForeground); }

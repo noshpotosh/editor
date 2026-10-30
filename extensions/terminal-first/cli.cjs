@@ -26,9 +26,6 @@ function parseArguments(args) {
 			files.push(argument);
 		}
 	}
-	if (!files.length) {
-		throw new Error('Usage: e [--wait] [--] <file>...');
-	}
 	return { files, wait, help: false };
 }
 
@@ -36,10 +33,10 @@ function parseArguments(args) {
 async function openFiles(args, environment = process.env, cwd = process.cwd()) {
 	const options = parseArguments(args);
 	if (options.help) {
-		return 'Usage: e [--wait] [--] <file>...\nOpens files in this window. --wait returns when all requested files are closed.';
+		return 'Usage: code [--wait] [--] [<file>...]\nOpens the editor in the current directory, or opens the specified files in this window. --wait returns when all requested files are closed.';
 	}
 	if (!environment.TERMINAL_FIRST_CLI_POINTER || !environment.TERMINAL_FIRST_SESSION) {
-		throw new Error('Run e inside a Terminal First shell.');
+		throw new Error('Run code inside a Terminal First shell.');
 	}
 	const fileURIs = [];
 	for (const file of options.files) {
@@ -86,7 +83,7 @@ if (require.main === module) {
 			process.stdout.write(`${message}\n`);
 		}
 	}, error => {
-		process.stderr.write(`e: ${error.message}\n`);
+		process.stderr.write(`code: ${error.message}\n`);
 		process.exitCode = 1;
 	});
 }

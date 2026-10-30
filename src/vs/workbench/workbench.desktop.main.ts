@@ -152,6 +152,7 @@ import './contrib/remote/electron-browser/remote.contribution.js';
 // Terminal
 import './contrib/terminal/electron-browser/terminal.contribution.js';
 import './contrib/terminalFirst/browser/terminalFirst.contribution.js';
+import './contrib/terminalFirst/browser/nativeVim.js';
 import './api/browser/terminalFirstVimStatus.js';
 
 // Themes

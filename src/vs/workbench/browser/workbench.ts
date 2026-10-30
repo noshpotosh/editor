@@ -309,6 +309,7 @@ export class Workbench extends Layout {
 		const platformClass = isWindows ? 'windows' : isLinux ? 'linux' : 'mac';
 		const workbenchClasses = coalesce([
 			'monaco-workbench',
+			terminalFirstEnabled ? 'terminal-first-starting' : undefined,
 			platformClass,
 			isWeb ? 'web' : undefined,
 			isChrome ? 'chromium' : isFirefox ? 'firefox' : isSafari ? 'safari' : undefined,

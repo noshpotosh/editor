@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/scm.css';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { basename, dirname } from '../../../../base/common/resources.js';
@@ -2198,7 +2199,7 @@ class SCMTreeDataSource extends Disposable implements IAsyncDataSource<ISCMViewS
 	async getChildren(inputOrElement: ISCMViewService | TreeElement): Promise<Iterable<TreeElement>> {
 		const repositoryCount = this.scmViewService.visibleRepositories.length;
 
-		const showActionButton = this.configurationService.getValue<boolean>('scm.showActionButton') === true;
+		const showActionButton = !terminalFirstEnabled && this.configurationService.getValue<boolean>('scm.showActionButton') === true;
 		const alwaysShowRepositories = this.configurationService.getValue<boolean>('scm.alwaysShowRepositories') === true;
 
 		if (isSCMViewService(inputOrElement) && (repositoryCount > 1 || alwaysShowRepositories)) {
@@ -2211,7 +2212,7 @@ class SCMTreeDataSource extends Disposable implements IAsyncDataSource<ISCMViewS
 			const resourceGroups = inputOrElement.provider.groups;
 
 			// SCM Input
-			if (inputOrElement.input.visible) {
+			if (!terminalFirstEnabled && inputOrElement.input.visible) {
 				children.push(inputOrElement.input);
 			}
 

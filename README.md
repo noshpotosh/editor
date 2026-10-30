@@ -10,7 +10,7 @@ This is an early macOS source build aimed at becoming a personal daily driver. P
 
 - **Shell on launch.** Ordinary windows start in the terminal; explicit file launches open the editor.
 - **An editor on demand.** `e file` opens local files in the originating window, including paths with spaces and files that do not exist yet. `e --wait file` waits until the requested files close.
-- **Vim-style editing.** A pinned VSCodeVim extension provides modal editing. Its mode and status appear in the full editor’s status bar.
+- **Vim-style editing.** VSCodeVim remains the default. An opt-in first-party native Vim preview adds modal editing, Space-led command menus, and consistent picker navigation; see [Native Vim preview](TERMINAL_FIRST.md#native-vim-preview) for setup and current limits.
 - **Plain terminal mode.** Only the terminal and persistent session strip remain. Sidebar, panel, and workbench shortcuts cannot reveal tools until you open the editor. The title-bar layout and Open in Agents controls are removed.
 - **Independent session tabs.** Each tab retains its shell, files, diffs, unsaved buffers, and editor layout. The strip stays visible in both modes; its plus button creates a separate shell tab. The editor has no embedded terminal.
 - **An isolated profile.** Development launchers keep settings, extensions, and shared data under `.build/terminal-first`, separate from an installed VS Code profile.

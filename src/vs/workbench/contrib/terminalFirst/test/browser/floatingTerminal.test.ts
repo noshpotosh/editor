@@ -45,7 +45,7 @@ suite('Floating Terminal Host', () => {
 		input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
 		deepStrictEqual([calls, document.activeElement === input, title.hasListeners()], [['attach', 'visible:true', 'hide:false', 'visible:false', 'detach'], true, false]);
 		host.show(terminal);
-		container.querySelector('button')!.click();
-		deepStrictEqual(calls.slice(5), ['attach', 'visible:true', 'hide:true', 'visible:false', 'detach']);
+		host.hideTerminal();
+		deepStrictEqual([calls.slice(5), container.querySelector('.floating-terminal-header button')], [['attach', 'visible:true', 'visible:false', 'detach'], null]);
 	});
 });

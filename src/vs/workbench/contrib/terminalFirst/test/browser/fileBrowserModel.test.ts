@@ -96,4 +96,83 @@ suite('Floating File Browser Model', () => {
 		deepStrictEqual([model.entries.map(entry => entry.stat.name), model.selected?.path], [['b.ts', 'c.ts'], '/root/b.ts']);
 	});
 
+	test('marks survive filtering and navigation; session state resumes without marks', async () => {
+		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
+			resolve: async resource => ({ ...stat(resource.path, true), children: [stat(resource.path + '/a')] }),
+			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
+		})));
+		model.show(URI.file('/one'), 'one');
+		await settle();
+		model.toggleMark();
+		model.setQuery('nothing');
+		model.navigate(URI.file('/elsewhere'));
+		model.toggleHidden();
+		await settle();
+		deepStrictEqual([...model.marked.keys()], [URI.file('/one/a').toString()]);
+		model.show(URI.file('/two'), 'two');
+		await settle();
+		model.show(URI.file('/one'), 'one');
+		await settle();
+		deepStrictEqual([model.directory?.path, model.root?.path, model.hidden, model.query, model.marked.size], ['/elsewhere', '/one', true, '', 0]);
+	});
+
+	test('folder finder includes empty folders and does not descend into symlinks or hidden folders', async () => {
+		const visited: string[] = [];
+		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
+			resolve: async resource => {
+				visited.push(resource.path);
+				return { ...stat(resource.path, true), children: resource.path === '/root' ? [stat('/root/empty', true), stat('/root/.hidden', true), { ...stat('/root/link', true), isSymbolicLink: true }] : [] };
+			},
+			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
+		})));
+		model.show(URI.file('/root'));
+		await settle();
+		const loaded = Event.toPromise(Event.filter(model.onDidChange, () => !model.loading));
+		model.toggleBrowser();
+		await loaded;
+		deepStrictEqual([model.entries.map(entry => entry.stat.name), visited.includes('/root/link'), visited.includes('/root/.hidden')], [['empty', 'link'], false, false]);
+	});
+
+	test('missing remembered directory falls back to the session directory', async () => {
+		let missing = false;
+		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
+			resolve: async resource => {
+				if (missing && resource.path === '/gone') { throw new Error('Missing'); }
+				return { ...stat(resource.path, true), children: [] };
+			},
+			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
+		})));
+		model.show(URI.file('/root'), 'one');
+		model.navigate(URI.file('/gone'));
+		await settle();
+		model.hide();
+		missing = true;
+		model.show(URI.file('/root'), 'one');
+		await settle();
+		await settle();
+		deepStrictEqual([model.directory?.path, !!model.notice, model.loading], ['/root', true, false]);
+	});
+
+	test('folder traversal stops scheduling work after dismissal', async () => {
+		const pending = new DeferredPromise<IFileStatWithMetadata>();
+		const entered = new DeferredPromise<void>();
+		const visited: string[] = [];
+		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
+			resolve: async resource => {
+				visited.push(resource.path);
+				if (resource.path === '/root/slow') { entered.complete(); return pending.p; }
+				return { ...stat(resource.path, true), children: [stat('/root/slow', true)] };
+			},
+			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
+		})));
+		model.show(URI.file('/root'));
+		await settle();
+		model.toggleBrowser();
+		await entered.p;
+		model.hide();
+		await pending.complete({ ...stat('/root/slow', true), children: [stat('/root/slow/deeper', true)] });
+		await settle();
+		deepStrictEqual([model.entries, visited.includes('/root/slow/deeper')], [[], false]);
+	});
+
 });

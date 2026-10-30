@@ -19,6 +19,10 @@ export interface ITerminalFirstService {
 	readonly onDidChangeSessions: Event<void>;
 	readonly sessions: readonly ITerminalFirstSession[];
 	initialize(): Promise<void>;
+	readonly floatingJumpListVisible: boolean;
+	addToJumpList(): Promise<void>;
+	toggleFloatingJumpList(): Promise<void>;
+	hideFloatingJumpList(focusEditor?: boolean): Promise<void>;
 	readonly floatingFileBrowserVisible: boolean;
 	toggleFloatingFileBrowser(): Promise<void>;
 	hideFloatingFileBrowser(focusEditor?: boolean): Promise<void>;

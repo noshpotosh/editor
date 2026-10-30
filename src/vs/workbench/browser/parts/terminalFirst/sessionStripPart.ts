@@ -79,16 +79,7 @@ export class SessionStripPart extends Part {
 			}));
 			button(wrapper, '×', localize('closeSession', "Close {0}", session.title), session.id + ':close', () => this.service.closeSession(session.id));
 		}
-		button(this.stripElement, '+', localize('newSession', "New Terminal"), 'new', () => this.service.newTerminal());
-		const editor = this.service.sessions.some(session => session.active && session.mode === 'editor');
-		if (editor) {
-			const files = button(this.stripElement, localize('files', "Files"), localize('toggleFileBrowser', "Toggle Floating File Browser"), 'files', () => this.service.toggleFloatingFileBrowser());
-			files.setAttribute('aria-pressed', String(this.service.floatingFileBrowserVisible));
-			const toggle = button(this.stripElement, localize('terminal', "Terminal"), localize('toggleFloatingTerminal', "Toggle Floating Terminal"), 'floating', () => this.service.toggleFloatingTerminal());
-			toggle.setAttribute('aria-pressed', String(this.service.floatingTerminalVisible));
-		}
-		const label = editor ? localize('returnToTerminal', "Return to Terminal") : localize('openEditor', "Open Editor");
-		button(this.stripElement, label, label, 'toggle', () => this.service.toggle()).classList.add('session-toggle');
+		button(tabs, '+', localize('newSession', "New Terminal"), 'new', () => this.service.newTerminal()).classList.add('session-new');
 		if (focusedId) {
 			this.buttons.get(focusedId)?.focus();
 		}

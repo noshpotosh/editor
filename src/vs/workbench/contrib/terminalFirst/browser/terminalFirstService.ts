@@ -3,14 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { status } from '../../../../base/browser/ui/aria/aria.js';
+import { EditorResourceAccessor, SideBySideEditor } from '../../../common/editor.js';
+import { FloatingJumpList } from './floatingJumpList.js';
+import { JumpListModel } from './jumpListModel.js';
 import { Sequencer } from '../../../../base/common/async.js';
 import { createTextBufferFactory } from '../../../../editor/common/model/textModel.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { Disposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
-import { joinPath, isEqual } from '../../../../base/common/resources.js';
+import { dirname, joinPath, isEqual } from '../../../../base/common/resources.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -31,7 +35,7 @@ import { IWorkbenchEnvironmentService } from '../../../services/environment/comm
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IWorkbenchLayoutService, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { ITerminalFirstService, ITerminalFirstSession } from '../../../services/terminalFirst/common/terminalFirst.js';
-import { TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalFirstJumpListVisibleContext, TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IWorkspaceEditingService } from '../../../services/workspaces/common/workspaceEditing.js';
 import { ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
@@ -68,13 +72,18 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private initialized = false;
 	private changingSession = false;
 	private managedWorkspace: URI | undefined;
-	private readonly editorOptions = this._register(new MutableDisposable());
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChangeSessions = this.changed.event;
 	private readonly shellContext;
 	private readonly floatingEnabledContext;
 	private readonly floatingVisibleContext;
 	private readonly floatingFocusedContext;
+	private jumpListHost: FloatingJumpList | undefined;
+	private jumpListModel: JumpListModel | undefined;
+	private jumpListVisible = false;
+	private jumpListGeneration = 0;
+	private readonly jumpListVisibleContext;
+	get floatingJumpListVisible(): boolean { return this.jumpListVisible; }
 	private browserHost: FloatingFileBrowser | undefined;
 	private browserVisible = false;
 	private browserGeneration = 0;
@@ -111,6 +120,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	) {
 		super();
 		TerminalFirstEnabledContext.bindTo(contextKeyService);
+		this.jumpListVisibleContext = TerminalFirstJumpListVisibleContext.bindTo(contextKeyService);
 		this.browserVisibleContext = TerminalFirstBrowserVisibleContext.bindTo(contextKeyService);
 		this.shellContext = TerminalFirstShellContext.bindTo(contextKeyService);
 		this.floatingEnabledContext = TerminalFirstFloatingEnabledContext.bindTo(contextKeyService);
@@ -145,7 +155,16 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		}));
 	}
 
-	initialize(): Promise<void> { return this.transitions.queue(() => this.initializeSessions()); }
+	initialize(): Promise<void> {
+		return this.transitions.queue(async () => {
+			try {
+				await this.initializeSessions();
+			} finally {
+				// Reveal only the settled layout, but keep startup failures recoverable.
+				this.layoutService.mainContainer.classList.remove('terminal-first-starting');
+			}
+		});
+	}
 
 	private async initializeSessions(): Promise<void> {
 		await this.layoutService.whenRestored;
@@ -183,6 +202,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this.editorGroupsService.mainPart.sessions?.activate(this.active.id);
 		this.initialized = true;
 		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
+		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
 		await this.present(this.active, explicitFiles ? 'editor' : 'shell');
 	}
 
@@ -222,6 +242,76 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this.storageService.store(TerminalFirstService.STORAGE_KEY, state, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 	}
 
+	private activeFile(): URI | undefined {
+		const resource = EditorResourceAccessor.getOriginalUri(this.editorService.activeEditor, { supportSideBySide: SideBySideEditor.PRIMARY });
+		return resource?.scheme === Schemas.file ? resource : undefined;
+	}
+
+	private async loadJumpList(): Promise<{ model: JumpListModel; project: URI } | undefined> {
+		const file = this.activeFile();
+		const directory = this.active?.cwd ? URI.parse(this.active.cwd) : this.workspaceContextService.getWorkspace().folders[0]?.uri
+			?? (this.active?.terminal?.initialCwd ? URI.file(this.active.terminal.initialCwd) : file ? dirname(file) : undefined);
+		if (!directory || directory.scheme !== Schemas.file) { return undefined; }
+		const model = this.jumpListModel ??= this.instantiationService.createInstance(JumpListModel);
+		const project = await model.resolveProject(directory);
+		model.load(project);
+		return { model, project };
+	}
+
+	addToJumpList(): Promise<void> {
+		return this.transitions.queue(async () => {
+			const resource = this.activeFile();
+			if (this.active?.mode !== 'editor' || !resource || this.jumpListVisible || this.browserVisible || this.floatingVisible) { return; }
+			const list = await this.loadJumpList();
+			if (!list) { return; }
+			status(list.model.add(resource)
+				? localize('jumpListAdded', "Added {0} to the jump list.", resource.fsPath)
+				: localize('jumpListAlreadyAdded', "{0} is already in the jump list.", resource.fsPath));
+		});
+	}
+
+	toggleFloatingJumpList(): Promise<void> {
+		return this.transitions.queue(async () => {
+			if (this.active?.mode !== 'editor') { return; }
+			if (this.jumpListVisible) { this.hideJumpList(true); return; }
+			const list = await this.loadJumpList();
+			if (!list) { return; }
+			this.hideBrowser();
+			this.hideFloating();
+			this.jumpListHost ??= this._register(this.instantiationService.createInstance(FloatingJumpList, list.model,
+				(focus: boolean) => { void this.hideFloatingJumpList(focus).catch(error => this.logService.error(error)); },
+				(resource: URI) => {
+					const owner = this.active;
+					const generation = this.jumpListGeneration;
+					return this.transitions.queue(async () => {
+						if (!this.jumpListVisible || generation !== this.jumpListGeneration || this.active !== owner || owner?.mode !== 'editor') { return false; }
+						if (!await this.fileService.exists(resource)) { throw new Error(localize('jumpFileMissing', "The file no longer exists: {0}", resource.fsPath)); }
+						const editor = await this.editorService.openEditor({ resource, options: { pinned: true } });
+						if (!editor) { throw new Error(localize('jumpFileOpenFailed', "The file could not be opened.")); }
+						this.hideJumpList(true);
+						return true;
+					});
+				}));
+			this.jumpListVisible = true;
+			this.jumpListVisibleContext.set(true);
+			try { this.jumpListHost.show(list.project, this.activeFile()); }
+			catch (error) { this.hideJumpList(true); throw error; }
+		});
+	}
+
+	hideFloatingJumpList(focusEditor = true): Promise<void> {
+		return this.transitions.queue(async () => this.hideJumpList(focusEditor));
+	}
+
+	private hideJumpList(focusEditor = false): void {
+		if (!this.jumpListVisible) { return; }
+		this.jumpListGeneration++;
+		this.jumpListHost?.hideList();
+		this.jumpListVisible = false;
+		this.jumpListVisibleContext.set(false);
+		if (focusEditor) { this.editorGroupsService.activeGroup.focus(); }
+	}
+
 	toggleFloatingFileBrowser(): Promise<void> {
 		return this.transitions.queue(async () => {
 			const session = this.active;
@@ -229,6 +319,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			if (this.browserVisible) { this.hideBrowser(true); return; }
 			const root = session.cwd ? URI.parse(session.cwd) : this.workspaceContextService.getWorkspace().folders[0]?.uri ?? (session.terminal?.initialCwd ? URI.file(session.terminal.initialCwd) : undefined);
 			if (!root) { throw new Error(localize('browserDirectoryUnavailable', "The session directory is not available yet. Try again after the shell starts.")); }
+			this.hideJumpList();
 			this.hideFloating();
 			this.browserHost ??= this._register(this.instantiationService.createInstance(FloatingFileBrowser,
 				(focus: boolean) => { void this.hideFloatingFileBrowser(focus).catch(error => this.logService.error(error)); },
@@ -246,7 +337,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			this.browserVisible = true;
 			this.browserVisibleContext.set(true);
 			this.changed.fire();
-			try { this.browserHost.show(root); }
+			try { this.browserHost.show(root, session.id); }
 			catch (error) { this.hideBrowser(true); throw error; }
 		});
 	}
@@ -271,6 +362,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			if (!session || session.mode !== 'editor') { return; }
 			if (this.floatingVisible) { this.hideFloating(true); return; }
 			this.hideBrowser();
+			this.hideJumpList();
 			if (!session.floatingTerminal) {
 				const terminal = await this.terminalService.createTerminal({
 					location: TerminalLocation.Panel,
@@ -326,9 +418,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 
 	private async present(session: Session, mode: 'shell' | 'editor', focus = true, cwd?: string): Promise<void> {
 		if (!session) { return; }
+		const changingSurface = this.active !== session || session.mode !== mode;
 		this.changingSession = true;
 		this.hideBrowser();
 		this.hideFloating();
+		this.hideJumpList();
 		try {
 			const terminal = await this.ensureTerminal(session);
 			if (mode === 'editor') { await this.updateDirectory(session, cwd); }
@@ -341,9 +435,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			this.terminalService.setActiveInstance(terminal);
 			this.layoutService.mainContainer.classList.toggle('terminal-first-shell', mode === 'shell');
 			this.layoutService.mainContainer.classList.remove('terminal-first-minimal');
-			this.editorOptions.value = this.editorGroupsService.enforcePartOptions({ showTabs: 'multiple' });
-			for (const part of [Parts.ACTIVITYBAR_PART, Parts.SIDEBAR_PART, Parts.STATUSBAR_PART]) {
+			for (const part of [Parts.ACTIVITYBAR_PART, Parts.STATUSBAR_PART]) {
 				this.layoutService.setPartHidden(mode === 'shell', part);
+			}
+			if (changingSurface || mode === 'shell') {
+				this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
 			}
 			this.layoutService.setPartHidden(true, Parts.AUXILIARYBAR_PART);
 			if (mode === 'shell') {
@@ -355,7 +451,6 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			} else {
 				if (this.layoutService.isPanelMaximized()) { this.layoutService.toggleMaximizedPanel(); }
 				this.layoutService.setPartHidden(true, Parts.PANEL_PART);
-				await this.commandService.executeCommand('workbench.view.explorer');
 				if (focus) { this.editorGroupsService.activeGroup.focus(); }
 			}
 			this.layoutService.layout();
@@ -443,7 +538,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 					return;
 				}
 				this.sessionList.splice(this.sessionList.indexOf(session), 1);
-				if (session === this.active) { this.hideBrowser(); this.hideFloating(); }
+				if (session === this.active) { this.hideBrowser(); this.hideFloating(); this.hideJumpList(); }
+				this.browserHost?.forgetSession(session.id);
 				session.floatingTerminal?.dispose(TerminalExitReason.User);
 				session.terminal?.dispose(TerminalExitReason.User);
 				if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
@@ -455,15 +551,16 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	async openFiles(fileURIs: string[], terminalSession: string, wait: boolean, cwd?: string): Promise<void> {
-		if (!fileURIs.length || fileURIs.some(value => URI.parse(value).scheme !== Schemas.file) || (cwd && URI.parse(cwd).scheme !== Schemas.file)) {
-			throw new Error(localize('invalidFiles', "Expected one or more local file paths."));
+		if ((!fileURIs.length && !cwd) || fileURIs.some(value => URI.parse(value).scheme !== Schemas.file) || (cwd && URI.parse(cwd).scheme !== Schemas.file)) {
+			throw new Error(localize('invalidFiles', "Expected local file paths or a local working directory."));
 		}
 		const resources = fileURIs.map(value => URI.parse(value));
 		let closed: Promise<void> | undefined;
 		await this.transitions.queue(async () => {
 			const session = this.sessionList.find(session => session.terminal?.shellIntegrationNonce === terminalSession || session.floatingTerminal?.shellIntegrationNonce === terminalSession);
 			if (!session) { throw new Error(localize('missingSession', "This shell session is no longer attached to the window. Open a new shell session and retry.")); }
-			await this.present(session, 'editor', false, cwd);
+			await this.present(session, 'editor', resources.length === 0, cwd);
+			if (!resources.length) { return; }
 			const editors = await Promise.all(resources.map(async resource => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true } })));
 			await this.editorService.openEditors(editors);
 			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorGroupsService.mainPart.sessions || this.editorGroupsService.mainPart.sessions.owns(session.id, groupId))); }

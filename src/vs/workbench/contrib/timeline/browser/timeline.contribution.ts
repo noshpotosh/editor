@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize } from '../../../../nls.js';
 import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
@@ -63,7 +64,9 @@ configurationRegistry.registerConfiguration({
 	}
 });
 
-Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([new TimelinePaneDescriptor()], VIEW_CONTAINER);
+if (!terminalFirstEnabled) {
+	Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([new TimelinePaneDescriptor()], VIEW_CONTAINER);
+}
 
 namespace OpenTimelineAction {
 

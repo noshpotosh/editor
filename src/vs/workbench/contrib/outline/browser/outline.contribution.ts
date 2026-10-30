@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { IViewsRegistry, Extensions as ViewExtensions } from '../../../common/views.js';
 import { OutlinePane } from './outlinePane.js';
@@ -23,19 +24,21 @@ import './outlineActions.js';
 
 const outlineViewIcon = registerIcon('outline-view-icon', Codicon.symbolClass, localize('outlineViewIcon', 'View icon of the outline view.'));
 
-Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
-	id: IOutlinePane.Id,
-	name: localize2('name', "Outline"),
-	containerIcon: outlineViewIcon,
-	ctorDescriptor: new SyncDescriptor(OutlinePane),
-	canToggleVisibility: true,
-	canMoveView: true,
-	hideByDefault: false,
-	collapsed: true,
-	order: 2,
-	weight: 30,
-	focusCommand: { id: 'outline.focus' }
-}], VIEW_CONTAINER);
+if (!terminalFirstEnabled) {
+	Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
+		id: IOutlinePane.Id,
+		name: localize2('name', "Outline"),
+		containerIcon: outlineViewIcon,
+		ctorDescriptor: new SyncDescriptor(OutlinePane),
+		canToggleVisibility: true,
+		canMoveView: true,
+		hideByDefault: false,
+		collapsed: true,
+		order: 2,
+		weight: 30,
+		focusCommand: { id: 'outline.focus' }
+	}], VIEW_CONTAINER);
+}
 
 // --- configurations
 

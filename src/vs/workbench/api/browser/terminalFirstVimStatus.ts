@@ -9,6 +9,7 @@ import { isMacintosh } from '../../../base/common/platform.js';
 import { ICodeEditor, IOverlayWidget, IOverlayWidgetPosition, OverlayWidgetPositionPreference } from '../../../editor/browser/editorBrowser.js';
 import { EditorContributionInstantiation, registerEditorContribution } from '../../../editor/browser/editorExtensions.js';
 import { IEditorContribution } from '../../../editor/common/editorCommon.js';
+import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { IExtensionStatusBarItemService } from './statusBarExtensionPoint.js';
 import './media/terminalFirst.css';
 
@@ -19,6 +20,7 @@ class TerminalFirstVimStatus extends Disposable implements IEditorContribution, 
 
 	constructor(
 		private readonly editor: ICodeEditor,
+		@IConfigurationService private readonly configuration: IConfigurationService,
 		@IExtensionStatusBarItemService private readonly statusbarService: IExtensionStatusBarItemService,
 	) {
 		super();
@@ -32,6 +34,7 @@ class TerminalFirstVimStatus extends Disposable implements IEditorContribution, 
 	}
 
 	private update(): void {
+		if (this.configuration.getValue<string>('terminalFirst.vim.engine') !== 'extension') { this.node.textContent = ''; return; }
 		const entries = [...this.statusbarService.getEntries()].filter(([, item]) => item.entry.extensionId?.toLowerCase() === 'vscodevim.vim');
 		this.node.textContent = this.editor.hasWidgetFocus() ? entries.map(([, item]) => item.entry.text).filter(Boolean).join('  ') : '';
 		this.node.classList.toggle('error', entries.some(([, item]) => item.entry.kind === 'error'));

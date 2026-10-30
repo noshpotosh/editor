@@ -43,7 +43,7 @@ async function createWindow(t, handler = (_body, response) => response.end('null
 test('parses wait, help and filenames following --', () => {
 	assert.deepEqual(parseArguments(['--wait', '--', '-file', 'a b']), { wait: true, help: false, files: ['-file', 'a b'] });
 	assert.equal(parseArguments(['--help']).help, true);
-	assert.throws(() => parseArguments([]), /Usage/);
+	assert.deepEqual(parseArguments([]), { wait: false, help: false, files: [] });
 	assert.throws(() => parseArguments(['--unknown']), /Unknown option/);
 });
 
@@ -111,4 +111,21 @@ test('shell launcher preserves arguments and uses the supplied runtime', async t
 		env: { ...process.env, ...window.environment, TERMINAL_FIRST_NODE: process.execPath },
 	});
 	assert.deepEqual(window.requests[0].fileURIs, [pathToFileURL(path.join(await fs.realpath(window.directory), '-a b.txt')).href]);
+});
+
+test('bare code opens the editor at the shell current directory', async t => {
+	const window = await createWindow(t);
+	const cwd = path.join(window.directory, 'nested directory');
+	await fs.mkdir(cwd);
+	await promisify(execFile)(path.resolve(__dirname, '../bin/code'), [], {
+		cwd,
+		env: { ...process.env, ...window.environment, TERMINAL_FIRST_NODE: process.execPath },
+	});
+	assert.deepEqual(window.requests, [{
+		type: 'terminalFirstOpen',
+		fileURIs: [],
+		terminalSession: window.directory,
+		wait: false,
+		cwd: pathToFileURL(await fs.realpath(cwd)).href,
+	}]);
 });

@@ -1,0 +1,15 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+.native-vim-leader {
+	right: 24px;
+	bottom: 48px;
+	z-index: 2600;
+	white-space: pre-wrap;
+	line-height: 1.8;
+	max-width: min(480px, 80vw);
+	max-height: 60vh;
+	overflow: auto;
+	pointer-events: none;
+}

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as dom from '../../../../../base/browser/dom.js';
 import { BaseActionViewItem, IBaseActionViewItemOptions } from '../../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { IAction, WorkbenchActionExecutedClassification, WorkbenchActionExecutedEvent } from '../../../../../base/common/actions.js';
@@ -573,8 +574,10 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 		registerAction2(ChatSetupTriggerAction);
 		registerAction2(ChatSetupTriggerForceSignInDialogAction);
 		registerAction2(ChatSetupFromAccountsAction);
-		registerAction2(ChatSetupSignInTitleBarAction);
-		registerAction2(ToggleSignInTitleBarAction);
+		if (!terminalFirstEnabled) {
+			registerAction2(ChatSetupSignInTitleBarAction);
+			registerAction2(ToggleSignInTitleBarAction);
+		}
 		registerAction2(ChatSetupTriggerAnonymousWithoutDialogAction);
 		registerAction2(ChatSetupTriggerSupportAnonymousAction);
 		registerAction2(UpgradePlanAction);

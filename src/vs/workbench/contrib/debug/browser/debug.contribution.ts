@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { FileAccess } from '../../../../base/common/network.js';
 import { isMacintosh, isWeb } from '../../../../base/common/platform.js';
@@ -460,6 +461,7 @@ const viewContainer = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewCo
 		order: 3
 	},
 	ctorDescriptor: new SyncDescriptor(DebugViewPaneContainer),
+	defaultPinned: !terminalFirstEnabled,
 	icon: icons.runViewIcon,
 	alwaysUseContainerInfo: true,
 	order: 3,

@@ -91,8 +91,11 @@ import { getPartsSplashColors, getPartsSplashLayoutMetrics } from './partsSplash
 			preloadGlobals.webFrame.setZoomLevel(data.zoomLevel);
 		}
 
+		// Terminal-first startup must not replay the saved editor layout before its shell is ready.
+		const terminalFirst = safeProcess.platform === 'darwin' && configuration.product.urlProtocol === 'terminal-first';
+
 		// restore parts if possible (we might not always store layout info)
-		if (data?.layoutInfo) {
+		if (data?.layoutInfo && !terminalFirst) {
 			const { layoutInfo, colorInfo } = data;
 			const modernUI = layoutInfo.modernUI === true;
 			const { floatingMargin, floatingOuterMargin, floatingBorderWidth, floatingBorderRadius } = getPartsSplashLayoutMetrics(layoutInfo);

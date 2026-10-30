@@ -495,6 +495,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 		// Title
 		this.title = append(this.centerContent, $('div.window-title'));
+		this.title.classList.toggle('terminal-first-title', terminalFirstEnabled);
 		this.createTitle();
 
 		// Center-Adjacent Toolbar

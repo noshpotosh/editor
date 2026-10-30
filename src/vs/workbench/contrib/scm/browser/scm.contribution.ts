@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContributionsRegistry, registerWorkbenchContribution2, Extensions as WorkbenchExtensions, WorkbenchPhase } from '../../../common/contributions.js';
@@ -127,22 +128,24 @@ viewsRegistry.registerViews([{
 	}
 }], viewContainer);
 
-viewsRegistry.registerViews([{
-	id: HISTORY_VIEW_PANE_ID,
-	containerTitle,
-	name: localize2('scmGraph', "Graph"),
-	singleViewPaneContainerTitle: localize('source control graph', "Source Control Graph"),
-	ctorDescriptor: new SyncDescriptor(SCMHistoryViewPane),
-	canToggleVisibility: true,
-	canMoveView: true,
-	weight: 40,
-	order: 2,
-	when: ContextKeyExpr.and(
-		ContextKeyExpr.has('scm.historyProviderCount'),
-		ContextKeyExpr.notEquals('scm.historyProviderCount', 0),
-	),
-	containerIcon: sourceControlViewIcon
-}], viewContainer);
+if (!terminalFirstEnabled) {
+	viewsRegistry.registerViews([{
+		id: HISTORY_VIEW_PANE_ID,
+		containerTitle,
+		name: localize2('scmGraph', "Graph"),
+		singleViewPaneContainerTitle: localize('source control graph', "Source Control Graph"),
+		ctorDescriptor: new SyncDescriptor(SCMHistoryViewPane),
+		canToggleVisibility: true,
+		canMoveView: true,
+		weight: 40,
+		order: 2,
+		when: ContextKeyExpr.and(
+			ContextKeyExpr.has('scm.historyProviderCount'),
+			ContextKeyExpr.notEquals('scm.historyProviderCount', 0),
+		),
+		containerIcon: sourceControlViewIcon
+	}], viewContainer);
+}
 
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(SCMActiveRepositoryController, LifecyclePhase.Restored);

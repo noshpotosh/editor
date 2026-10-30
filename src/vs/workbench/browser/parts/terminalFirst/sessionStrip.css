@@ -21,7 +21,29 @@
 .terminal-first-sessions .active { color: var(--vscode-tab-activeForeground); background: var(--vscode-tab-activeBackground); border-top: 1px solid var(--vscode-tab-activeBorderTop, transparent); }
 .terminal-first-sessions button:hover { background: var(--vscode-toolbar-hoverBackground); }
 .terminal-first-sessions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
-.terminal-first-sessions .session-toggle { flex-shrink: 0; }
+.terminal-first-sessions .session-new { flex-shrink: 0; }
 .monaco-workbench.terminal-first-shell .part.panel > .title { display: none; }
 
 .monaco-workbench.terminal-first-shell .part.titlebar .monaco-toolbar { display: none; }
+
+/* The shell is the primary surface, so it does not need a second frame. */
+.monaco-workbench.terminal-first-shell .monaco-grid-view .part.panel {
+	border-color: transparent !important;
+	border-radius: 0 !important;
+	background-image: none !important;
+	box-shadow: none;
+}
+
+.monaco-workbench .part.titlebar .window-title.terminal-first-title {
+	visibility: hidden;
+}
+
+/* Restore and measure the workbench without flashing its intermediate editor layout. */
+.monaco-workbench.terminal-first-starting > .monaco-grid-view {
+	visibility: hidden;
+}
+
+/* The shell fills the window; workbench dividers become available again in editor mode. */
+.monaco-workbench.terminal-first-shell > .monaco-grid-view .monaco-sash {
+	display: none;
+}

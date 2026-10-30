@@ -52,6 +52,8 @@ suite('Terminal First', () => {
 		let maximized = false;
 		const hidden = new Map<Parts, boolean>();
 		const commands: string[] = [];
+		const mainContainer = document.createElement('div');
+		mainContainer.classList.add('terminal-first-starting');
 		const opened: ITextResourceEditorInput[][] = [];
 
 		class Editors extends TestEditorService {
@@ -114,7 +116,7 @@ suite('Terminal First', () => {
 		}));
 		instantiationService.stub(IWorkbenchLayoutService, upcastPartial<IWorkbenchLayoutService>({
 			whenRestored: Promise.resolve(),
-			mainContainer: document.createElement('div'),
+			mainContainer,
 			onDidLayoutMainContainer: Event.None,
 			getContainer: () => document.createElement('div'),
 			setPartHidden: (value, part) => { hidden.set(part, value); },
@@ -137,8 +139,35 @@ suite('Terminal First', () => {
 		instantiationService.stub(IDialogService, dialog);
 		instantiationService.stub(IConfigurationService, config);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { service, disposedIds, cancelEditorClose: () => { cancelEditorClose = true; }, dialog, config, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
+		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: () => { cancelEditorClose = true; }, dialog, config, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
 	}
+
+	test('reveals the settled shell after startup', async () => {
+		const state = fixture();
+		const pending = state.service.initialize();
+		strictEqual(state.mainContainer.classList.contains('terminal-first-starting'), true);
+		await pending;
+		deepStrictEqual([state.mainContainer.classList.contains('terminal-first-starting'), state.mainContainer.classList.contains('terminal-first-shell'), state.maximized], [false, true, true]);
+	});
+
+	test('startup failure reveals the workbench for recovery', async () => {
+		const state = fixture();
+		state.failCreation();
+		await rejects(state.service.initialize(), /launch failed/);
+		strictEqual(state.mainContainer.classList.contains('terminal-first-starting'), false);
+	});
+
+	test('bare code enters the editor in the supplied directory without opening files', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.openFiles([], state.active!.shellIntegrationNonce, false, 'file:///project/nested');
+		deepStrictEqual({
+			mode: state.service.sessions[0].mode,
+			folders: state.workspace.folders.map(folder => folder.uri.path),
+			opened: state.opened,
+			focused: state.editorFocusCount,
+		}, { mode: 'editor', folders: ['/project/nested'], opened: [], focused: 1 });
+	});
 
 	test('file browser is editor-only, excludes terminal overlay, and leaves session directory unchanged', async () => {
 		const state = fixture();
@@ -162,6 +191,69 @@ suite('Terminal First', () => {
 		await state.service.toggleFloatingFileBrowser();
 		await state.service.showShell();
 		strictEqual(state.service.floatingFileBrowserVisible, false);
+	});
+
+	test('jump list can resolve a directly launched file before the session directory is available', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		state.editors.activeEditor = store.add(new TestEditorInput(URI.file('/project/file.ts'), 'test'));
+		await state.service.addToJumpList();
+		await state.service.toggleFloatingJumpList();
+		strictEqual(state.service.floatingJumpListVisible, true);
+	});
+
+	test('jump list shares a Git project across sessions, persists, and excludes other overlays', async () => {
+		const state = fixture();
+		document.body.appendChild(state.mainContainer);
+		store.add(toDisposable(() => state.mainContainer.remove()));
+		state.instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('/.git') || resource.path === '/project/.git');
+		await state.service.initialize();
+		await state.service.toggleFloatingJumpList();
+		strictEqual(state.service.floatingJumpListVisible, false);
+		await state.service.openFiles(['file:///project/a'], state.active!.shellIntegrationNonce, false, 'file:///project/src');
+		await state.service.addToJumpList();
+		await state.service.addToJumpList();
+		await state.service.toggleFloatingTerminal();
+		await state.service.toggleFloatingJumpList();
+		deepStrictEqual([state.service.floatingJumpListVisible, state.service.floatingTerminalVisible, state.mainContainer.querySelectorAll('.jump-list-row').length], [true, false, 1]);
+		await state.service.toggleFloatingFileBrowser();
+		deepStrictEqual([state.service.floatingJumpListVisible, state.service.floatingFileBrowserVisible], [false, true]);
+		await state.service.toggleFloatingJumpList();
+		strictEqual(state.service.floatingFileBrowserVisible, false);
+		const focusBefore = state.editorFocusCount;
+		await state.service.hideFloatingJumpList();
+		strictEqual(state.editorFocusCount, focusBefore + 1);
+		await state.service.newTerminal();
+		await state.service.openFiles(['file:///project/b'], state.active!.shellIntegrationNonce, false, 'file:///project/other');
+		await state.service.addToJumpList();
+		await state.service.toggleFloatingJumpList();
+		strictEqual(state.mainContainer.querySelectorAll('.jump-list-row').length, 2);
+		await state.service.showShell();
+		strictEqual(state.service.floatingJumpListVisible, false);
+	});
+
+	test('jump list failed open retains entries and session switch rejects a queued stale open', async () => {
+		const state = fixture();
+		document.body.appendChild(state.mainContainer);
+		store.add(toDisposable(() => state.mainContainer.remove()));
+		await state.service.initialize();
+		const first = state.active!.shellIntegrationNonce;
+		await state.service.openFiles(['file:///project/new.ts'], first, false, 'file:///project');
+		// Supply a saved-file input: CLI opens a missing file as untitled.
+		state.editors.activeEditor = store.add(new TestEditorInput(URI.file('/project/new.ts'), 'test'));
+		await state.service.addToJumpList();
+		await state.service.toggleFloatingJumpList();
+		document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		// Flush the serialized open without hiding the overlay.
+		await state.service.addToJumpList();
+		strictEqual(state.mainContainer.querySelector('.jump-list-status')?.textContent?.includes('no longer exists'), true);
+		strictEqual(state.service.floatingJumpListVisible, true);
+		const switching = state.service.newTerminal();
+		document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		await switching;
+		await state.service.addToJumpList();
+		deepStrictEqual([state.service.floatingJumpListVisible, state.service.sessions.filter(session => session.active).map(session => session.mode)], [false, ['shell']]);
 	});
 
 	test('floating shell is lazy, independent, and reused through rapid toggles', async () => {
@@ -373,6 +465,19 @@ suite('Terminal First', () => {
 		strictEqual(state.hidden.get(Parts.STATUSBAR_PART), true);
 		await state.service.showEditor(false);
 		strictEqual(state.hidden.get(Parts.STATUSBAR_PART), false);
+	});
+
+	test('editor starts with a collapsed sidebar and preserves user visibility while opening files', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		deepStrictEqual([state.hidden.get(Parts.SIDEBAR_PART), state.hidden.get(Parts.ACTIVITYBAR_PART), state.commands.includes('workbench.view.explorer')], [true, false, false]);
+		state.hidden.set(Parts.SIDEBAR_PART, false);
+		await state.service.openFiles(['file:///project/file.ts'], state.active!.shellIntegrationNonce, false);
+		strictEqual(state.hidden.get(Parts.SIDEBAR_PART), false);
+		await state.service.showShell();
+		await state.service.showEditor();
+		strictEqual(state.hidden.get(Parts.SIDEBAR_PART), true);
 	});
 
 	test('closing the last file returns to the shell', async () => {

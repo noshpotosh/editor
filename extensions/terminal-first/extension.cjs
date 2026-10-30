@@ -26,7 +26,7 @@ exports.activate = context => {
 
 		const environment = context.environmentVariableCollection;
 		environment.persistent = true;
-		environment.description = vscode.l10n.t('Enables the e command for opening files in this window.');
+		environment.description = vscode.l10n.t('Enables the code and e commands for opening the editor and files in this window.');
 		environment.prepend('PATH', `${path.join(context.extensionPath, 'bin')}${path.delimiter}`);
 		environment.replace('TERMINAL_FIRST_NODE', process.execPath);
 		environment.replace('TERMINAL_FIRST_CLI_POINTER', pointerPath);

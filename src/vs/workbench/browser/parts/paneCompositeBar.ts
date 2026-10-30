@@ -343,10 +343,14 @@ export class PaneCompositeBar extends Disposable {
 		for (const viewContainer of viewContainers) {
 			this.addComposite(viewContainer);
 
-			// Pin it by default if it is new
+			// Apply the default pin state only for a new container.
 			const cachedViewContainer = this.cachedViewContainers.filter(({ id }) => id === viewContainer.id)[0];
 			if (!cachedViewContainer) {
-				this.compositeBar.pin(viewContainer.id);
+				if (viewContainer.defaultPinned === false) {
+					this.compositeBar.unpin(viewContainer.id);
+				} else {
+					this.compositeBar.pin(viewContainer.id);
+				}
 			}
 
 			// Active
@@ -567,7 +571,7 @@ export class PaneCompositeBar extends Disposable {
 						id: viewContainer.id,
 						name: typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value,
 						order: viewContainer.order,
-						pinned: true,
+						pinned: viewContainer.defaultPinned !== false,
 						visible: !this.shouldBeHidden(viewContainer),
 					});
 				}

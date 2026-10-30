@@ -11,7 +11,7 @@ import { Color } from '../../../base/common/color.js';
 import { BugIndicatingError, illegalArgument, onUnexpectedError } from '../../../base/common/errors.js';
 import { Emitter, Event } from '../../../base/common/event.js';
 import { IMarkdownString } from '../../../base/common/htmlContent.js';
-import { Disposable, IDisposable, MutableDisposable } from '../../../base/common/lifecycle.js';
+import { Disposable, IDisposable, MutableDisposable, toDisposable } from '../../../base/common/lifecycle.js';
 import { listenStream } from '../../../base/common/stream.js';
 import * as strings from '../../../base/common/strings.js';
 import { ThemeColor } from '../../../base/common/themables.js';
@@ -1266,12 +1266,21 @@ export class TextModel extends Disposable implements model.ITextModel, IDecorati
 
 	//#region Editing
 
+	private _undoRedoTransactionDepth = 0;
+
+	public beginUndoRedoTransaction(): IDisposable {
+		if (this._undoRedoTransactionDepth++ === 0) { this._commandManager.pushStackElement(); }
+		return toDisposable(() => {
+			if (--this._undoRedoTransactionDepth === 0 && !this.isDisposed()) { this._commandManager.pushStackElement(); }
+		});
+	}
+
 	public pushStackElement(): void {
-		this._commandManager.pushStackElement();
+		if (this._undoRedoTransactionDepth === 0) { this._commandManager.pushStackElement(); }
 	}
 
 	public popStackElement(): void {
-		this._commandManager.popStackElement();
+		if (this._undoRedoTransactionDepth === 0) { this._commandManager.popStackElement(); }
 	}
 
 	public pushEOL(eol: model.EndOfLineSequence): void {

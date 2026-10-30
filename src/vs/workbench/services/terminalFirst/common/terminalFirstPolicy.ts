@@ -16,6 +16,9 @@ export const TerminalFirstBrowserVisibleContext = new RawContextKey<boolean>('te
 export const TerminalFirstBrowserFocusedContext = new RawContextKey<boolean>('terminalFirstBrowserFocused', false);
 export const TerminalFirstBrowserModeContext = new RawContextKey<string>('terminalFirstBrowserMode', '');
 
+export const TerminalFirstJumpListVisibleContext = new RawContextKey<boolean>('terminalFirstJumpListVisible', false);
+export const TerminalFirstJumpListFocusedContext = new RawContextKey<boolean>('terminalFirstJumpListFocused', false);
+
 export const TerminalFirstShellContext = new RawContextKey<boolean>('terminalFirstShell', false);
 export const TerminalFirstEnabledContext = new RawContextKey<boolean>('terminalFirstEnabled', terminalFirstEnabled);
 
