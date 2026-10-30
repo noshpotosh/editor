@@ -35,9 +35,13 @@ suite('Jump List Model', () => {
 		const redone = f.paths();
 		f.model.load(URI.file('/project'));
 		f.model.undo();
-		deepStrictEqual({ duplicate, selected, moved, undone, redone, restored: f.paths() }, {
+		const undoneAfterReload = f.paths();
+		f.model.redo();
+		const movedDown = f.model.move(0, 1);
+		const movedPast = f.model.move(2, 5);
+		deepStrictEqual({ duplicate, selected, moved, undone, redone, undoneAfterReload, movedDown, movedPast, reordered: f.paths() }, {
 			duplicate: false, selected: 2, moved: ['/project/b', '/project/c', '/project/a'], undone: ['/project/b', '/project/c'],
-			redone: ['/project/b', '/project/c', '/project/a'], restored: ['/project/b', '/project/c', '/project/a'],
+			redone: ['/project/b', '/project/c', '/project/a'], undoneAfterReload: ['/project/b', '/project/c'], movedDown: 1, movedPast: 2, reordered: ['/project/c', '/project/b', '/project/a'],
 		});
 	});
 

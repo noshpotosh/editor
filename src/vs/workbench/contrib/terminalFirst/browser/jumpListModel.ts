@@ -35,22 +35,33 @@ export class JumpListModel {
 	}
 
 	load(project: URI): void {
-		this.key = `terminalFirst.jumpList.v1.${this.identity.extUri.getComparisonKey(project)}`;
-		this.items = [];
+		const key = `terminalFirst.jumpList.v1.${this.identity.extUri.getComparisonKey(project)}`;
+		const stored = this.read(key);
+		// Reopening the same project's unchanged list keeps its undo history; a different project or an external change starts over.
+		if (key === this.key && stored.length === this.items.length && stored.every((item, index) => this.identity.extUri.isEqual(item, this.items[index]))) {
+			return;
+		}
+		this.key = key;
+		this.items = stored;
 		this.removed = undefined;
 		this.undoStack = [];
 		this.redoStack = [];
+	}
+
+	private read(key: string): URI[] {
+		const items: URI[] = [];
 		try {
-			const stored = this.storage.getObject<{ version: number; entries: string[] }>(this.key, StorageScope.PROFILE);
-			if (stored?.version !== 1 || !Array.isArray(stored.entries)) { return; }
+			const stored = this.storage.getObject<{ version: number; entries: string[] }>(key, StorageScope.PROFILE);
+			if (stored?.version !== 1 || !Array.isArray(stored.entries)) { return items; }
 			for (const value of stored.entries) {
 				if (typeof value !== 'string') { continue; }
 				try {
 					const resource = URI.parse(value, true);
-					if (resource.scheme === 'file' && resource.path.startsWith('/') && this.indexOf(resource) < 0) { this.items.push(resource); }
+					if (resource.scheme === 'file' && resource.path.startsWith('/') && !items.some(item => this.identity.extUri.isEqual(item, resource))) { items.push(resource); }
 				} catch { /* Ignore malformed entries without losing valid bookmarks. */ }
 			}
 		} catch { /* A damaged saved list starts empty. */ }
+		return items;
 	}
 
 	indexOf(resource: URI): number { return this.items.findIndex(item => this.identity.extUri.isEqual(item, resource)); }
@@ -72,6 +83,17 @@ export class JumpListModel {
 		const items = [...this.items];
 		const target = Math.max(0, Math.min(items.length, index + (before ? 0 : 1)));
 		items.splice(target, 0, this.removed);
+		this.change(items);
+		return target;
+	}
+
+	/** Moves an entry by `delta` rows; returns its new index. */
+	move(index: number, delta: number): number {
+		const target = Math.max(0, Math.min(this.items.length - 1, index + delta));
+		if (!this.items[index] || target === index) { return index; }
+		const items = [...this.items];
+		const [item] = items.splice(index, 1);
+		items.splice(target, 0, item);
 		this.change(items);
 		return target;
 	}

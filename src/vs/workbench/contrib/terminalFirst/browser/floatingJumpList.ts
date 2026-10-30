@@ -81,7 +81,7 @@ export class FloatingJumpList extends Disposable {
 		this.message = append(this.element, $('.jump-list-status'));
 		this.message.setAttribute('role', 'status');
 		const hints = append(this.element, $('.jump-list-hints'));
-		hints.textContent = localize('jumpHints', "j/k Navigate · gg/G First/Last · dd Remove · p/P Put After/Before · u Undo · Ctrl+R Redo · Enter Open · q/Esc Close");
+		hints.textContent = localize('jumpHints', "j/k Navigate · J/K Move · 1-9 Open Slot · gg/G First/Last · dd Remove · p/P Put After/Before · u Undo · Ctrl+R Redo · Enter Open · q/Esc Close");
 		this._register(this.list.onDidChangeFocus(event => this.list.setSelection([...event.indexes])));
 		this._register(this.list.onMouseDblClick(event => { if (event.element) { void this.accept(event.element); } }));
 		this._register(addDisposableListener(this.element, EventType.KEY_DOWN, event => this.keydown(event), true));
@@ -152,6 +152,8 @@ export class FloatingJumpList extends Disposable {
 				this.model.redo(); this.render(index);
 			} else if (event.key === 'j' || event.key === 'ArrowDown') { this.select(index + 1);
 			} else if (event.key === 'k' || event.key === 'ArrowUp') { this.select(index - 1);
+			} else if (event.key === 'J' || event.key === 'K') { this.render(this.model.move(index, event.key === 'J' ? 1 : -1));
+			} else if (/^[1-9]$/.test(event.key)) { const resource = this.model.entries[Number(event.key) - 1]; if (resource) { void this.accept(resource); }
 			} else if (event.key === 'G') { this.select(this.list.length - 1);
 			} else if (event.key === 'g') { if (pending === 'g') { this.select(0); } else { this.pending = 'g'; }
 			} else if (event.key === 'd') { if (pending === 'd') { this.model.remove(index); this.render(index); } else { this.pending = 'd'; }

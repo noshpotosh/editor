@@ -40,7 +40,7 @@ import { IWorkbenchEnvironmentService } from '../../../services/environment/comm
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IWorkbenchLayoutService, Parts, Position } from '../../../services/layout/browser/layoutService.js';
 import { ITerminalFirstService, ITerminalFirstSession } from '../../../services/terminalFirst/common/terminalFirst.js';
-import { TerminalFirstJumpListVisibleContext, TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { TerminalFirstJumpListVisibleContext, TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy, onDidBlockTerminalFirstCommand } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IWorkspaceEditingService } from '../../../services/workspaces/common/workspaceEditing.js';
 import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
@@ -48,6 +48,8 @@ import { FloatingFileBrowser } from './floatingFileBrowser.js';
 import { FloatingTerminal } from './floatingTerminal.js';
 import { TerminalFirstLaunch } from './terminalPolicy.js';
 import { EditorPartSessions, IEditorPartSessions } from './editorPartSessions.js';
+import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { ITextEditorSelection } from '../../../../platform/editor/common/editor.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -130,6 +132,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		@IUserDataProfileService private readonly profiles: IUserDataProfileService,
 		@IWorkspaceTrustManagementService private readonly trust: IWorkspaceTrustManagementService,
 		@IWorkspaceTrustRequestService private readonly trustRequests: IWorkspaceTrustRequestService,
+		@INotificationService private readonly notificationService: INotificationService,
 	) {
 		super();
 		const updatePadding = () => {
@@ -146,6 +149,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this._register(editorGroupsService.mainPart.onDidRemoveGroup(updateTileCount));
 		TerminalFirstEnabledContext.bindTo(contextKeyService);
 		this.jumpListVisibleContext = TerminalFirstJumpListVisibleContext.bindTo(contextKeyService);
+		this._register(onDidBlockTerminalFirstCommand(id => this.reportBlockedCommand(id)));
 		this.browserVisibleContext = TerminalFirstBrowserVisibleContext.bindTo(contextKeyService);
 		this.shellContext = TerminalFirstShellContext.bindTo(contextKeyService);
 		this.floatingEnabledContext = TerminalFirstFloatingEnabledContext.bindTo(contextKeyService);
@@ -299,6 +303,33 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private activeFile(): URI | undefined {
 		const resource = EditorResourceAccessor.getOriginalUri(this.editorService.activeEditor, { supportSideBySide: SideBySideEditor.PRIMARY });
 		return resource?.scheme === Schemas.file ? resource : undefined;
+	}
+
+	private readonly blockedCommands = new Set<string>();
+	private blockedHintShown = false;
+
+	/** Blocked commands are silent at the call site; log each ID once and hint at the editor the first time it happens in the shell. */
+	private reportBlockedCommand(id: string): void {
+		if (!this.blockedCommands.has(id)) {
+			this.blockedCommands.add(id);
+			this.logService.info(`[terminalFirst] Blocked command '${id}' while the ${terminalFirstPolicy.mode} surface is shown.`);
+		}
+		if (!this.blockedHintShown && terminalFirstPolicy.shell && id.startsWith('workbench.')) {
+			this.blockedHintShown = true;
+			this.notificationService.info(localize('blockedCommandHint', "That command is available in the editor. Press Ctrl+Space e to open it."));
+		}
+	}
+
+	/** Opens the jump list entry at a 1-based slot without showing the list. */
+	jumpToSlot(slot: number): Promise<void> {
+		return this.transitions.queue(async () => {
+			if (this.active?.mode !== 'editor' || this.jumpListVisible) { return; }
+			const list = await this.loadJumpList();
+			const resource = list?.model.entries[slot - 1];
+			if (!resource) { status(localize('emptySlot', "Jump list slot {0} is empty.", slot)); return; }
+			if (!await this.fileService.exists(resource)) { throw new Error(localize('jumpFileMissing', "The file no longer exists: {0}", resource.fsPath)); }
+			await this.editorService.openEditor({ resource, options: { pinned: true } });
+		});
 	}
 
 	private async loadJumpList(): Promise<{ model: JumpListModel; project: URI } | undefined> {
@@ -633,17 +664,28 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		if ((!fileURIs.length && !cwd) || fileURIs.some(value => URI.parse(value).scheme !== Schemas.file) || (cwd && URI.parse(cwd).scheme !== Schemas.file)) {
 			throw new Error(localize('invalidFiles', "Expected local file paths or a local working directory."));
 		}
-		const resources = fileURIs.map(value => URI.parse(value));
+		// `e --goto file:line:col` arrives as a `#L<line>,<col>` fragment on the file URI.
+		const targets = fileURIs.map(value => parseGotoFragment(URI.parse(value)));
+		const resources = targets.map(target => target.resource);
 		let closed: Promise<void> | undefined;
 		await this.transitions.queue(async () => {
 			const session = this.sessionList.find(session => session.terminal?.shellIntegrationNonce === terminalSession || session.floatingTerminal?.shellIntegrationNonce === terminalSession || session.tileNonces?.includes(terminalSession));
 			if (!session) { throw new Error(localize('missingSession', "This shell session is no longer attached to the window. Open a new shell session and retry.")); }
 			await this.present(session, 'editor', resources.length === 0, cwd);
 			if (!resources.length) { return; }
-			const editors = await Promise.all(resources.map(async resource => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true } })));
+			const editors = await Promise.all(targets.map(async ({ resource, selection }) => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true, selection } })));
 			await this.editorService.openEditors(editors);
 			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorSessions || this.editorSessions.owns(session.id, groupId))); }
 		});
 		await closed;
 	}
+}
+
+/** Splits a `#L<line>[,<column>]` fragment off a CLI file URI into an editor selection. */
+function parseGotoFragment(uri: URI): { resource: URI; selection?: ITextEditorSelection } {
+	const match = /^L(?<line>\d+)(?:,(?<column>\d+))?$/.exec(uri.fragment);
+	if (!match?.groups) {
+		return { resource: uri };
+	}
+	return { resource: uri.with({ fragment: '' }), selection: { startLineNumber: Number(match.groups.line), startColumn: match.groups.column ? Number(match.groups.column) : 1 } };
 }

@@ -7,4 +7,4 @@ if [ -z "$TERMINAL_FIRST_NODE" ]; then
 	exit 1
 fi
 
-ELECTRON_RUN_AS_NODE=1 exec "$TERMINAL_FIRST_NODE" "$(dirname "$0")/../cli.cjs" "$@"
+TERMINAL_FIRST_CLI_NAME="code" ELECTRON_RUN_AS_NODE=1 exec "$TERMINAL_FIRST_NODE" "$(dirname "$0")/../cli.cjs" "$@"

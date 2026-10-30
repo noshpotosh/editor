@@ -50,17 +50,15 @@ From any VS NOSH shell, the user must be able to open files in *this* window's e
 ## Known gaps and risks
 
 - **`code` shadows VS Code's own CLI** inside VS NOSH shells. Scripts or muscle memory that expect `code --install-extension`, `code --diff`, `code -r`, or `code <folder>` will get "Unknown option" or a directory error. Decide which `code` options to support or pass through, or rename.
-- The help text says `Usage: code …` even when invoked as `e`.
-- Directory arguments are unsupported, even though `code .` is the most common VS Code invocation.
 - Custom shell startup files that reset `PATH` remove the commands. The workaround is documented but not detected.
 - Disabling the built-in extension silently disables both commands.
 - Pointer files in global storage are never cleaned up after windows close.
-- Diff, merge, goto (`file:line:col`), and `--new-window` are not supported.
+- Diff, merge, and `--new-window` are not supported.
 
 ## Open questions
 
 1. Should `code` be a fuller VS Code CLI (`.` / folder, `-g file:line`, `--diff`) or should only `e` be installed?
-2. Should `code <dir>` set the session directory and open the editor there?
+2. Resolved: `code <dir>` (one directory per invocation) opens the editor in that directory; files named beside it open in the same session. `-g`/`--goto file:line[:col]` opens at a position. Help and error messages use the invoked name (`e` or `code`).
 3. Should the wait handshake survive a window reload?
 
 ## Release acceptance

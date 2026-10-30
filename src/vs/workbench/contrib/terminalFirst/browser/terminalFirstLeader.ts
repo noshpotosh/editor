@@ -61,6 +61,7 @@ const editorActions: readonly ModalAction[] = [
 	{ keys: 'cd', label: localize('diagnostic', "Next Diagnostic"), command: 'editor.action.marker.nextInFiles' },
 	{ keys: 'jj', label: localize('jumpList', "Open Jump List"), command: 'terminalFirst.toggleFloatingJumpList' },
 	{ keys: 'ja', label: localize('addJump', "Add File to Jump List"), command: 'terminalFirst.addToJumpList' },
+	...Array.from({ length: 9 }, (_, index) => ({ keys: `j${index + 1}`, label: localize('jumpSlot', "Open Jump List Slot {0}", index + 1), command: `terminalFirst.jumpToSlot${index + 1}` })),
 	{ keys: 'tt', label: localize('terminal', "Toggle Floating Terminal"), command: 'terminalFirst.toggleFloatingTerminal' },
 	{ keys: 'ts', label: localize('session', "Pick Session"), command: 'terminalFirst.pickTerminal' },
 	{ keys: 'tn', label: localize('newSession', "New Session"), command: 'terminalFirst.newTerminal' },

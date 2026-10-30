@@ -11,6 +11,7 @@ const { pathToFileURL } = require('node:url');
 /** Parses file arguments without shell interpolation or special handling of colons in filenames. */
 function parseArguments(args) {
 	let wait = false;
+	let goto = false;
 	let positional = false;
 	const files = [];
 	for (const argument of args) {
@@ -18,39 +19,63 @@ function parseArguments(args) {
 			positional = true;
 		} else if (!positional && argument === '--wait') {
 			wait = true;
+		} else if (!positional && (argument === '--goto' || argument === '-g')) {
+			goto = true;
 		} else if (!positional && (argument === '--help' || argument === '-h')) {
-			return { help: true, files: [], wait: false };
+			return { help: true, files: [], wait: false, goto: false };
 		} else if (!positional && argument.startsWith('-')) {
 			throw new Error(`Unknown option: ${argument}. Use -- before filenames beginning with a dash.`);
 		} else {
 			files.push(argument);
 		}
 	}
-	return { files, wait, help: false };
+	return { files, wait, goto, help: false };
+}
+
+/** Splits `path:line[:column]` for --goto; a name without a trailing line number is returned unchanged. */
+function parseGoto(file) {
+	const match = /^(?<path>.+?)(?::(?<line>\d+))(?::(?<column>\d+))?$/.exec(file);
+	if (!match || !match.groups) {
+		return { path: file };
+	}
+	return { path: match.groups.path, line: Number(match.groups.line), column: match.groups.column ? Number(match.groups.column) : undefined };
 }
 
 /** Opens files through the current window's extension-host CLI server. */
 async function openFiles(args, environment = process.env, cwd = process.cwd()) {
+	const name = environment.TERMINAL_FIRST_CLI_NAME || 'code';
 	const options = parseArguments(args);
 	if (options.help) {
-		return 'Usage: code [--wait] [--] [<file>...]\nOpens the editor in the current directory, or opens the specified files in this window. --wait returns when all requested files are closed.';
+		return `Usage: ${name} [--wait] [--goto] [--] [<file or directory>...]\nOpens the editor in the current directory, or opens the specified files in this window. A directory argument opens the editor in that directory. --goto opens file:line[:column]. --wait returns when all requested files are closed.`;
 	}
 	if (!environment.TERMINAL_FIRST_CLI_POINTER || !environment.TERMINAL_FIRST_SESSION) {
-		throw new Error('Run code inside a Terminal First shell.');
+		throw new Error(`Run ${name} inside a Terminal First shell.`);
 	}
 	const fileURIs = [];
+	let directory;
 	for (const file of options.files) {
-		const absolutePath = path.resolve(cwd, file);
+		const target = options.goto ? parseGoto(file) : { path: file };
+		const absolutePath = path.resolve(cwd, target.path);
+		let isDirectory = false;
 		try {
-			if ((await fs.stat(absolutePath)).isDirectory()) {
-				throw new Error(`Directories are not supported: ${file}. Use the terminal-first workspace-opening command instead.`);
-			}
+			isDirectory = (await fs.stat(absolutePath)).isDirectory();
 		} catch (error) {
 			if (error.code !== 'ENOENT') {
 				throw error;
 			}
 		}
-		fileURIs.push(pathToFileURL(absolutePath).href);
+		if (isDirectory) {
+			if (directory !== undefined) {
+				throw new Error(`Only one directory can be opened at a time: ${file}.`);
+			}
+			directory = absolutePath;
+			continue;
+		}
+		const url = pathToFileURL(absolutePath);
+		if (target.line !== undefined) {
+			url.hash = `L${target.line}${target.column !== undefined ? `,${target.column}` : ''}`;
+		}
+		fileURIs.push(url.href);
 	}
 	let pointer;
 	const deadline = Date.now() + 2000;
@@ -65,7 +90,7 @@ async function openFiles(args, environment = process.env, cwd = process.cwd()) {
 	if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath)) {
 		throw new Error('The window CLI pointer is invalid. Reload the window to retry.');
 	}
-	const body = JSON.stringify({ type: 'terminalFirstOpen', fileURIs, terminalSession: environment.TERMINAL_FIRST_SESSION, wait: options.wait, cwd: pathToFileURL(cwd).href });
+	const body = JSON.stringify({ type: 'terminalFirstOpen', fileURIs, terminalSession: environment.TERMINAL_FIRST_SESSION, wait: options.wait, cwd: pathToFileURL(directory ?? cwd).href });
 	await new Promise((resolve, reject) => {
 		const request = http.request({ socketPath, path: '/', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, response => {
 			const chunks = [];
@@ -84,7 +109,7 @@ async function openFiles(args, environment = process.env, cwd = process.cwd()) {
 	});
 }
 
-module.exports = { parseArguments, openFiles };
+module.exports = { parseArguments, parseGoto, openFiles };
 
 if (require.main === module) {
 	openFiles(process.argv.slice(2)).then(message => {
@@ -92,7 +117,7 @@ if (require.main === module) {
 			process.stdout.write(`${message}\n`);
 		}
 	}, error => {
-		process.stderr.write(`code: ${error.message}\n`);
+		process.stderr.write(`${process.env.TERMINAL_FIRST_CLI_NAME || 'code'}: ${error.message}\n`);
 		process.exitCode = 1;
 	});
 }

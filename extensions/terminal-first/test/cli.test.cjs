@@ -13,7 +13,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const { test } = require('node:test');
 const { pathToFileURL } = require('node:url');
-const { parseArguments, openFiles } = require('../cli.cjs');
+const { parseArguments, parseGoto, openFiles } = require('../cli.cjs');
 
 /** Creates a window-scoped CLI endpoint and shell environment. */
 async function createWindow(t, handler = (_body, response) => response.end('null')) {
@@ -40,11 +40,18 @@ async function createWindow(t, handler = (_body, response) => response.end('null
 	return { directory, socketPath, pointerPath, requests, environment: { TERMINAL_FIRST_CLI_POINTER: pointerPath, TERMINAL_FIRST_SESSION: directory } };
 }
 
-test('parses wait, help and filenames following --', () => {
-	assert.deepEqual(parseArguments(['--wait', '--', '-file', 'a b']), { wait: true, help: false, files: ['-file', 'a b'] });
+test('parses wait, goto, help and filenames following --', () => {
+	assert.deepEqual(parseArguments(['--wait', '--', '-file', 'a b']), { wait: true, goto: false, help: false, files: ['-file', 'a b'] });
 	assert.equal(parseArguments(['--help']).help, true);
-	assert.deepEqual(parseArguments([]), { wait: false, help: false, files: [] });
+	assert.deepEqual(parseArguments(['-g', 'a.ts:3:4']), { wait: false, goto: true, help: false, files: ['a.ts:3:4'] });
+	assert.deepEqual(parseArguments([]), { wait: false, goto: false, help: false, files: [] });
 	assert.throws(() => parseArguments(['--unknown']), /Unknown option/);
+	assert.deepEqual(['a.ts:12', 'a.ts:12:4', 'notes:draft.txt', 'plain.ts'].map(parseGoto), [{ path: 'a.ts', line: 12, column: undefined }, { path: 'a.ts', line: 12, column: 4 }, { path: 'notes:draft.txt' }, { path: 'plain.ts' }]);
+});
+
+test('help and errors use the invoked command name', async () => {
+	assert.match(await openFiles(['--help'], { TERMINAL_FIRST_CLI_NAME: 'e' }, '/tmp'), /^Usage: e /);
+	await assert.rejects(openFiles(['x'], { TERMINAL_FIRST_CLI_NAME: 'e' }, '/tmp'), /Run e inside/);
 });
 
 test('opens quoted, Unicode, special-character and new files relative to the shell cwd', async t => {
@@ -61,10 +68,20 @@ test('opens quoted, Unicode, special-character and new files relative to the she
 	}]);
 });
 
-test('rejects directories before sending any file-open request', async t => {
+test('a directory argument opens the editor there, files beside it open in that session, and two directories are refused', async t => {
 	const window = await createWindow(t);
-	await assert.rejects(openFiles(['file.ts', '.'], window.environment, window.directory), /Directories are not supported/);
-	assert.deepEqual(window.requests, []);
+	const nested = path.join(window.directory, 'nested');
+	await fs.mkdir(nested);
+	await openFiles(['file.ts', 'nested'], window.environment, window.directory);
+	assert.deepEqual(window.requests, [{ type: 'terminalFirstOpen', fileURIs: [pathToFileURL(path.join(window.directory, 'file.ts')).href], terminalSession: window.directory, wait: false, cwd: pathToFileURL(nested).href }]);
+	await assert.rejects(openFiles(['.', 'nested'], window.environment, window.directory), /Only one directory/);
+	assert.equal(window.requests.length, 1);
+});
+
+test('--goto encodes the line and column as a fragment the window understands', async t => {
+	const window = await createWindow(t);
+	await openFiles(['-g', 'a.ts:12:4', 'b.ts:7', 'c.ts'], window.environment, window.directory);
+	assert.deepEqual(window.requests[0].fileURIs, [`${pathToFileURL(path.join(window.directory, 'a.ts')).href}#L12,4`, `${pathToFileURL(path.join(window.directory, 'b.ts')).href}#L7`, pathToFileURL(path.join(window.directory, 'c.ts')).href]);
 });
 
 test('keeps simultaneous windows isolated and follows a refreshed CLI pointer after reload', async t => {

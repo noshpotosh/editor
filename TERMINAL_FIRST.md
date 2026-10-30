@@ -25,6 +25,8 @@ Native Vim controls are built in and enabled by default. For optional VSCodeVim 
 | Open several files | `e src/app.ts 'notes with spaces.txt'` |
 | Block until the requested files close | `e --wait COMMIT_EDITMSG` |
 | Open a filename beginning with a dash | `e -- -notes.txt` |
+| Open the editor in a directory | `e src/` |
+| Open at a line and column | `e -g src/app.ts:12:4` |
 | Open editor / return to shell | `Ctrl+Space e` / `Ctrl+Space q` |
 | Toggle floating terminal (editor mode) | `Cmd+Shift+T` or leader `t t` |
 | New shell session | `Cmd+Option+N` |
@@ -33,6 +35,7 @@ Native Vim controls are built in and enabled by default. For optional VSCodeVim 
 | Browse files with preview (editor mode) | `Cmd+Shift+E` or leader `f b` |
 | Add current file to jump list | `Cmd+Shift+A` or leader `j a` |
 | Toggle jump list | `Cmd+Shift+J` or leader `j j` |
+| Open jump list slot 1 to 9 | leader `j 1` … `j 9` |
 | Find a file (editor mode) | `Cmd+P` |
 | Command Palette (editor mode) | `Cmd+Shift+P` |
 
@@ -40,7 +43,7 @@ The title bar contains session tabs with shell/editor glyphs, dirty indicators, 
 
 Shell mode hides the panel header entirely and prevents sidebar, panel, and workbench commands from revealing tools. Normal terminal input, copy/paste, selection, scrolling, and find remain available. Editor mode shows a tiling workspace with editor tabs and a status bar. The activity bar, sidebar, and secondary sidebar are removed; views open as tiles instead. The layout controls and Open in Agents title-bar button are absent in both modes. The former Toggle Workbench Tools command is removed.
 
-`code` and its alias `e` support local files and new unsaved files. It sends the invoking directory along with the originating terminal session identity. Open Editor uses shell directory detection, then the last known directory, then the initial shell directory. Explorer, search, and source control follow the active editor session’s directory; open files remain in that session even after `cd`. Directory arguments to `e` remain unsupported. `EDITOR='e --wait'` is supported, and switching surfaces or sessions does not release the wait.
+`code` and its alias `e` support local files and new unsaved files. It sends the invoking directory along with the originating terminal session identity. Open Editor uses shell directory detection, then the last known directory, then the initial shell directory. Explorer, search, and source control follow the active editor session’s directory; open files remain in that session even after `cd`. A single directory argument opens the editor in that directory; `-g file:line[:col]` opens at a position. `EDITOR='e --wait'` is supported, and switching surfaces or sessions does not release the wait.
 
 The window uses a managed `.code-workspace` file in its own workspace storage. User-owned workspace files are not rewritten. Settings and the extension host are shared across tabs. Folder changes use the normal workspace service and notifications, but do not restart the extension host: doing so would break pending shell CLI requests. Extensions that assume the first workspace folder never changes may require an explicit extension-host restart. Remote development and fully isolated extension environments per tab are outside this milestone.
 

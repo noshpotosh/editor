@@ -5,6 +5,7 @@
 
 import { RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
+import { Emitter } from '../../../../base/common/event.js';
 
 export { terminalFirstEnabled };
 export const TerminalFirstFloatingEnabledContext = new RawContextKey<boolean>('terminalFirstFloatingEnabled', false);
@@ -37,7 +38,19 @@ export function isTerminalFirstInteraction(id: string): boolean {
 	return /^workbench\.action\.terminal\.(copySelection|copyAndClearSelection|paste|pasteSelection|selectAll|clear|focusFind|findNext|findPrevious|hideFind|scroll|sendSequence|sizeToContentWidth)/.test(id);
 }
 
+const blockedCommand = new Emitter<string>();
+/** Fires with the ID of every command the policy refused, so the session controller can log it and hint at the editor. */
+export const onDidBlockTerminalFirstCommand = blockedCommand.event;
+
 export function isTerminalFirstCommandAllowed(id: string, mode = terminalFirstPolicy.mode, enabled = terminalFirstEnabled): boolean {
+	const allowed = isCommandAllowed(id, mode, enabled);
+	if (!allowed) {
+		blockedCommand.fire(id);
+	}
+	return allowed;
+}
+
+function isCommandAllowed(id: string, mode: typeof terminalFirstPolicy.mode, enabled: boolean): boolean {
 	if (!enabled) { return true; }
 	if (id.startsWith('workbench.action.terminal.')) {
 		return isTerminalFirstInteraction(id);

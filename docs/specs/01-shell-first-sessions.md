@@ -118,7 +118,7 @@ Design decisions:
 
 - Global leader navigation now preserves dirty buffers when returning to the shell (S1.15).
 - `present()` shows the status bar in editor mode, but the default settings set `workbench.statusBar.visible: false`. The effective behavior should be confirmed and one source of truth chosen.
-- The command gate silently returns `undefined` for blocked commands. Extensions and keybindings get no feedback, and users get no signal that a command was suppressed.
+- The command gate returns `undefined` for blocked commands. Each blocked ID is logged once per window, and the first blocked workbench command in the shell shows a one-time hint that the command is available in the editor (Ctrl+Space e). Extensions still get no error.
 - Workspace-scoped settings are copied once into the managed workspace. Later edits to an original `.code-workspace` file are not synced.
 - Changing the workspace folder without an extension-host restart can leave language servers rooted at the previous folder.
 - Session titles come from the terminal title only. They cannot be renamed and are not stable across processes.
@@ -128,7 +128,7 @@ Design decisions:
 
 1. Resolved: global leader provides explicit editor/shell navigation.
 2. Resolved: title-bar tabs show mode and dirty state.
-3. Should blocked commands produce a one-time notification or a log entry?
+3. Resolved: both; see Known gaps.
 4. Should session titles be user-renamable and persisted?
 5. Should the status bar be visible in editor mode by default?
 

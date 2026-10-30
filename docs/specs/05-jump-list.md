@@ -54,18 +54,15 @@ Both bindings use weight `ExternalExtension + 1000`, to rank above extension def
 
 ## Known gaps and risks
 
-- No direct slot jumps (Harpoon-style `1`–`9`, or "go to entry N" commands bound outside the list). Numbers are displayed but are not actionable.
-- No move-up and move-down. Reordering is only possible with `dd` plus `p`/`P`.
 - The list holds files only: no cursor position, no line, and no non-`file:` resources.
 - The project key depends on `.git` discovery. Nested repositories and worktrees each get separate lists. A project without `.git` keys on the session cwd, so a `cd` changes which list is shown.
-- Undo/redo history is lost when the list is reloaded (every toggle reloads).
 - Not documented for users.
 
 ## Open questions
 
 1. Final keybindings for add and toggle?
 2. Should entries record a cursor position?
-3. Should there be global "jump to slot N" commands?
+3. Resolved: `terminalFirst.jumpToSlot1`–`9` (leader `j 1`–`j 9`) open a slot without showing the list; inside the list, `1`–`9` open a slot and `J`/`K` move the focused entry. Undo history survives reopening the same project's list.
 4. Is the project key right for monorepos and worktrees?
 
 ## Release acceptance

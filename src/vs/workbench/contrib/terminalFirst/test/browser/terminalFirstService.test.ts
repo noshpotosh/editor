@@ -497,6 +497,15 @@ suite('Terminal First', () => {
 		deepStrictEqual([state.hidden.get(Parts.SIDEBAR_PART), state.hidden.get(Parts.AUXILIARYBAR_PART), state.hidden.get(Parts.ACTIVITYBAR_PART), state.commands.includes('workbench.view.explorer')], [true, true, true, false]);
 	});
 
+	test('CLI goto fragments become editor selections', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.openFiles(['file:///project/a.ts#L12,4', 'file:///project/b.ts#L7', 'file:///project/c.ts'], state.active!.shellIntegrationNonce, false);
+		deepStrictEqual(state.opened.at(-1)?.map(input => [input.resource.toString(), input.options?.selection]), [
+			['file:///project/a.ts', { startLineNumber: 12, startColumn: 4 }], ['file:///project/b.ts', { startLineNumber: 7, startColumn: 1 }], ['file:///project/c.ts', undefined],
+		]);
+	});
+
 	test('terminal tile CLI requests return to their owning session', async () => {
 		const state = fixture();
 		await state.service.initialize();

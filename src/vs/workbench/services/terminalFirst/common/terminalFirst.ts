@@ -23,6 +23,8 @@ export interface ITerminalFirstService {
 	readonly floatingJumpListVisible: boolean;
 	addToJumpList(): Promise<void>;
 	toggleFloatingJumpList(): Promise<void>;
+	/** Opens the jump list entry at a 1-based slot. */
+	jumpToSlot(slot: number): Promise<void>;
 	hideFloatingJumpList(focusEditor?: boolean): Promise<void>;
 	readonly floatingFileBrowserVisible: boolean;
 	toggleFloatingFileBrowser(): Promise<void>;

@@ -53,6 +53,19 @@ suite('Floating Jump List', () => {
 		]);
 	});
 
+	test('Shift+J/K move the focused entry and digits open slots', async () => {
+		const f = fixture();
+		f.key('J');
+		const movedDown = f.model.entries.map(item => item.path);
+		f.key('K'); f.key('K');
+		const movedTop = f.model.entries.map(item => item.path);
+		f.key('3');
+		await f.settle();
+		f.key('9');
+		await f.settle();
+		deepStrictEqual({ movedDown, movedTop, opened: f.opened, focused: f.container.querySelector('.focused')?.getAttribute('aria-label') }, { movedDown: ['/project/a', '/project/c', '/project/b'], movedTop: ['/project/b', '/project/a', '/project/c'], opened: ['/project/c'], focused: 'b' });
+	});
+
 	test('IME and modifiers do not remove rows; failed opens stay visible; outside click dismisses', async () => {
 		const f = fixture();
 		f.key('d', { isComposing: true }); f.key('d'); f.key('j', { metaKey: true }); f.key('d'); f.key('ArrowDown');

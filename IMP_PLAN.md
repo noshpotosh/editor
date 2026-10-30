@@ -583,7 +583,10 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | D2.12 web app leader routes | done | (see git log) | `w b`, `w c` |
 | D2.13 issue URL + CHANGELOG | done | (see git log) | extension gallery decision unchanged |
 | D2.14 spec drift | done | (see git log) | |
-| D2.1 … D2.10 hardening | todo | | one row per item when started |
+| D2.1 blocked-command feedback | done | (see git log) | log once per id; one-time shell hint via notification center |
+| D2.3 CLI | done | (see git log) | directory arg, `-g file:line:col`, invoked name in help/errors |
+| D2.7 jump list slots | done | (see git log) | `j 1`…`j 9`, `J`/`K` reorder, undo kept across reopen |
+| D2.2, D2.4, D2.5, D2.6, D2.8, D2.9, D2.10 | todo | | |
 
 ## Definition of done (whole plan)
 

@@ -125,6 +125,9 @@ if (terminalFirstEnabled) {
 	}
 
 	CommandsRegistry.registerCommand('terminalFirst.showEditor', accessor => accessor.get(ITerminalFirstService).showEditor());
+	for (let slot = 1; slot <= 9; slot++) {
+		CommandsRegistry.registerCommand(`terminalFirst.jumpToSlot${slot}`, accessor => accessor.get(ITerminalFirstService).jumpToSlot(slot));
+	}
 	CommandsRegistry.registerCommand('terminalFirst.showShell', accessor => accessor.get(ITerminalFirstService).showShell());
 	CommandsRegistry.registerCommand('terminalFirst.closeSession', accessor => {
 		const service = accessor.get(ITerminalFirstService);
