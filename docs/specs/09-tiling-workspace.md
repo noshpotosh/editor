@@ -33,6 +33,7 @@ Code mode should behave like a keyboard-driven tiling window manager (Hyprland's
 - **S9.21** View tiles persist their container ID. A tile whose container has not been registered yet (the extension is not yet loaded) shows a placeholder and fills in when the container registers. Layouts that persisted the older `{ kind: 'explorer' | 'scm' }` form restore as the matching containers.
 - **S9.22** There is one composite per view container per window. Session tiles hand it over when they become visible, so singleton-backed views (extension tree views, webview views, Explorer) are created once and keep their state. It is disposed when the last tile for that container closes in any session.
 - **S9.23** A background open (no focus requested) that finds no room fails silently. Only focused opens show the no-room message from S9.3.
+- **S9.24** Keyboard focus of a view tile lands on its list with a visible cursor, and the tile's scoped context carries `terminalFirstViewTile` so lists inside it get Vim keys (spec 6, S6.21 to S6.25).
 
 ## Surface
 
@@ -60,6 +61,7 @@ All commands are `terminalFirst.tile.*`, in category **VS NOSH**. Chords use Ctr
 | `terminalFirst.tiles.focusFollowsMouse` | `true` | S9.14 |
 | `terminalFirst.tiles.wrapFocus` | `false` | S9.7 |
 | `terminalFirst.tiles.resizeStep` | `40` | S9.10 |
+| `terminalFirst.vim.listActionKeys` | `false` | S6.24 |
 
 ## Implementation
 

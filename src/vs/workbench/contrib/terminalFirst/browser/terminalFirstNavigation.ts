@@ -6,8 +6,6 @@
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { KeybindingsRegistry, KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { WorkbenchListFocusContextKey } from '../../../../platform/list/browser/listService.js';
-import { FilesExplorerFocusedContext } from '../../files/common/files.js';
 import { TerminalFirstEnabledContext, TerminalFirstShellContext, TerminalFirstBrowserVisibleContext, TerminalFirstFloatingVisibleContext, TerminalFirstJumpListVisibleContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 /** The code workspace has keyboard focus and no floating tool or picker owns the keys. */
@@ -32,17 +30,5 @@ for (const [key, id] of [
 		id, weight, when: dockedNavigation,
 		primary: KeyMod.CtrlCmd | key,
 		mac: { primary: KeyMod.WinCtrl | key },
-	});
-}
-
-for (const [key, id] of [
-	[KeyCode.KeyH, 'list.collapse'],
-	[KeyCode.KeyJ, 'list.focusDown'],
-	[KeyCode.KeyK, 'list.focusUp'],
-	[KeyCode.KeyL, 'list.expand'],
-] as const) {
-	KeybindingsRegistry.registerKeybindingRule({
-		id, weight, primary: key,
-		when: ContextKeyExpr.and(dockedNavigation, FilesExplorerFocusedContext, WorkbenchListFocusContextKey),
 	});
 }

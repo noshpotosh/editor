@@ -5,7 +5,7 @@
 import './floatingOverlay.css';
 import { ITerminalFirstLeaderService } from './terminalFirstLeader.js';
 import { NativeVimPickers } from './nativeVimPickers.js';
-import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter } from '../../../../base/common/event.js';
@@ -31,7 +31,7 @@ import { EnablementState, IWorkbenchExtensionEnablementService } from '../../../
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { terminalFirstEnabled, TerminalFirstVimEnabledContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
@@ -41,6 +41,7 @@ export class NativeVimService extends Disposable implements INativeVimService {
 	declare readonly _serviceBrand: undefined;
 	readonly shared = new VimSharedState();
 	private ready = false;
+	private readonly vimEnabledContext: IContextKey<boolean>;
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChange = this.changed.event;
 	hint = '';
@@ -67,6 +68,7 @@ export class NativeVimService extends Disposable implements INativeVimService {
 		@IWorkbenchExtensionEnablementService enablement: IWorkbenchExtensionEnablementService,
 	) {
 		super();
+		this.vimEnabledContext = TerminalFirstVimEnabledContext.bindTo(contexts);
 		this._register(this.leader.onDidChange(() => { this.hint = this.leader.hint; this.changed.fire(); }));
 		this._register(new NativeVimPickers(this, quickInput, commands, contexts));
 		this._register(sessions.onDidChangeSessions(() => {
@@ -89,7 +91,7 @@ export class NativeVimService extends Disposable implements INativeVimService {
 					notifications.info(localize('reloadNative', "VSCodeVim has been disabled for this profile. Reload the window to finish switching engines."));
 					return;
 				}
-				this.ready = this.initialEngine === 'native'; this.changed.fire();
+				this.ready = this.initialEngine === 'native'; this.vimEnabledContext.set(this.ready); this.changed.fire();
 			}).catch(error => notifications.error(error));
 		}
 		this._register(configuration.onDidChangeConfiguration(event => {
@@ -203,6 +205,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfigurat
 		'terminalFirst.vim.engine': { type: 'string', enum: ['native', 'extension', 'off'], default: 'native', description: localize('engineSetting', "Vim engine. Reload required. Native is experimental until acceptance validation is complete.") },
 		'terminalFirst.vim.leader': { type: 'string', default: ' ', minLength: 1, maxLength: 1, description: localize('leaderSetting', "Normal-mode leader key.") },
 		'terminalFirst.vim.hintDelay': { type: 'number', default: 250, minimum: 0, maximum: 2000, description: localize('hintSetting', "Delay before showing leader hints, in milliseconds.") },
+		'terminalFirst.vim.listActionKeys': { type: 'boolean', default: false, description: localize('listActionKeysSetting', "In view tiles, single keys run row actions: s/u/d stage, unstage, and discard in Changes; r/a/A/d/D/y/x/p rename, create, delete, copy, cut, and paste in Explorer. Delete and discard still confirm. The '.' actions picker is always available.") },
 		'terminalFirst.vim.leaderBindings': { type: 'array', default: [], description: localize('leaderBindingsSetting', "Additional code-mode leader shortcuts. Bindings that conflict with existing shortcuts or menu prefixes are ignored."), items: { type: 'object', required: ['keys', 'label', 'command'], additionalProperties: false, properties: { keys: { type: 'string', minLength: 1 }, label: { type: 'string' }, command: { type: 'string', minLength: 1 } } } },
 		'terminalFirst.vim.remaps': { type: 'array', default: [], description: localize('remapsSetting', "Nonrecursive mode-specific key mappings."), items: { type: 'object', required: ['mode', 'before'], additionalProperties: false, properties: { mode: { type: 'string', enum: ['normal', 'insert', 'visual', 'visualLine', 'visualBlock', 'operator', 'replace'] }, before: { type: 'array', minItems: 1, items: { type: 'string' } }, after: { type: 'array', items: { type: 'string' } }, command: { type: 'string' } }, oneOf: [{ required: ['after'] }, { required: ['command'] }] } },
 	}

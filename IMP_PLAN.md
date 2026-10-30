@@ -576,7 +576,7 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | A2.2 sessions extension | done | (see git log) | `EditorPartSessions` extension with `for()`/`attach()`; `IEditorPart.sessions`/`swapGroups` removed; upstream editor tests pristine |
 | A5 titlebar | done | (see git log) | `SessionStripContribution` injects the strip; browser `titlebarPart.ts` pristine; electron-browser part keeps a 4-line `minimumHeight` hunk |
 | A6 manifest + sync | done | (see git log) | `build/fork/upstream-patches.json`, `build/fork/upstream-check.ts`, `scripts/upstream-check.sh`, `scripts/upstream-sync.sh`, `docs/upstream/{SYNC,PATCHES}.md`, `.github/workflows/upstream-drift.yml`; dry run against `upstream/main` shows zero conflicts in documented patches |
-| B keyboard model | todo | | |
+| B keyboard model | done | (see git log) | `tileListNavigation.ts`, `tileListActions.ts`, deterministic `ViewTileEditor.focus()`, tile-scoped `terminalFirstViewTile` and `listTypeNavigationMode`; manual checklist in the B verification section still to run in the app |
 | C picker | todo | | |
 | D1 key collisions | todo | | |
 | D2.1 … D2.14 hardening | todo | | one row per item when started |

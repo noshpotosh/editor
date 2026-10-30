@@ -12,17 +12,19 @@ import { KeybindingResolver, ResultKind } from '../../../../../platform/keybindi
 import { ResolvedKeybindingItem } from '../../../../../platform/keybinding/common/resolvedKeybindingItem.js';
 import { USLayoutResolvedKeybinding } from '../../../../../platform/keybinding/common/usLayoutResolvedKeybinding.js';
 import '../../browser/terminalFirstNavigation.js';
+import '../../browser/tileListNavigation.js';
 
 suite('Terminal First docked navigation', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
 	const defaults = KeybindingsRegistry.getDefaultKeybindings()
-		.filter(binding => binding.when?.keys().includes('terminalFirstEnabled') && /^(workbench.action.navigate(Left|Right|Up|Down)|list.(collapse|expand|focusDown|focusUp))$/.test(binding.command ?? ''))
+		.filter(binding => binding.when?.keys().includes('terminalFirstEnabled') && /^(workbench\.action\.navigate(Left|Right|Up|Down)|terminalFirst\.tileList\..*)$/.test(binding.command ?? ''))
 		.map(binding => new ResolvedKeybindingItem(USLayoutResolvedKeybinding.resolveKeybinding(binding.keybinding!, OS)[0], binding.command, undefined, binding.when ?? undefined, true, null, false));
-	function resolve(key: string, context: Record<string, boolean | string | undefined> = {}, overrides: ResolvedKeybindingItem[] = []) {
+	function resolve(key: string, context: Record<string, boolean | string | undefined> = {}, overrides: ResolvedKeybindingItem[] = [], chords: string[] = []) {
 		const values: Record<string, boolean | string | undefined> = { terminalFirstEnabled: true, ...context };
-		const result = new KeybindingResolver(defaults, overrides, () => { }).resolve({ getValue: <T extends ContextKeyValue>(key: string) => values[key] as T | undefined }, [], key.replace(/[hjkl]$/, letter => letter.toUpperCase()));
-		return result.kind === ResultKind.KbFound ? result.commandId : undefined;
+		const result = new KeybindingResolver(defaults, overrides, () => { }).resolve({ getValue: <T extends ContextKeyValue>(key: string) => values[key] as T | undefined }, chords, key.replace(/[hjkl]$/, letter => letter.toUpperCase()));
+		return result.kind === ResultKind.KbFound ? result.commandId : result.kind === ResultKind.MoreChordsNeeded ? 'chord' : undefined;
 	}
+	const tileList = { terminalFirstViewTile: true, terminalFirstVimEnabled: true, listFocus: true };
 
 	test('physical Control navigates regardless of Vim engine, mode or terminal focus', () => {
 		for (const mode of ['', 'normal', 'visual', 'insert']) {
@@ -36,12 +38,34 @@ suite('Terminal First docked navigation', () => {
 		}
 	});
 
-	test('Explorer navigation requires tree focus and leaves text inputs alone', () => {
-		const context = { filesExplorerFocus: true, listFocus: true };
-		assert.deepStrictEqual(['h', 'j', 'k', 'l'].map(key => resolve(key, context)), ['list.collapse', 'list.focusDown', 'list.focusUp', 'list.expand']);
-		for (const exclusion of [{ inputFocus: true }, { listFocus: false }, { filesExplorerFocus: false }]) {
-			assert.deepStrictEqual(['h', 'j', 'k', 'l'].map(key => resolve(key, { ...context, ...exclusion })), Array(4).fill(undefined));
+	test('tile lists get Vim keys only with native Vim on, list focus, and no input or find widget', () => {
+		const keys: [string, string | undefined, string[]?][] = [
+			['j', 'terminalFirst.tileList.down'], ['k', 'terminalFirst.tileList.up'], ['h', 'terminalFirst.tileList.collapse'], ['l', 'terminalFirst.tileList.expand'],
+			['O', 'terminalFirst.tileList.open'], ['shift+G', 'terminalFirst.tileList.last'], ['G', 'chord'], ['G', 'terminalFirst.tileList.first', ['G']],
+			['ctrl+D', 'terminalFirst.tileList.pageDown'], ['ctrl+U', 'terminalFirst.tileList.pageUp'], ['/', 'terminalFirst.tileList.find'], ['Space', 'terminalFirst.tileList.leader'],
+			['.', 'terminalFirst.tileList.actions'], ['M', 'terminalFirst.tileList.contextMenu'], ['F6', 'terminalFirst.tileList.focusNext'], ['shift+F6', 'terminalFirst.tileList.focusPrevious'],
+			['Escape', 'terminalFirst.tileList.escape'], ['shift+/', 'terminalFirst.tileList.help'],
+			['S', undefined], ['R', undefined],
+		];
+		assert.deepStrictEqual(keys.map(([key, , chords]) => resolve(key, tileList, [], chords)), keys.map(([, command]) => command));
+		for (const exclusion of [{ terminalFirstVimEnabled: false }, { terminalFirstViewTile: false }, { listFocus: false }, { inputFocus: true }, { treeFindOpen: true }, { filesExplorerFocus: true, terminalFirstViewTile: false }]) {
+			assert.deepStrictEqual(['h', 'j', 'k', 'l', '.', 'Space'].map(key => resolve(key, { ...tileList, ...exclusion })), Array(6).fill(undefined));
 		}
+	});
+
+	test('row action keys are opt-in and scoped to their view', () => {
+		const optIn = { ...tileList, 'config.terminalFirst.vim.listActionKeys': true };
+		assert.deepStrictEqual({
+			scm: ['S', 'U', 'D'].map(key => resolve(key, { ...optIn, view: 'workbench.scm' })),
+			explorer: ['R', 'A', 'shift+A', 'D', 'shift+D', 'Y', 'X', 'P'].map(key => resolve(key, { ...optIn, filesExplorerFocus: true })),
+			elsewhere: ['S', 'R'].map(key => resolve(key, optIn)),
+			off: ['S', 'R'].map(key => resolve(key, { ...tileList, view: 'workbench.scm', filesExplorerFocus: true })),
+		}, {
+			scm: ['terminalFirst.tileList.stage', 'terminalFirst.tileList.unstage', 'terminalFirst.tileList.discard'],
+			explorer: ['terminalFirst.tileList.rename', 'terminalFirst.tileList.newFile', 'terminalFirst.tileList.newFolder', 'terminalFirst.tileList.trash', 'terminalFirst.tileList.delete', 'terminalFirst.tileList.copy', 'terminalFirst.tileList.cut', 'terminalFirst.tileList.paste'],
+			elsewhere: [undefined, undefined],
+			off: [undefined, undefined],
+		});
 	});
 
 	test('user bindings override navigation defaults', () => {

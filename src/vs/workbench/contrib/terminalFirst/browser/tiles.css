@@ -28,6 +28,12 @@
 	height: 100%;
 }
 
+/* Vim users park the list cursor while they use a toolbar or picker; keep it visible without list focus. */
+.monaco-workbench .terminal-first-tool-tile .monaco-list:not(:focus) .monaco-list-row.focused {
+	outline: var(--vscode-strokeThickness) dotted var(--vscode-list-inactiveFocusOutline, var(--vscode-focusBorder));
+	outline-offset: -1px;
+}
+
 /* Shown until an extension registers the tile's view container. */
 .monaco-workbench .terminal-first-tool-tile .tile-tool-placeholder {
 	padding: var(--vscode-spacing-size80);

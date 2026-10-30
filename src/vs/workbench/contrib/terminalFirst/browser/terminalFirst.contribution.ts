@@ -24,6 +24,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ITerminalFirstService, TerminalFirstService } from './terminalFirstService.js';
 import './viewPruning.js';
+import './tileListNavigation.js';
 import { createTerminalFirstTerminalPolicy } from './terminalPolicy.js';
 import { SessionStripContribution } from './sessionStripContribution.js';
 import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';

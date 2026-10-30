@@ -19,6 +19,10 @@ export const TerminalFirstJumpListVisibleContext = new RawContextKey<boolean>('t
 export const TerminalFirstJumpListFocusedContext = new RawContextKey<boolean>('terminalFirstJumpListFocused', false);
 
 export const TerminalFirstShellContext = new RawContextKey<boolean>('terminalFirstShell', false);
+/** Set on the scoped context of every view tile, so lists inside tiles inherit it. */
+export const TerminalFirstViewTileContext = new RawContextKey<boolean>('terminalFirstViewTile', false);
+/** True while the native Vim engine owns keyboard input. */
+export const TerminalFirstVimEnabledContext = new RawContextKey<boolean>('terminalFirstVimEnabled', false);
 export const TerminalFirstEnabledContext = new RawContextKey<boolean>('terminalFirstEnabled', terminalFirstEnabled);
 
 /** Window-local presentation policy. Only the session controller changes the active surface. */

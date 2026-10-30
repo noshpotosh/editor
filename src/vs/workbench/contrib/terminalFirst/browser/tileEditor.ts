@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './tiles.css';
-import { $, append, Dimension } from '../../../../base/browser/dom.js';
+import { $, addDisposableListener, append, Dimension, EventHelper, EventType, getActiveElement, isActiveElement, isAncestor, isAncestorOfActiveElement } from '../../../../base/browser/dom.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
-import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { combinedDisposable, Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { disposableTimeout } from '../../../../base/common/async.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
@@ -28,6 +29,9 @@ import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH } from '../common/tileLayout.j
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { viewContainerHosts } from '../../../services/views/browser/viewContainerHost.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
+import { getSelectionKeyboardEvent, IListService } from '../../../../platform/list/browser/listService.js';
+import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
+import { TerminalFirstViewTileContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 /** Container IDs of the built-in tool tiles; also maps tool tiles persisted before view tiles. */
 export const tileViewIds = { explorer: 'workbench.view.explorer', scm: 'workbench.view.scm' } as const;
@@ -64,6 +68,7 @@ export class ViewTileComposites extends Disposable {
 		@IPaneCompositePartService private readonly composites: IPaneCompositePartService,
 		@IViewDescriptorService private readonly descriptors: IViewDescriptorService,
 		@IContextKeyService private readonly contextKeys: IContextKeyService,
+		@INativeVimService private readonly vim: INativeVimService,
 	) {
 		super();
 		this._register(descriptors.onDidChangeViewContainers(({ removed }) => {
@@ -97,7 +102,15 @@ export class ViewTileComposites extends Disposable {
 			if (!descriptor) { return undefined; }
 			const store = new DisposableStore();
 			const element = $('.tile-tool-composite');
-			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, store.add(this.contextKeys.createScoped(element))])));
+			const scopedContextKeys = store.add(this.contextKeys.createScoped(element));
+			// Lists created by the views inherit these keys, so Vim keys apply to every list in a tile.
+			TerminalFirstViewTileContext.bindTo(scopedContextKeys).set(true);
+			// With Vim keys, type-ahead must wait for an explicit trigger (`/`) instead of eating j/k.
+			const typeNavigation = scopedContextKeys.createKey<string | undefined>('listTypeNavigationMode', undefined);
+			const syncTypeNavigation = () => this.vim.enabled ? typeNavigation.set('trigger') : typeNavigation.reset();
+			store.add(this.vim.onDidChange(syncTypeNavigation));
+			syncTypeNavigation();
+			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, scopedContextKeys])));
 			const composite = store.add(descriptor.instantiate(scoped));
 			composite.create(element);
 			entry = { composite, element, store, owner: undefined, references: 0 };
@@ -218,6 +231,10 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 	private dimension = new Dimension(0, 0);
 	private composite: PaneComposite | undefined;
 	private containerId: string | undefined;
+	private toolbar: WorkbenchToolBar | undefined;
+	/** Set when focus was requested before the composite was acquired. */
+	private focusWhenReady = false;
+	private readonly pendingRowFocus = this._register(new MutableDisposable());
 	get viewContainer(): PaneComposite | undefined { return this.composite; }
 	override get minimumWidth(): number { return EDITOR_TILE_MIN_WIDTH - EDITOR_TILE_INSET * 2; }
 	override get minimumHeight(): number { return 150; }
@@ -232,6 +249,7 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		@IViewDescriptorService descriptors: IViewDescriptorService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IEditorGroupsService private readonly groups: IEditorGroupsService,
+		@IListService private readonly listService: IListService,
 	) {
 		super(ViewTileEditor.ID, group, telemetry, theme, storage);
 		this._register(layoutService.onDidChangePartVisibility(() => this.updateVisibility()));
@@ -242,6 +260,13 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 
 	protected createEditor(parent: HTMLElement): void {
 		this.element = append(parent, $('.terminal-first-tool-tile'));
+		// Escape in a toolbar returns to the list with its cursor, mirroring how F6 got there.
+		this._register(addDisposableListener(this.element, EventType.KEY_DOWN, event => {
+			if (event.key === 'Escape' && isActiveElementInToolbar(this.element)) {
+				EventHelper.stop(event, true);
+				this.focus();
+			}
+		}));
 	}
 
 	override async setInput(input: ViewTileInput, options: IEditorOptions | undefined, context: IEditorOpenContext, token: CancellationToken): Promise<void> {
@@ -273,7 +298,7 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		const header = append(this.element, $('.tile-tool-actions'));
 		const body = append(this.element, $('.tile-tool-body'));
 		body.appendChild(entry.element);
-		const toolbar = this.content.add(this.instantiation.createInstance(WorkbenchToolBar, header, {
+		const toolbar = this.toolbar = this.content.add(this.instantiation.createInstance(WorkbenchToolBar, header, {
 			actionViewItemProvider: (action, options) => composite.getActionViewItem(action, options),
 			actionRunner: composite.getActionRunner(),
 		}));
@@ -284,12 +309,21 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		this.content.add(composite.onTitleAreaUpdate(updateActions));
 		updateActions();
 		this.layout(this.dimension);
+		if (this.focusWhenReady) {
+			this.focusWhenReady = false;
+			if (this.groups.activeGroup === this.group) {
+				this.focus();
+			}
+		}
 	}
 
 	/** Another tile took the composite, or its container was removed. */
 	detach(): void {
 		this.composite = undefined;
 		this.containerId = undefined;
+		this.toolbar = undefined;
+		this.focusWhenReady = false;
+		this.pendingRowFocus.clear();
 		this.content.clear();
 		this.element?.replaceChildren();
 	}
@@ -300,11 +334,103 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 	}
 
 	override clearInput(): void { this.releaseComposite(); super.clearInput(); }
-	override focus(): void { super.focus(); this.composite?.focus(); }
+	/**
+	 * Focuses the view's list and gives it a visible cursor. The composite may not be acquired yet
+	 * (focus arrives before `updateVisibility`), and some views focus their tree asynchronously, so
+	 * the first row is focused as soon as a list inside the tile receives focus.
+	 */
+	override focus(): void {
+		super.focus();
+		this.pendingRowFocus.clear();
+		if (!this.composite) {
+			this.focusWhenReady = true;
+			return;
+		}
+		const panes = this.composite.getViewPaneContainer()?.panes.filter(pane => pane.isVisible()) ?? [];
+		if (panes.length && !panes.some(pane => pane.isExpanded())) {
+			panes[0].setExpanded(true);
+		}
+		this.composite.focus();
+		if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element)) {
+			return;
+		}
+		const listener = addDisposableListener(this.element, EventType.FOCUS_IN, () => {
+			if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element)) {
+				this.pendingRowFocus.clear();
+			}
+		});
+		this.pendingRowFocus.value = combinedDisposable(listener, disposableTimeout(() => this.pendingRowFocus.clear(), 1000));
+	}
+
+	/** Moves focus between the list, the focused view's header toolbar, and the tile toolbar. */
+	cycleFocus(forward: boolean): void {
+		const composite = this.composite;
+		if (!composite) {
+			return;
+		}
+		const panes = composite.getViewPaneContainer()?.panes.filter(pane => pane.isVisible()) ?? [];
+		const pane = panes.find(pane => isAncestorOfActiveElement(pane.element)) ?? panes.find(pane => pane.isExpanded()) ?? panes[0];
+		const stops: (() => boolean)[] = [
+			() => { this.focus(); return true; },
+			() => focusFirstActionIn(pane?.element, ':scope > .pane-header'),
+			() => focusFirstActionIn(this.toolbar?.getElement()),
+		];
+		const current = this.toolbar && isAncestorOfActiveElement(this.toolbar.getElement()) ? 2 : pane && isActiveElementInToolbar(pane.element) ? 1 : 0;
+		for (let step = 1; step <= stops.length; step++) {
+			const index = (current + (forward ? step : stops.length - step)) % stops.length;
+			if (stops[index]()) {
+				return;
+			}
+		}
+	}
 	layout(dimension: Dimension): void {
 		this.dimension = dimension;
 		this.element.style.height = `${dimension.height}px`;
 		this.composite?.layout(new Dimension(dimension.width, Math.max(0, dimension.height - toolTileHeaderHeight)));
 	}
 	override dispose(): void { this.releaseComposite(); super.dispose(); }
+}
+
+/** The part of a list widget the focus helper needs; every workbench list and tree satisfies it. */
+export interface IFocusableList {
+	getHTMLElement(): HTMLElement;
+	getFocus(): readonly unknown[];
+	focusFirst(browserEvent?: UIEvent): void;
+	reveal(element: never, relativeTop?: number): void;
+}
+
+/**
+ * Gives a list that has DOM focus but no focused row a visible cursor on its first row. Returns
+ * false when no list inside `within` has focus (views without lists keep their own focus).
+ */
+export function focusFirstRowIfNone(list: IFocusableList | undefined, within: HTMLElement): boolean {
+	if (!list || !isAncestor(list.getHTMLElement(), within) || !isAncestorOfActiveElement(list.getHTMLElement())) {
+		return false;
+	}
+	// eslint-disable-next-line no-restricted-syntax
+	if (list.getFocus().length === 0 && list.getHTMLElement().querySelector('.monaco-list-row')) {
+		list.focusFirst(getSelectionKeyboardEvent('keydown', true));
+		const focus = list.getFocus();
+		if (focus.length) {
+			list.reveal(focus[0] as never);
+		}
+	}
+	return true;
+}
+
+/** Whether the active element sits in an action bar inside `container`. */
+function isActiveElementInToolbar(container: HTMLElement): boolean {
+	const active = getActiveElement();
+	return !!active && isAncestor(active, container) && !!active.closest('.monaco-action-bar');
+}
+
+/** Focuses the first action of the action bar found under `container` (optionally within `scope`); the action bar then handles arrow keys. */
+function focusFirstActionIn(container: HTMLElement | undefined, scope = ''): boolean {
+	// eslint-disable-next-line no-restricted-syntax
+	const action = container?.querySelector<HTMLElement>(`${scope} .monaco-action-bar .action-item:not(.disabled) .action-label, ${scope} .monaco-action-bar .action-item:not(.disabled) [tabindex]`.trim());
+	if (!action) {
+		return false;
+	}
+	action.focus();
+	return isActiveElement(action);
 }

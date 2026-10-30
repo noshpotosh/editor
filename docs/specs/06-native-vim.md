@@ -123,8 +123,16 @@ Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer E
 
 VSCodeVim users can set `vim.normalModeKeyBindingsNonRecursive` to `[{ "before": ["<space>"], "commands": ["terminalFirst.leader"] }]`. Copy mode reuses `NativeVim` with a read-only terminal snapshot host. Counts, motions, search, and character/line visual selection remain shared grammar; prompt jumps and clipboard exit are terminal-specific. The COPY badge shows pending search text. Resize or trimmed-away cursor lines cancel safely.
 
-### Docked pane and Explorer navigation
+### Docked pane and tile list navigation
 
 In VS NOSH's editor workbench, physical **Ctrl+H** and **Ctrl+L** focus the visible pane to the left and right. They cross editor splits, the Explorer, secondary sidebar, and docked panels using the current layout; they do not wrap, reveal hidden panes, or switch sidebar tabs. These defaults apply with native Vim, VSCodeVim, or Vim disabled, including Insert mode and docked terminals. Where active, they replace Ctrl+H backspace and Ctrl+L terminal clear. User keybinding overrides take precedence.
 
-In the focused Explorer file tree, **j/k** move down/up and **h/l** collapse/expand using the standard tree behavior. Rename and filter inputs retain ordinary typing. These shortcuts are inactive in shell-only mode, while floating terminal/file-browser/jump-list overlays are visible, and in Quick Open; floating controls retain their existing bindings.
+Every list or tree inside a view tile (Explorer, Changes, Search, Problems, extension trees) accepts Vim keys while native Vim is on, through `terminalFirst.tileList.*` commands registered in `tileListNavigation.ts`:
+
+- **S6.21** Focusing a view tile by keyboard or pointer gives its list a visible cursor: `ViewTileEditor.focus()` expands a fully collapsed view, focuses the composite, then focuses the first row of the list that received focus (synchronously, or on the first `focusin` within one second for views such as Changes that focus asynchronously). Views without a list keep their own focus.
+- **S6.22** Keys apply when `terminalFirstViewTile` (set on the tile composite's scoped context, inherited by its lists), `terminalFirstVimEnabled`, `listFocus`, and the docked-navigation conditions hold, and no text input or tree find widget has focus: `j`/`k` rows, `h` collapse, `l` expand or open keeping focus, `o` open keeping focus, `gg`/`G`, Ctrl+D/U pages, `za`/`zo`/`zc` folds, `/` find or type navigation, Space leader, `.` actions, `m` context menu, `F6`/Shift+F6 focus cycle, Escape keeps the cursor, `?` help. Enter keeps its upstream meaning.
+- **S6.23** `.` opens a picker of the focused row's actions (Changes menus including the inline group; Explorer context menu; a context-menu fallback elsewhere), the focused view header actions, and the tile toolbar actions. `m` opens the row's native context menu. `F6` cycles list, view header toolbar, and tile toolbar; Escape in a toolbar returns to the list.
+- **S6.24** `terminalFirst.vim.listActionKeys` (default off) adds single-key row actions: `s`/`u`/`d` in Changes; `r`/`a`/`A`/`d`/`D`/`y`/`x`/`p` in Explorer. Confirmations are unchanged.
+- **S6.25** While Vim is on, tile lists run type navigation in `trigger` mode (`listTypeNavigationMode` on the tile scope), so letters never filter until `/`.
+
+These shortcuts are inactive in shell-only mode, while floating terminal/file-browser/jump-list overlays are visible, and in Quick Open; floating controls retain their existing bindings.

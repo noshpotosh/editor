@@ -38,6 +38,8 @@ import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IEditorOptions, IResourceEditorInput } from '../../../../../platform/editor/common/editor.js';
 import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
+import { INativeVimService } from '../../../../../editor/contrib/nativeVim/common/nativeVimService.js';
+import { Event } from '../../../../../base/common/event.js';
 
 suite('Terminal First Tiles', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -72,7 +74,7 @@ suite('Terminal First Tiles', () => {
 			getViewContainerModel: () => undefined!,
 		});
 		instantiation.stub(IViewDescriptorService, descriptors);
-		instantiation.stub(IContextKeyService, upcastPartial<IContextKeyService>({ createScoped: () => upcastPartial<IScopedContextKeyService>({ dispose() { } }) }));
+		instantiation.stub(IContextKeyService, upcastPartial<IContextKeyService>({ createScoped: () => upcastPartial<IScopedContextKeyService>({ dispose() { }, createKey: () => ({ set() { }, reset() { }, get: () => undefined }) }) }));
 		instantiation.stub(IPaneCompositePartService, upcastPartial<IPaneCompositePartService>({
 			getPaneComposite: id => upcastPartial<PaneCompositeDescriptor>({
 				instantiate: () => {
@@ -82,6 +84,7 @@ suite('Terminal First Tiles', () => {
 				},
 			}),
 		}));
+		instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
 		const composites = store.add(instantiation.createInstance(ViewTileComposites));
 		instantiation.stub(IViewTileComposites, composites);
 		return { instantiation, composites, created };
@@ -176,6 +179,7 @@ suite('Terminal First Tiles', () => {
 			const viewContexts = store.add(instantiation.createInstance(ContextKeyService));
 			instantiation.stub(IViewDescriptorService, store.add(store.add(instantiation.createChild(new ServiceCollection([IContextKeyService, viewContexts]))).createInstance(ViewDescriptorService)));
 			instantiation.stub(IViewsService, new TestViewsService());
+			instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
 			instantiation.stub(IViewTileComposites, store.add(instantiation.createInstance(ViewTileComposites)));
 			const service = store.add(instantiation.createInstance(TileService));
 			const names = new Map<number, string>([[parts.mainPart.activeGroup.id, 'a']]);
