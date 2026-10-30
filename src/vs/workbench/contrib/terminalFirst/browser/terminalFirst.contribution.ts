@@ -65,6 +65,8 @@ if (terminalFirstEnabled) {
 			'terminal.integrated.gpuAcceleration': 'on',
 			'terminal.integrated.minimumContrastRatio': 1,
 			'security.workspace.trust.startupPrompt': 'never',
+			// The shell is the product; it starts in any folder. Entering the editor still asks for trust (present()).
+			'terminal.integrated.allowInUntrustedWorkspace': true,
 			'extensions.ignoreRecommendations': true,
 			'update.mode': 'none',
 			'update.showReleaseNotes': false,
