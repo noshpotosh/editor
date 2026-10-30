@@ -25,7 +25,7 @@ import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/edit
 import { PaneComposite } from '../../../browser/panecomposite.js';
 import { EditorExtensions, EditorInputCapabilities, IEditorFactoryRegistry } from '../../../common/editor.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
-import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
+import { IViewDescriptorService } from '../../../common/views.js';
 import { GroupDirection, GroupsArrangement, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { noRoomForTileMessage, tileFits, tileSplitDirection, tileSplitSizes } from '../common/tileLayout.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -40,6 +40,9 @@ import { EditorPartSessions } from './editorPartSessions.js';
 import './tileChrome.js';
 import './tileLayoutHook.js';
 import './tileRouting.js';
+import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { buildTileCatalog, TileCatalogTarget, TileGroup, tileGroupLabels } from './tileCatalog.js';
 
 type TileKind = 'editor' | 'terminal' | { readonly container: string };
 
@@ -79,14 +82,8 @@ function parseWebAppUrl(value: string): string | undefined {
 	return url && (url.protocol === 'https:' || url.protocol === 'http:') ? url.toString() : undefined;
 }
 
-/** View container locations whose containers open as tiles; the terminal container stays the shell surface. */
-const tiledLocations = [ViewContainerLocation.Sidebar, ViewContainerLocation.Panel, ViewContainerLocation.AuxiliaryBar] as const;
-
 interface ITilePick extends IQuickPickItem {
-	readonly tile?: TileKind;
-	readonly app?: WebAppTileId;
-	/** A single view, which may move into a container of its own. */
-	readonly view?: string;
+	readonly target: TileCatalogTarget;
 }
 
 const ITileService = createDecorator<TileService>('terminalFirstTiles');
@@ -122,6 +119,8 @@ export class TileService extends Disposable {
 		@IViewDescriptorService private readonly descriptors: IViewDescriptorService,
 		@IViewsService private readonly views: IViewsService,
 		@IViewTileComposites private readonly composites: ViewTileComposites,
+		@IPaneCompositePartService private readonly paneComposites: IPaneCompositePartService,
+		@IKeybindingService private readonly keybindings: IKeybindingService,
 	) {
 		super();
 		// Every view container except the shell surface opens as a tile, so the sidebar and panel never host views.
@@ -173,27 +172,6 @@ export class TileService extends Disposable {
 		return group;
 	}
 
-	private viewPicks(): (ITilePick | IQuickPickSeparator)[] {
-		const containers: ITilePick[] = [];
-		const views: ITilePick[] = [];
-		for (const location of tiledLocations) {
-			for (const container of this.descriptors.getViewContainersByLocation(location)) {
-				const model = this.descriptors.getViewContainerModel(container);
-				if (container.id === TERMINAL_VIEW_ID || !model.activeViewDescriptors.length) { continue; }
-				containers.push({ label: model.title, iconClasses: ThemeIcon.isThemeIcon(model.icon) ? ThemeIcon.asClassNameArray(model.icon) : undefined, tile: { container: container.id } });
-				if (model.activeViewDescriptors.length > 1) {
-					for (const view of model.activeViewDescriptors.filter(view => view.canMoveView)) {
-						views.push({ label: localize('viewInContainer', "{0} › {1}", model.title, view.name.value), view: view.id });
-					}
-				}
-			}
-		}
-		return [
-			{ type: 'separator', label: localize('views', "Views") }, ...containers,
-			...(views.length ? [{ type: 'separator' as const, label: localize('singleViews', "Single Views") }, ...views] : []),
-		];
-	}
-
 	/** Layout changes act on the whole grid, so a maximized tile is restored first. */
 	private unmaximize(): void {
 		if (this.part.hasMaximizedGroup()) { this.part.toggleMaximizeGroup(); }
@@ -203,15 +181,37 @@ export class TileService extends Disposable {
 		return this.part.findGroup({ direction }, source, wrap);
 	}
 
+	/** The New Tile picker: Workspace, Tools, Web, and Extensions rows, each with an icon, a name, and what it opens. */
 	async pick(direction?: GroupDirection, viewsOnly = false): Promise<void> {
-		const tiles: (ITilePick | IQuickPickSeparator)[] = viewsOnly ? [] : [
-			{ type: 'separator', label: localize('tiles', "Tiles") },
-			{ label: localize('editor', "Editor"), tile: 'editor' },
-			{ label: localize('terminal', "Terminal"), tile: 'terminal' },
-			...Object.entries(webAppTiles).map(([app, { label }]) => ({ label, app: app as WebAppTileId })),
-		];
-		const selection = await this.quickInput.pick<ITilePick>([...tiles, ...this.viewPicks()], { placeHolder: viewsOnly ? localize('openViewTile', "Open View as Tile") : localize('newTile', "New Tile"), matchOnDescription: true });
-		if (selection?.view) { await this.openView(selection.view, direction); } else if (selection?.app) { await this.openWebApp(selection.app, direction); } else if (selection?.tile) { await this.open(selection.tile, direction); }
+		const entries = buildTileCatalog({
+			descriptors: this.descriptors,
+			composites: this.paneComposites,
+			webApps: Object.entries(webAppTiles).map(([id, app]) => ({ id, label: app.label, configuredUrl: parseWebAppUrl(this.configuration.getValue<string>(app.setting) ?? '') })),
+		}, viewsOnly);
+		const picks: (ITilePick | IQuickPickSeparator)[] = [];
+		let group: TileGroup | undefined;
+		for (const entry of entries) {
+			if (entry.group !== group) {
+				group = entry.group;
+				picks.push({ type: 'separator', label: tileGroupLabels[group] });
+			}
+			picks.push({
+				label: entry.label,
+				description: entry.description,
+				iconClasses: ThemeIcon.isThemeIcon(entry.icon) ? ThemeIcon.asClassNameArray(entry.icon) : undefined,
+				iconPath: ThemeIcon.isThemeIcon(entry.icon) ? undefined : entry.icon,
+				keybinding: entry.command ? this.keybindings.lookupKeybinding(entry.command) : undefined,
+				target: entry.target,
+			});
+		}
+		const selection = await this.quickInput.pick<ITilePick>(picks, { placeHolder: viewsOnly ? localize('openViewTile', "Open View as Tile") : localize('newTile', "New Tile"), matchOnDescription: true });
+		switch (selection?.target.kind) {
+			case 'editor': await this.open('editor', direction); break;
+			case 'terminal': await this.open('terminal', direction); break;
+			case 'web': await this.openWebApp(selection.target.app as WebAppTileId, direction); break;
+			case 'container': await this.open({ container: selection.target.id }, direction); break;
+			case 'view': await this.openView(selection.target.id, direction); break;
+		}
 	}
 
 	/**

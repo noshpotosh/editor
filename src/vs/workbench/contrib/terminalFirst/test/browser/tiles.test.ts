@@ -37,10 +37,13 @@ import { EditorExtensions } from '../../../../common/editor.js';
 import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IEditorOptions, IResourceEditorInput } from '../../../../../platform/editor/common/editor.js';
-import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
+import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { INativeVimService } from '../../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { Event } from '../../../../../base/common/event.js';
 
+import { Codicon } from '../../../../../base/common/codicons.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 suite('Terminal First Tiles', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
@@ -146,6 +149,8 @@ suite('Terminal First Tiles', () => {
 			notifications: string[];
 			/** Settings written, web app URL prompts shown, and browser views opened. */
 			web: { written: [string, unknown][]; prompts: number; opened: IResourceEditorInput[] };
+			/** Items shown by each quick pick, in order. */
+			picks: (IQuickPickItem | IQuickPickSeparator)[][];
 		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean; jiraBoardUrl?: string; webAppAnswer?: string } = {}): Promise<void> {
 			const instantiation = workbenchInstantiationService(undefined, store);
 			const contexts = instantiation.get(IContextKeyService);
@@ -155,6 +160,9 @@ suite('Terminal First Tiles', () => {
 			configuration.updateValue = async (key: string, value: unknown) => { web.written.push([key, value]); };
 			instantiation.stub(IConfigurationService, configuration);
 			instantiation.stub(IQuickInputService, 'input', async () => { web.prompts++; return options.webAppAnswer; });
+			const picks: (IQuickPickItem | IQuickPickSeparator)[][] = [];
+			instantiation.stub(IQuickInputService, 'pick', (async (items: (IQuickPickItem | IQuickPickSeparator)[]) => { picks.push(items); return undefined; }) as IQuickInputService['pick']);
+			instantiation.stub(IPaneCompositePartService, 'getVisiblePaneCompositeIds', () => []);
 			const parts = await createEditorParts(instantiation, store.add(new DisposableStore()));
 			instantiation.stub(IEditorGroupsService, parts);
 			const notifications: string[] = [];
@@ -185,7 +193,7 @@ suite('Terminal First Tiles', () => {
 			const names = new Map<number, string>([[parts.mainPart.activeGroup.id, 'a']]);
 			try {
 				await run({
-					service, groups: parts, notifications, web,
+					service, groups: parts, notifications, web, picks,
 					name: (group, label) => { if (group) { names.set(group.id, label); } },
 					layout: (width, height) => parts.testMainPart.layout(width, height, 0, 0),
 					elements: () => parts.testMainPart.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => parts.testMainPart.groups.find(view => view.id === group.id)!.element),
@@ -299,6 +307,40 @@ suite('Terminal First Tiles', () => {
 					containers.deregisterViewContainer(generated);
 				}
 				containers.deregisterViewContainer(container);
+			}
+		}));
+
+		test('the New Tile picker groups rows and gives every row an icon, a name, and a description', () => withTiles(async ({ service, picks }) => {
+			const views = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
+			const containers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
+			const tool = containers.registerViewContainer({ id: 'test.picker.tool', title: localize2('pickerTool', "Picker Tool"), icon: Codicon.beaker, ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.Sidebar);
+			const extension = containers.registerViewContainer({ id: 'test.picker.extension', title: localize2('pickerExtension', "Picker Extension"), icon: URI.parse('file:///icon.svg'), extensionId: new ExtensionIdentifier('vendor.picker'), ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.AuxiliaryBar);
+			const untitled = containers.registerViewContainer({ id: 'test.picker.untitled', title: { value: '', original: '' }, ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.Panel);
+			views.registerViews([{ id: 'test.picker.toolView', name: localize2('toolView', "Tool View"), ctorDescriptor: new SyncDescriptor(class { }) }], tool);
+			views.registerViews([{ id: 'test.picker.extensionView', name: localize2('extensionView', "Extension View"), ctorDescriptor: new SyncDescriptor(class { }) }], extension);
+			views.registerViews([{ id: 'test.picker.untitledView', name: localize2('untitledView', "Named by View"), ctorDescriptor: new SyncDescriptor(class { }) }], untitled);
+			try {
+				await service.pick();
+				const shown = picks[0] ?? [];
+				const groups = shown.filter(item => item.type === 'separator').map(item => item.label);
+				const groupOf = (label: string) => { let group: string | undefined; for (const item of shown) { if (item.type === 'separator') { group = item.label; } else if (item.label === label) { return group; } } return undefined; };
+				const row = (label: string) => { const item = shown.find((item): item is IQuickPickItem => item.type !== 'separator' && item.label === label); return item && [item.description, !!(item.iconClasses?.length || item.iconPath)]; };
+				deepStrictEqual({
+					groups,
+					editor: row('Editor'), terminal: row('Terminal'), jira: row('Jira Board'),
+					tool: [row('Picker Tool'), groupOf('Picker Tool')], extension: [row('Picker Extension'), groupOf('Picker Extension')], untitled: [row('Named by View'), groupOf('Named by View')],
+					allRowsHaveIconAndDescription: shown.filter((item): item is IQuickPickItem => item.type !== 'separator').every(item => !!item.label && !!item.description && !!(item.iconClasses?.length || item.iconPath)),
+				}, {
+					groups: ['Workspace', 'Tools', 'Web', 'Extensions'],
+					editor: ['Empty editor tile', true], terminal: ['Shell in the session directory', true], jira: ['Asks for the URL the first time', true],
+					tool: [['View', true], 'Tools'], extension: [['Extension view', true], 'Extensions'], untitled: [['View', true], 'Tools'],
+					allRowsHaveIconAndDescription: true,
+				});
+			} finally {
+				for (const container of [tool, extension, untitled]) {
+					views.deregisterViews(views.getViews(container), container);
+					containers.deregisterViewContainer(container);
+				}
 			}
 		}));
 

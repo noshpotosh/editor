@@ -1,0 +1,157 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
+import { URI } from '../../../../base/common/uri.js';
+import { localize } from '../../../../nls.js';
+import { IViewContainerModel, IViewDescriptorService, ViewContainer, ViewContainerLocation } from '../../../common/views.js';
+import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
+import { TERMINAL_VIEW_ID } from '../../terminal/common/terminal.js';
+
+/** The sections of the New Tile picker, in display order. */
+export const enum TileGroup {
+	Workspace = 'workspace',
+	Tools = 'tools',
+	Web = 'web',
+	Extensions = 'extensions',
+}
+
+export const tileGroupLabels: Record<TileGroup, string> = {
+	[TileGroup.Workspace]: localize('tileGroupWorkspace', "Workspace"),
+	[TileGroup.Tools]: localize('tileGroupTools', "Tools"),
+	[TileGroup.Web]: localize('tileGroupWeb', "Web"),
+	[TileGroup.Extensions]: localize('tileGroupExtensions', "Extensions"),
+};
+
+/** What a picker row opens. */
+export type TileCatalogTarget =
+	| { readonly kind: 'editor' }
+	| { readonly kind: 'terminal' }
+	| { readonly kind: 'web'; readonly app: string }
+	| { readonly kind: 'container'; readonly id: string }
+	| { readonly kind: 'view'; readonly id: string };
+
+export interface ITileCatalogEntry {
+	readonly group: TileGroup;
+	/** Never empty; falls back through the container title, the first view's name, and the ID. */
+	readonly label: string;
+	/** What opens, so the picker reads as a list of things rather than names. */
+	readonly description: string;
+	readonly icon: ThemeIcon | { readonly dark: URI; readonly light?: URI };
+	/** The command whose keybinding the row shows, when one exists. */
+	readonly command?: string;
+	readonly target: TileCatalogTarget;
+}
+
+/** View container locations whose containers open as tiles; the terminal container stays the shell surface. */
+export const tiledLocations = [ViewContainerLocation.Sidebar, ViewContainerLocation.Panel, ViewContainerLocation.AuxiliaryBar] as const;
+
+/** Built-in containers shown under Tools, in this order; other built-ins follow in registration order. */
+const toolOrder = ['workbench.view.explorer', 'workbench.view.scm', 'workbench.view.search', 'workbench.panel.markers', 'workbench.panel.output', 'workbench.panel.repl', 'workbench.view.debug', 'workbench.view.extensions'];
+
+/** Commands that open a built-in container directly, so the row can show their chord. */
+const toolCommands: Record<string, string> = { 'workbench.view.explorer': 'terminalFirst.tile.explorer', 'workbench.view.scm': 'terminalFirst.tile.scm' };
+
+const toolDescriptions: Record<string, string> = {
+	'workbench.view.explorer': localize('describeExplorer', "Files in the workspace"),
+	'workbench.view.scm': localize('describeScm', "Source control changes"),
+	'workbench.view.search': localize('describeSearch', "Find and replace in files"),
+	'workbench.panel.markers': localize('describeProblems', "Errors and warnings"),
+	'workbench.panel.output': localize('describeOutput', "Output channels"),
+	'workbench.panel.repl': localize('describeDebugConsole', "Debug console"),
+	'workbench.view.debug': localize('describeDebug', "Run and debug"),
+	'workbench.view.extensions': localize('describeExtensions', "Browse and manage extensions"),
+};
+
+/** A readable name for a view container: its model title, its descriptor title, its first active view, then its ID. */
+export function viewContainerDisplayName(container: ViewContainer, model: IViewContainerModel | undefined): string {
+	const title = model?.title || (typeof container.title === 'string' ? container.title : container.title?.value);
+	return title || model?.activeViewDescriptors[0]?.name.value || container.id;
+}
+
+/** The container's icon, falling back through the model, the descriptor, and a generic layout glyph. */
+export function viewContainerIcon(container: ViewContainer, model: IViewContainerModel | undefined): ThemeIcon | { readonly dark: URI; readonly light?: URI } {
+	const icon = model?.icon ?? container.icon;
+	if (ThemeIcon.isThemeIcon(icon)) {
+		return icon;
+	}
+	if (URI.isUri(icon)) {
+		return { dark: icon };
+	}
+	return Codicon.layout;
+}
+
+export interface ITileCatalogServices {
+	readonly descriptors: IViewDescriptorService;
+	readonly composites: IPaneCompositePartService;
+	/** Web app tiles, in display order. */
+	readonly webApps: readonly { readonly id: string; readonly label: string; readonly configuredUrl: string | undefined }[];
+}
+
+/** Builds the New Tile picker rows. `viewsOnly` keeps only Tools and Extensions. */
+export function buildTileCatalog({ descriptors, composites, webApps }: ITileCatalogServices, viewsOnly = false): ITileCatalogEntry[] {
+	const entries: ITileCatalogEntry[] = [];
+	if (!viewsOnly) {
+		entries.push(
+			{ group: TileGroup.Workspace, label: localize('editorTile', "Editor"), description: localize('describeEditor', "Empty editor tile"), icon: Codicon.file, target: { kind: 'editor' } },
+			{ group: TileGroup.Workspace, label: localize('terminalTile', "Terminal"), description: localize('describeTerminal', "Shell in the session directory"), icon: Codicon.terminal, command: 'terminalFirst.tile.terminal', target: { kind: 'terminal' } },
+		);
+	}
+	const tools: ITileCatalogEntry[] = [];
+	const extensions: ITileCatalogEntry[] = [];
+	for (const location of tiledLocations) {
+		const visibleOrder = composites.getVisiblePaneCompositeIds(location);
+		const containers = [...descriptors.getViewContainersByLocation(location)].sort((a, b) => rank(a.id, visibleOrder) - rank(b.id, visibleOrder));
+		for (const container of containers) {
+			const model = descriptors.getViewContainerModel(container);
+			if (container.id === TERMINAL_VIEW_ID || !model.activeViewDescriptors.length || (container.hideIfEmpty && !model.visibleViewDescriptors.length)) {
+				continue;
+			}
+			const builtIn = !container.extensionId;
+			const label = viewContainerDisplayName(container, model);
+			const icon = viewContainerIcon(container, model);
+			const list = builtIn ? tools : extensions;
+			list.push({
+				group: builtIn ? TileGroup.Tools : TileGroup.Extensions,
+				label,
+				description: toolDescriptions[container.id] ?? (builtIn ? localize('describeBuiltInView', "View") : localize('describeExtensionView', "Extension view")),
+				icon,
+				command: toolCommands[container.id],
+				target: { kind: 'container', id: container.id },
+			});
+			if (model.activeViewDescriptors.length > 1) {
+				for (const view of model.activeViewDescriptors.filter(view => view.canMoveView)) {
+					list.push({
+						group: builtIn ? TileGroup.Tools : TileGroup.Extensions,
+						label: localize('viewInContainer', "{0} › {1}", label, view.name.value),
+						description: localize('describeSingleView', "Single view in its own tile"),
+						icon: ThemeIcon.isThemeIcon(view.containerIcon) ? view.containerIcon : icon,
+						target: { kind: 'view', id: view.id },
+					});
+				}
+			}
+		}
+	}
+	tools.sort((a, b) => rank(containerIdOf(a), toolOrder) - rank(containerIdOf(b), toolOrder));
+	entries.push(...tools);
+	if (!viewsOnly) {
+		for (const app of webApps) {
+			entries.push({ group: TileGroup.Web, label: app.label, description: app.configuredUrl ?? localize('describeWebApp', "Asks for the URL the first time"), icon: Codicon.globe, command: `terminalFirst.tile.${app.id}`, target: { kind: 'web', app: app.id } });
+		}
+	}
+	entries.push(...extensions);
+	return entries;
+}
+
+function containerIdOf(entry: ITileCatalogEntry): string {
+	return entry.target.kind === 'container' ? entry.target.id : entry.target.kind === 'view' ? `view:${entry.target.id}` : '';
+}
+
+/** Position in `order`, with unknown IDs after every known one in their existing order. */
+function rank(id: string, order: readonly string[]): number {
+	const index = order.indexOf(id);
+	return index < 0 ? order.length : index;
+}

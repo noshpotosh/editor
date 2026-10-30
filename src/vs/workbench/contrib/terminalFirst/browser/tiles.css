@@ -75,6 +75,8 @@
 	bottom: var(--vscode-spacing-size160);
 	right: var(--vscode-spacing-size160);
 	z-index: 1;
+	align-items: center;
+	gap: var(--vscode-spacing-size40);
 	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size120);
 	border: var(--vscode-strokeThickness) solid var(--vscode-button-border, transparent);
 	border-radius: var(--vscode-cornerRadius-small);
@@ -85,7 +87,7 @@
 }
 
 .monaco-workbench.terminal-first-tiles .part.editor > .content.empty .terminal-first-empty-new-tile {
-	display: block;
+	display: inline-flex;
 }
 
 .monaco-workbench .terminal-first-empty-new-tile:hover {

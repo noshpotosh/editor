@@ -34,6 +34,8 @@ Code mode should behave like a keyboard-driven tiling window manager (Hyprland's
 - **S9.22** There is one composite per view container per window. Session tiles hand it over when they become visible, so singleton-backed views (extension tree views, webview views, Explorer) are created once and keep their state. It is disposed when the last tile for that container closes in any session.
 - **S9.23** A background open (no focus requested) that finds no room fails silently. Only focused opens show the no-room message from S9.3.
 - **S9.24** Keyboard focus of a view tile lands on its list with a visible cursor, and the tile's scoped context carries `terminalFirstViewTile` so lists inside it get Vim keys (spec 6, S6.21 to S6.25).
+- **S9.25** The New Tile picker is built from `tileCatalog.ts`: groups Workspace, Tools, Web, Extensions in that order; built-in containers (no `extensionId`) under Tools in a fixed order (Explorer, Changes, Search, Problems, Output, Debug Console, Run and Debug, Extensions, then others), extension containers under Extensions ordered by their visible pane order; every row has an icon (theme icon, URI icon, or `layout`), a non-empty label, a description of what opens, and the chord of its command when one exists; containers with `hideIfEmpty` and no visible views are skipped. `terminalFirst.tile.openView` without an argument shows only Tools and Extensions.
+- **S9.26** A container label falls back from the model title to the descriptor title, the first active view's name, and the container ID. The tile's tab uses the same fallback and the same icon resolution.
 
 ## Surface
 
@@ -66,6 +68,7 @@ All commands are `terminalFirst.tile.*`, in category **VS NOSH**. Chords use Ctr
 ## Implementation
 
 - `src/vs/workbench/contrib/terminalFirst/browser/tiles.ts`: `TileService`, commands, keybindings, and settings.
+- `src/vs/workbench/contrib/terminalFirst/browser/tileCatalog.ts`: the New Tile picker rows (S9.25) and the container name and icon fallbacks (S9.26).
 - `src/vs/workbench/services/editor/common/editorTileLayout.ts`: tile minimums, `tileFits`, `tileSplitDirection`, `tileSplitSizes`, and the shared no-room message.
 - `src/vs/workbench/browser/parts/editor/editorPart.ts`: `swapGroups` (grid `swapViews`) and the dedicated-input guard in `copyGroup`.
 - `src/vs/workbench/browser/parts/editor/editorGroupView.ts`: tile inset, minimum sizes, and focus-follows-mouse.
@@ -75,7 +78,7 @@ All commands are `terminalFirst.tile.*`, in category **VS NOSH**. Chords use Ctr
 
 ## Tests
 
-- `contrib/terminalFirst/test/browser/tiles.test.ts`: split rules; and, on a real grid, the `TileService` operations (open/no-room/rollback, swap, toggle split, balance, edge resize, close fallback, maximize restore) and focus-follows-mouse on/off.
+- `contrib/terminalFirst/test/browser/tiles.test.ts`: split rules; and, on a real grid, the `TileService` operations (open/no-room/rollback, swap, toggle split, balance, edge resize, close fallback, maximize restore), focus-follows-mouse on/off, and the grouped picker rows (groups, icons, descriptions, empty-title fallback).
 - `contrib/terminalFirst/test/browser/nativeVim.test.ts`: leader and Ctrl+W routes, the resize submap, swap prefix, and `:sp`/`:vs`.
 - `contrib/terminalFirst/test/browser/terminalFirstService.test.ts`: terminal tile ownership and nonce pruning.
 - `services/editor/test/browser/editorService.test.ts`: dedicated-group routing and room checks.

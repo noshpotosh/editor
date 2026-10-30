@@ -23,7 +23,7 @@ import { PaneComposite } from '../../../browser/panecomposite.js';
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
 import { EditorInputCapabilities, IEditorOpenContext, IEditorSerializer } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
-import { IViewDescriptorService } from '../../../common/views.js';
+import { IViewDescriptorService, ViewContainer } from '../../../common/views.js';
 import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH } from '../common/tileLayout.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
@@ -32,6 +32,7 @@ import { IPaneCompositePartService } from '../../../services/panecomposite/brows
 import { getSelectionKeyboardEvent, IListService } from '../../../../platform/list/browser/listService.js';
 import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { TerminalFirstViewTileContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { viewContainerDisplayName, viewContainerIcon } from './tileCatalog.js';
 
 /** Container IDs of the built-in tool tiles; also maps tool tiles persisted before view tiles. */
 export const tileViewIds = { explorer: 'workbench.view.explorer', scm: 'workbench.view.scm' } as const;
@@ -179,8 +180,12 @@ export class ViewTileInput extends EditorInput {
 		this.trackContainer();
 	}
 
+	private get container(): ViewContainer | undefined {
+		return this.descriptors.getViewContainerById(this.containerId) ?? undefined;
+	}
+
 	private get model() {
-		const container = this.descriptors.getViewContainerById(this.containerId);
+		const container = this.container;
 		return container ? this.descriptors.getViewContainerModel(container) : undefined;
 	}
 
@@ -190,9 +195,13 @@ export class ViewTileInput extends EditorInput {
 		this._onDidChangeLabel.fire();
 	}
 
-	override getName(): string { return this.model?.title ?? localize('viewTile', "View"); }
+	override getName(): string {
+		const container = this.container;
+		return container ? viewContainerDisplayName(container, this.model) : localize('viewTile', "View");
+	}
 	override getIcon(): ThemeIcon | undefined {
-		const icon = this.model?.icon;
+		const container = this.container;
+		const icon = container ? viewContainerIcon(container, this.model) : undefined;
 		return ThemeIcon.isThemeIcon(icon) ? icon : undefined;
 	}
 	override matches(other: EditorInput): boolean {

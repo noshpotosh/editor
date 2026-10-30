@@ -20,6 +20,7 @@ import { IEditorGroupView } from '../../../browser/parts/editor/editor.js';
 import { EditorPartHooks, IEditorPartExtension, IEditorPartExtensionContext } from '../../../browser/parts/editor/editorPartHooks.js';
 import { GroupIdentifier } from '../../../common/editor.js';
 import { terminalFirstEnabled, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 
 /** Context keys of widgets that must keep keyboard focus while the pointer rests on another tile. */
 const focusHoldingWidgets = ['inQuickInput', 'dialogVisible', 'suggestWidgetVisible', 'findWidgetVisible', 'parameterHintsVisible', 'renameInputVisible'];
@@ -42,6 +43,7 @@ export class TileChrome extends Disposable implements IEditorPartExtension {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICommandService private readonly commandService: ICommandService,
 		@IHoverService private readonly hoverService: IHoverService,
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
 	) {
 		super();
 		this._register(contextMenuService.onDidShowContextMenu(() => this.contextMenuVisible = true));
@@ -98,8 +100,13 @@ export class TileChrome extends Disposable implements IEditorPartExtension {
 		const newTile = element.ownerDocument.createElement('button');
 		newTile.className = 'terminal-first-empty-new-tile';
 		newTile.type = 'button';
-		newTile.textContent = localize('newTile', "New Tile");
+		const newTileIcon = newTile.appendChild($('span'));
+		newTileIcon.className = ThemeIcon.asClassName(Codicon.add);
+		newTileIcon.setAttribute('aria-hidden', 'true');
+		newTile.appendChild($('span')).textContent = localize('newTile', "New Tile");
 		element.appendChild(newTile);
+		const chord = this.keybindingService.lookupKeybinding('terminalFirst.tile.new')?.getLabel();
+		store.add(this.hoverService.setupDelayedHover(newTile, { content: chord ? localize('newTileHover', "Open the New Tile picker ({0})", chord) : localize('newTileHoverPlain', "Open the New Tile picker") }));
 		store.add(addDisposableListener(newTile, EventType.CLICK, event => {
 			EventHelper.stop(event);
 			void this.commandService.executeCommand('terminalFirst.tile.new').catch(onUnexpectedError);
