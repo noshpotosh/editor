@@ -1,6 +1,6 @@
 # VS NOSH Implementation Plan (IMP_PLAN.md)
 
-> **For a cold agent:** this file is the implementation plan for the VS NOSH fork. Every workstream names its files, the seams it must use, how to verify, and what it must not touch. Start by reading "How to work in this repo", then pick the first `todo` row in the Status table, work it to done, update the row with the commit hash, and move on. Written 2026-10-30 against branch `terminal-first` at commit `8079947e2f6` plus its uncommitted working tree.
+> **For a cold agent:** this file is the implementation plan for the VS NOSH fork. The current hand-off for the startup performance workstream is `HAND_OFF_SHELL_OVERHAUL.md`. Every workstream names its files, the seams it must use, how to verify, and what it must not touch. Start by reading "How to work in this repo", then pick the first `todo` row in the Status table, work it to done, update the row with the commit hash, and move on. Written 2026-10-30 against branch `terminal-first` at commit `8079947e2f6` plus its uncommitted working tree.
 
 ## Context
 
@@ -644,12 +644,12 @@ Manual: fresh folder launch shows the title bar at once and a prompt soon after;
 | F0.5 shell in untrusted folders | done | b4c3828969a | `terminal.integrated.allowInUntrustedWorkspace: true`; a fresh profile never got a prompt because the first shell waited behind the trust dialog |
 | F3.1 pty connect at Ready | done | 65e3cc46110 | gated `Restored` wait removal in `_connectToDirectProxy` |
 | F1 shell-first scheduling | done | ef7f9dcb5e0 | BlockRestore, `editorGroupsService.whenReady`, `Connected` not replay (1.5 s budget, late reconnects adopted by nonce), title bar first, hidden layouts restore after `terminalFirstStartup.whenPresented()`; stock launch→input 1494 → 1323 ms, owner 1615 → 1374 ms |
-| F2 login shell off the critical path | done | (see git log) | three gates + `inheritEnv: false`; S7.31 |
-| F3.2 xterm pre-import | todo | | keep only if measured |
-| F7 main-process pre-spawn | todo | | only if median `prompt − presented` ≥ 150 ms |
-| F4 defer non-terminal work | todo | | phase seam, ext-host deferral, nativeVim, strip |
-| F5 defaults and Copilot | todo | | revive never, relaunch off, Copilot out of the build |
-| F6 fast quit and `e` | todo | | timeouts, curl fast path, pointer cleanup |
+| F2 login shell off the critical path | done | b53e117c3a5 | three gates + `inheritEnv: false`; S7.31; no measurable median change on the dev machine, removes the 10 s worst case |
+| F3.2 xterm pre-import | todo | | next: the F2 timeline shows 130 ms between `created` and `willConnectPtyHost` |
+| F7 main-process pre-spawn | todo | | decision rule met (207–244 ms); design in the plan and `HAND_OFF_SHELL_OVERHAUL.md` |
+| F4 defer non-terminal work | landed, measurement pending | (see git log) | `startupPhaseOverrides` seam (fill the list from the perf dump's `contributions`), `whenExtensionHostMayStart` + `terminalFirst.startup.deferExtensionHost`, native Vim ready at once, strip renders once per tick; S7.32–S7.34 |
+| F5 defaults and Copilot | landed, build and measurement pending | (see git log) | revive never, relaunch off, environment reporting off; `VSCODE_SKIP_COPILOT=1` build, `defaultChatAgent` removed; S7.35–S7.36 |
+| F6 fast quit and `e` | landed, measurement pending | (see git log) | deactivate 1 s / exit 1.5 s, `e` curl fast path with Node fallback, pointer cleanup; S7.37–S7.38 |
 
 ## Definition of done (whole plan)
 

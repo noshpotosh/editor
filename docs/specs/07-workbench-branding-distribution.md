@@ -115,8 +115,17 @@ Workstream F in `IMP_PLAN.md`. Requirements:
 - **S7.29** The pty host connection does not wait for the `Restored` lifecycle phase in VS NOSH, because the main process warms the pty host with the first window.
 - **S7.30** Hidden session and space layouts materialize only after the first surface is presented (`terminalFirstStartup.whenPresented()`), so their editor restore never competes with the first prompt. Retained spaces are still listed, saved, and included in shutdown.
 - **S7.31** The macOS login-shell environment probe (`$SHELL -i -l -c`, up to 10 s) never gates a VS NOSH shell: profile detection in the main process uses the process environment, process creation passes an empty executable environment, the variable resolver does not merge the probed environment, and `terminal.integrated.inheritEnv` defaults to false. The probe still runs for the extension host, tasks, and debugging. Consequences: the shell inherits the launcher's environment and rebuilds its own as the login shell it is; `${env:NAME}` in `terminal.integrated.env.osx` and in profile arguments resolves against the app's environment; a user profile whose `path` is a bare command name must become an absolute path.
+- **S7.32** `deferStartupContribution` (`src/vs/platform/terminalFirst/common/startupPhaseOverrides.ts`) moves a fixed list of upstream BlockRestore contributions to AfterRestored in VS NOSH. The list holds only self-contained contributions whose constructors the startup marks dump showed as costly; a test pins every id to its class. Outside VS NOSH the seam is the identity.
+- **S7.33** The extension host starts when the first surface is presented, or at the latest two seconds after the workbench restored (`terminalFirst.startup.deferExtensionHost`, default true). `e` therefore waits up to ten seconds for the window's CLI pointer and prints a hint after two seconds.
+- **S7.34** Native Vim is enabled as soon as the service is constructed; the VSCodeVim hand-over check (disable the extension when the native engine is chosen, or the reverse) runs after presentation. The session strip rebuilds at most once per tick.
+- **S7.35** Defaults: `terminal.integrated.persistentSessionReviveProcess: never` (quit never persists buffers; relaunch gives every restored session a fresh shell; Reload Window still reattaches live shells), `terminal.integrated.environmentChangesRelaunch: false` (the first shell is never respawned because an extension published an environment collection after it started), `terminal.integrated.shellIntegration.environmentReporting: false`.
+- **S7.36** The VS NOSH launcher builds with `VSCODE_SKIP_COPILOT=1`: the packaged app has no Copilot extension, and `product.json` has no `defaultChatAgent` and no auto-updated built-in.
+- **S7.37** Quit waits at most one second for extension deactivation and 1.5 seconds for extension host exit in VS NOSH.
+- **S7.38** `e` with plain file or directory arguments (optionally after `--wait`) sends the request to the window's CLI socket with `curl` and starts no Node process; options, `--goto`, and names outside `A-Za-z0-9/._~@+-` go through `cli.cjs` as before. The extension removes its pointer on deactivation and sweeps pointers whose socket is gone.
 
 Results (medians, p90 in parentheses; one row per landed step). Upstream `ellapsed` (main start to `code/didStartWorkbench`) grows from F1 on because the hidden session layouts, whose restore completes the workbench's own restore, now wait for the shell to be presented; it is reported for comparison with upstream, not as a target.
+
+F2 changed nothing measurable on this machine (the login shell here finishes well before the first spawn); it removes the 10 s worst case rather than median time. The F2 timeline shows the pty host connection still 130 ms after the terminal instance exists, which is xterm's lazy import, the container barrier, and process setup, and the prompt 195 ms after the connection, which is the shell's own startup. Those two gaps are F3.2 and F7.
 
 | Build | Profile | Mode | launch→presented | launch→prompt | launch→input | prompt−presented | `ellapsed` | quit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -124,6 +133,8 @@ Results (medians, p90 in parentheses; one row per landed step). Upstream `ellaps
 | F0 baseline `f702d86cacc` | owner | warm | 1421 (1442) | 1607 (1623) | 1615 (1627) | 184 (186) | 752 (755) | |
 | F3.1 + F1 `ef7f9dcb5e0` | stock | warm | 1112 (1129) | 1317 (1386) | 1323 (1403) | 207 (284) | 966 (985) | 234 (244) |
 | F3.1 + F1 `ef7f9dcb5e0` | owner | warm | 1152 (1212) | 1365 (1404) | 1374 (1409) | 192 (219) | 996 (1038) | |
+| F2 `b53e117c3a5` | stock | warm | 1159 (1325) | 1394 (1609) | 1412 (1614) | 244 (339) | 1009 (1128) | |
+| F2 `b53e117c3a5` | owner | warm | 1181 (1288) | 1394 (1509) | 1408 (1516) | 212 (303) | 1018 (1121) | |
 
 ### Verification result
 

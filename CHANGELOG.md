@@ -4,6 +4,10 @@ Changes of the fork on top of upstream VS Code. Upstream release notes are at ht
 
 ## Unreleased (upstream base 1.144.0)
 
+- Extensions start after the shell is on screen (`terminalFirst.startup.deferExtensionHost`), chat, notebook, and agent-host setup that the shell does not need is created after restore, and native Vim is ready at once instead of after an extension scan.
+- Quit is quicker: buffers are no longer persisted on quit (`terminal.integrated.persistentSessionReviveProcess` defaults to `never`; restored sessions get fresh shells, Reload Window still reattaches), and the extension host gets one second to deactivate. The first shell is no longer respawned when git publishes its environment (`terminal.integrated.environmentChangesRelaunch` defaults to false).
+- `e file` and `e dir` reach the window with `curl` instead of starting a Node process; `e` waits up to ten seconds for a window that is still starting its extension host.
+- The packaged app no longer bundles the Copilot extension (395 MB); `VSCODE_SKIP_COPILOT=1` in the build.
 - Faster first prompt: the shell starts with the workbench instead of after the editor restore, the pty host connects as soon as the workbench is ready, the login-shell environment probe no longer gates the shell (`terminal.integrated.inheritEnv` defaults to false; the shell is a login shell and rebuilds its environment itself), stored session tabs show on the title bar before any shell exists, and hidden session layouts restore only after the first prompt.
 - The shell starts in untrusted folders instead of waiting behind a trust dialog (`terminal.integrated.allowInUntrustedWorkspace` defaults to true); entering the editor still asks for trust.
 - Startup measurement: `scripts/terminal-first-perf.sh` times packaged launches and quits; **Developer: Terminal First Startup Marks** lists the startup marks and slowest contributions; packaged builds now ship a Node compile cache (`quality: stable`), and the packaged launcher rebuilds when sources moved (`--build-only`, `--no-build-check`).

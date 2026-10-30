@@ -9,6 +9,7 @@
 		"extensions/terminal-first/",
 		"extensions/theme-vs-nosh/",
 		"docs/",
+		"screenshots/",
 		"build/fork/",
 		"scripts/terminal-first.sh",
 		"scripts/terminal-first-app.sh",
