@@ -24,7 +24,7 @@ import { EditorInputCapabilities, IEditorOpenContext, IEditorSerializer } from '
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IViewDescriptorService } from '../../../common/views.js';
 import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH } from '../../../services/editor/common/editorTileLayout.js';
+import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH } from '../common/tileLayout.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { viewContainerHosts } from '../../../services/views/browser/viewContainerHost.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';

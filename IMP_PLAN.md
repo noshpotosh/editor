@@ -572,8 +572,8 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | A1 gating | done | (see git log) | `TERMINAL_FIRST_SESSION` env gating deferred to A3 (needs the policy seam so the test can register it); `whenEditorClosed(acceptClose)` kept as a 2-line additive hook instead of duplicating 60 lines; `viewsService.ts` helper shrink skipped (call sites differ) |
 | A4 view pruning | done | 7a874eaabb6 | `chatSetupContributions`, `relauncher`, `remoteAgentHost`, `agentHostService` keep their small gated edits |
 | A3 terminal policy seam | done | (see git log) | `ICreateTerminalOptions`/`IShellLaunchConfig` fork fields removed; `TERMINAL_FIRST_SESSION` now set via `decorateEnvironment`; upstream terminal tests pristine |
-| A2.1 routing + layout hooks | todo | | |
-| A2.2 sessions extension | todo | | |
+| A2.1 routing + layout hooks | done | (see git log) | `editorGroupRouting.ts`, `editorPartHooks.ts` seams; `tileRouting.ts`, `tileLayoutHook.ts`, `tileChrome.ts` in the fork; `getActionRowCenter` additions to the tab controls dropped (chrome reads the DOM) |
+| A2.2 sessions extension | done | (see git log) | `EditorPartSessions` extension with `for()`/`attach()`; `IEditorPart.sessions`/`swapGroups` removed; upstream editor tests pristine |
 | A5 titlebar | todo | | |
 | A6 manifest + sync | todo | | |
 | B keyboard model | todo | | |

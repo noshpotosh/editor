@@ -192,7 +192,7 @@ function validateEditorPartOptions(options: IEditorPartOptions): IEditorPartOpti
  */
 export interface IEditorPartsView {
 
-	/** Includes retained sessions for input lifetime and close confirmation. */
+	/** Every group view, including ones an editor part extension hides from `groups`. */
 	readonly allGroups?: IEditorGroupView[];
 
 	readonly mainPart: IEditorGroupsView;
@@ -305,9 +305,9 @@ export interface IEditorGroupMenuIds {
  */
 export interface IEditorGroupView extends IDisposable, ISerializableView, IEditorGroup {
 
-	/** Updates editor visibility when retaining or restoring a session. */
+	/** Forwards visibility to the editor pane; editor part extensions call this for groups they hide and show. */
 	setVisible(visible: boolean): void;
-	/** Resolve save/discard/cancel decisions without removing any editor tabs. */
+	/** Resolves save, discard, or cancel for every editor without closing any of them. */
 	confirmCloseAllEditors(): Promise<boolean>;
 
 	readonly onDidFocus: Event<void>;

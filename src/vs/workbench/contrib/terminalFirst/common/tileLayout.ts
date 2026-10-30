@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
-import { GroupDirection } from './editorGroupsService.js';
+import { GroupDirection } from '../../../services/editor/common/editorGroupsService.js';
 
 /** Four-pixel gutters plus a one-pixel border inside each grid cell. */
 export const EDITOR_TILE_INSET = 5;

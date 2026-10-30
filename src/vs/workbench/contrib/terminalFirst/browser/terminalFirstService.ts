@@ -47,6 +47,7 @@ import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerm
 import { FloatingFileBrowser } from './floatingFileBrowser.js';
 import { FloatingTerminal } from './floatingTerminal.js';
 import { TerminalFirstLaunch } from './terminalPolicy.js';
+import { EditorPartSessions, IEditorPartSessions } from './editorPartSessions.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -102,7 +103,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	get floatingTerminalVisible(): boolean { return this.floatingVisible; }
 
 	get sessions(): readonly ITerminalFirstSession[] {
-		return this.sessionList.map(session => ({ id: session.id, title: session.terminal?.title || session.title, mode: session.mode, dirty: this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).some(({ editor, groupId }) => editor.isDirty() && this.editorGroupsService.mainPart.sessions?.owns(session.id, groupId)), active: session === this.active }));
+		return this.sessionList.map(session => ({ id: session.id, title: session.terminal?.title || session.title, mode: session.mode, dirty: this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).some(({ editor, groupId }) => editor.isDirty() && this.editorSessions?.owns(session.id, groupId)), active: session === this.active }));
 	}
 
 	constructor(
@@ -217,15 +218,15 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		}
 		if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 		this.active = this.sessionList.find(session => session.id === stored?.active) ?? this.sessionList.find(session => session.terminal === this.terminalGroupService.activeInstance) ?? this.sessionList[0];
-		this.editorGroupsService.mainPart.sessions?.activate(this.active.id);
+		this.editorSessions?.activate(this.active.id);
 		// Restore inactive editors too, so backups and shutdown include every session.
-		for (const id of this.editorGroupsService.mainPart.sessions?.ids() ?? []) {
-			this.editorGroupsService.mainPart.sessions?.activate(id);
+		for (const id of this.editorSessions?.ids() ?? []) {
+			this.editorSessions?.activate(id);
 			if (!this.sessionList.some(session => session.id === id)) {
 				this.sessionList.push({ id, nonce: id, title: localize('recovered', "Recovered Session"), mode: 'editor' });
 			}
 		}
-		this.editorGroupsService.mainPart.sessions?.activate(this.active.id);
+		this.editorSessions?.activate(this.active.id);
 		this.initialized = true;
 		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
 		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
@@ -258,6 +259,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		const session: Session = { id: terminal.shellIntegrationNonce, nonce: terminal.shellIntegrationNonce, title: terminal.title || localize('terminal', "Terminal"), mode: 'shell', terminal };
 		this.sessionList.push(session);
 		return session;
+	}
+
+	/** Per-session editor layouts of the main editor part. */
+	private get editorSessions(): IEditorPartSessions | undefined {
+		return EditorPartSessions.for(this.editorGroupsService.mainPart);
 	}
 
 	private createTerminal(cwd?: string): Promise<ITerminalInstance> {
@@ -473,7 +479,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		try {
 			const terminal = await this.ensureTerminal(session);
 			if (mode === 'editor') { await this.updateDirectory(session, cwd); }
-			this.editorGroupsService.mainPart.sessions?.activate(session.id);
+			this.editorSessions?.activate(session.id);
 			this.active = session;
 			session.mode = mode;
 			terminalFirstPolicy.mode = mode;
@@ -586,9 +592,9 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			this.changingSession = true;
 			try {
 				// Activate before close so normal dirty-editor dialogs refer to visible files.
-				this.editorGroupsService.mainPart.sessions?.activate(id);
-				if (this.editorGroupsService.mainPart.sessions && !await this.editorGroupsService.mainPart.sessions.close(id)) {
-					this.editorGroupsService.mainPart.sessions.activate(this.active!.id);
+				this.editorSessions?.activate(id);
+				if (this.editorSessions && !await this.editorSessions.close(id)) {
+					this.editorSessions.activate(this.active!.id);
 					return;
 				}
 				this.sessionList.splice(this.sessionList.indexOf(session), 1);
@@ -599,7 +605,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 				if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 				const next = this.active === session ? this.sessionList[0] : this.active!;
 				await this.present(next, next.mode);
-				await this.editorGroupsService.mainPart.sessions?.close(id);
+				await this.editorSessions?.close(id);
 			} finally { this.changingSession = false; }
 		});
 	}
@@ -636,7 +642,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			if (!resources.length) { return; }
 			const editors = await Promise.all(resources.map(async resource => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true } })));
 			await this.editorService.openEditors(editors);
-			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorGroupsService.mainPart.sessions || this.editorGroupsService.mainPart.sessions.owns(session.id, groupId))); }
+			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorSessions || this.editorSessions.owns(session.id, groupId))); }
 		});
 		await closed;
 	}

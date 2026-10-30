@@ -27,7 +27,7 @@ import { EditorExtensions, EditorInputCapabilities, IEditorFactoryRegistry } fro
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { GroupDirection, GroupsArrangement, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { noRoomForTileMessage, tileFits, tileSplitDirection, tileSplitSizes } from '../../../services/editor/common/editorTileLayout.js';
+import { noRoomForTileMessage, tileFits, tileSplitDirection, tileSplitSizes } from '../common/tileLayout.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 import { terminalFirstEnabled, terminalFirstPolicy, TerminalFirstFloatingEnabledContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
@@ -36,6 +36,10 @@ import { viewContainerHosts } from '../../../services/views/browser/viewContaine
 import { TERMINAL_VIEW_ID } from '../../terminal/common/terminal.js';
 import { IViewTileComposites, tileViewIds, ViewTileComposites, ViewTileEditor, ViewTileInput, ViewTileSerializer } from './tileEditor.js';
 import { dockedNavigation } from './terminalFirstNavigation.js';
+import { EditorPartSessions } from './editorPartSessions.js';
+import './tileChrome.js';
+import './tileLayoutHook.js';
+import './tileRouting.js';
 
 type TileKind = 'editor' | 'terminal' | { readonly container: string };
 
@@ -333,7 +337,7 @@ export class TileService extends Disposable {
 		this.unmaximize();
 		const source = this.part.activeGroup;
 		const target = this.neighbor(direction, source);
-		if (target) { this.part.swapGroups(source, target); source.focus(); }
+		if (target) { EditorPartSessions.for(this.part)?.swapGroups(source, target); source.focus(); }
 	}
 
 	/** Flips the focused tile and its neighbor between side by side and stacked, like Hyprland's `togglesplit`. */

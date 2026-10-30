@@ -216,7 +216,8 @@ export interface IEditorDropTargetDelegate {
  * all opened editor parts.
  */
 export interface IEditorGroupsContainer {
-	/** Includes retained inactive session groups for saving and file operations. */
+
+	/** Every group, including ones hidden from `groups` and navigation, for saving and file operations. */
 	readonly allGroups?: readonly IEditorGroup[];
 
 	/**
@@ -480,14 +481,6 @@ export interface IEditorGroupsContainer {
  * parts opened in multiple windows.
  */
 export interface IEditorPart extends IEditorGroupsContainer {
-	/** Retain live editor groups while another terminal session is active. */
-	readonly sessions?: {
-		activate(id: string): void;
-		owns(id: string, groupId: GroupIdentifier): boolean;
-		close(id: string): Promise<boolean>;
-		ids(): readonly string[];
-	};
-
 
 	/**
 	 * An event for when the editor part is layed out.
@@ -518,11 +511,6 @@ export interface IEditorPart extends IEditorGroupsContainer {
 	 * Find out if an editor group is currently maximized.
 	 */
 	hasMaximizedGroup(): boolean;
-
-	/**
-	 * Exchange the grid positions of two groups of this part. Each group takes the other's cell size.
-	 */
-	swapGroups(group: IEditorGroup | GroupIdentifier, other: IEditorGroup | GroupIdentifier): void;
 
 	/**
 	 * Enable or disable centered editor layout.

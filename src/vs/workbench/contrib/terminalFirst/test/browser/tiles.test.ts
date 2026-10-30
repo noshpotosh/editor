@@ -14,10 +14,10 @@ import { TestConfigurationService } from '../../../../../platform/configuration/
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
 import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
-import { tileSplitDirection } from '../../../../services/editor/common/editorTileLayout.js';
+import { tileSplitDirection } from '../../common/tileLayout.js';
 import { ITerminalFirstService } from '../../../../services/terminalFirst/common/terminalFirst.js';
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
-import { EditorGroupView } from '../../../../browser/parts/editor/editorGroupView.js';
+import { TileChrome } from '../../browser/tileChrome.js';
 import { createEditorParts, TestFileEditorInput, TestViewsService, workbenchInstantiationService, workbenchTeardown } from '../../../../test/browser/workbenchTestServices.js';
 import { TileService, webAppTiles } from '../../browser/tiles.js';
 import { IViewTileComposites, ViewTileComposites, ViewTileEditor, ViewTileInput, ViewTileSerializer } from '../../browser/tileEditor.js';
@@ -352,10 +352,10 @@ suite('Terminal First Tiles', () => {
 					const [left] = elements();
 					left.dispatchEvent(new MouseEvent('mouseenter'));
 					left.dispatchEvent(new MouseEvent('mouseleave'));
-					await timeout(EditorGroupView.HOVER_FOCUS_DELAY + 20);
+					await timeout(TileChrome.HOVER_FOCUS_DELAY + 20);
 					const passedOver = shape().active;
 					left.dispatchEvent(new MouseEvent('mouseenter'));
-					await timeout(EditorGroupView.HOVER_FOCUS_DELAY + 20);
+					await timeout(TileChrome.HOVER_FOCUS_DELAY + 20);
 					deepStrictEqual({ passedOver, rested: shape().active }, { passedOver: 'b', rested: enabled ? 'a' : 'b' });
 				} finally {
 					terminalFirstPolicy.mode = previousMode;

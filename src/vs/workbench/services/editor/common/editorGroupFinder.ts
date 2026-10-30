@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { noRoomForTileMessage, tileSplitDirection } from './editorTileLayout.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { EditorActivation } from '../../../../platform/editor/common/editor.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
@@ -11,6 +10,7 @@ import { EditorInputWithOptions, isEditorInputWithOptions, IUntypedEditorInput, 
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { IEditorGroup, GroupsOrder, preferredSideBySideGroupDirection, IEditorGroupsService, IModalEditorPart } from './editorGroupsService.js';
 import { AUX_WINDOW_GROUP, AUX_WINDOW_GROUP_TYPE, MODAL_GROUP, MODAL_GROUP_TYPE, PreferredGroup, SIDE_GROUP, USE_MODAL_EDITOR_SETTING, UseModalEditorMode } from './editorService.js';
+import { EditorGroupRouting } from './editorGroupRouting.js';
 
 type FindGroupResult = Promise<[IEditorGroup, EditorActivation | undefined]> | [IEditorGroup, EditorActivation | undefined];
 
@@ -53,16 +53,7 @@ function handleGroupResult(group: IEditorGroup, editor: EditorInputWithOptions |
 		return handleModalEditorPart(group, editor, modalEditorPart, editorGroupService, preferredGroup);
 	}
 
-	if (isGroupDedicatedForEditor(group, editorInput)) {
-		const candidate = editorGroupService.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).find(candidate => !isGroupDedicatedForEditor(candidate, editorInput) && !candidate.isLocked);
-		if (candidate) {
-			group = candidate;
-		} else {
-			const direction = tileSplitDirection(editorGroupService.getSize(group));
-			if (direction === undefined) { throw new Error(noRoomForTileMessage()); }
-			group = editorGroupService.addGroup(group, direction);
-		}
-	}
+	group = EditorGroupRouting.get()?.resolveGroup(group, editorInput, editorGroupService) ?? group;
 	return handleGroupActivation(group, editor, preferredGroup, editorGroupService);
 }
 
@@ -277,9 +268,4 @@ function isOpened(group: IEditorGroup, editor: EditorInput | IUntypedEditorInput
 	}
 
 	return false;
-}
-
-/** Dedicated tool groups cannot accept another input, even with an explicit target. */
-export function isGroupDedicatedForEditor(group: IEditorGroup, editor: EditorInput | undefined): boolean {
-	return group.editors.some(existing => (!editor || !existing.matches(editor)) && (existing.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup) || !!editor?.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup)));
 }

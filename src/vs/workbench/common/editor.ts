@@ -882,8 +882,8 @@ export const enum EditorInputCapabilities {
 	 */
 	CannotClose = 1 << 13,
 
-	/** This input occupies a group exclusively; unrelated editors must open elsewhere. */
-	RequiresDedicatedGroup = 1 << 14
+	/** This input occupies a group exclusively; unrelated editors must open elsewhere. A high bit keeps clear of future upstream flags. */
+	RequiresDedicatedGroup = 1 << 30
 }
 
 export type IUntypedEditorInput = IResourceEditorInput | ITextResourceEditorInput | IUntitledTextResourceEditorInput | IResourceDiffEditorInput | IResourceMultiDiffEditorInput | IResourceSideBySideEditorInput | IResourceMergeEditorInput;

@@ -33,6 +33,7 @@ import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/t
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 import { createTerminalFirstTerminalPolicy, TerminalFirstLaunch } from '../../browser/terminalPolicy.js';
 import { IShellLaunchConfig } from '../../../../../platform/terminal/common/terminal.js';
+import { EditorPartSessions } from '../../browser/editorPartSessions.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -137,7 +138,9 @@ suite('Terminal First', () => {
 			setPanelAlignment: () => { },
 			layout: () => { },
 		}));
-		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({ groups: [upcastPartial<IEditorGroup>({ id: 0 })], count: 1, onDidAddGroup: Event.None, onDidRemoveGroup: Event.None, onDidLayout: Event.None, sessions: { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose } }), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
+		const mainPart = upcastPartial<IEditorPart>({ groups: [upcastPartial<IEditorGroup>({ id: 0 })], count: 1, onDidAddGroup: Event.None, onDidRemoveGroup: Event.None, onDidLayout: Event.None });
+		store.add(EditorPartSessions.attach(mainPart, { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose, swapGroups: () => { } }));
+		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart, activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed') }));
 		instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('new.ts'));
