@@ -55,8 +55,9 @@
 	transition: border-color 120ms ease-out;
 }
 
-/* A resting pointer previews the tile it would focus. */
-.monaco-workbench:not(.terminal-first-single-tile) .part.editor > .content .editor-group-container.terminal-first-tile:not(.active):hover {
+/* A resting pointer previews the tile it would focus. The only tile carries no active border, so it shows the hover border as well. */
+.monaco-workbench .part.editor > .content .editor-group-container.terminal-first-tile:not(.active):hover,
+.monaco-workbench.terminal-first-single-tile .part.editor > .content .editor-group-container.terminal-first-tile:hover {
 	border-color: var(--vscode-terminalFirst-tile-hoverBorder, var(--vscode-terminalFirst-tile-border, transparent));
 }
 
@@ -70,10 +71,13 @@
 	border-color: var(--vscode-terminalFirst-tile-activeBorder, var(--vscode-terminalFirst-tile-border, transparent));
 }
 
+/* The tiles sit in one rounded tray set into the window chrome; the tile stroke outlines it in every theme, even where the gutter and the chrome share a color. */
 .monaco-workbench.terminal-first-tiles .monaco-grid-view .part.editor:not(.modal-editor-part) {
-	--modern-ui-editor-border-color: transparent;
-	border-color: transparent;
-	border-radius: 0;
+	--modern-ui-editor-border-color: var(--vscode-terminalFirst-tile-border, transparent);
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-tile-border, transparent);
+	border-radius: var(--vscode-cornerRadius-large);
+	box-sizing: border-box;
+	overflow: hidden;
 	background: var(--vscode-terminalFirst-tile-gutterBackground);
 	box-shadow: none;
 }

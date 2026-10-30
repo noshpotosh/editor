@@ -9,6 +9,7 @@ Changes of the fork on top of upstream VS Code. Upstream release notes are at ht
 - New Tile picker: grouped into Workspace, Tools, Web, and Extensions; every row has an icon, a name, and a description; empty container titles fall back to the first view's name, also on tile tabs.
 - Shortcuts: `Cmd+A`, `Cmd+J`, `Cmd+E`, and `Cmd+T` keep their upstream meaning. The fork's overlays use `Cmd+Shift+A/J/E/T` and leader `j a`, `j j`, `f b`, `t t`.
 - Tiles ease their border color when focus moves and show an opaque hover border under a resting pointer (`terminalFirst.tile.hoverBorder`, the midpoint of the active and inactive borders); reduced-motion settings disable the transition.
+- The hover border also shows on the only open tile. The tiles sit in a rounded tray outlined in `terminalFirst.tile.border`. Session tabs no longer paint an editor-tab background on the title bar; the active tab lifts off the title bar like the command center (`terminalFirst.sessionTab.activeBackground` defaults to `commandCenter.activeBackground`).
 - Vim keys and the `.` actions picker work in extension tree views, and the first row gets the cursor even when the tree fills in after the tile is focused.
 - Leader `w b` and `w c` open the Jira board and Bitbucket tiles.
 - Debugging no longer opens Run and Debug or the Debug Console tiles on its own (`debug.openDebug` and `debug.internalConsoleOptions` default to `neverOpen`).

@@ -5,7 +5,7 @@
 
 import { localize } from '../../../../nls.js';
 import { activeContrastBorder, badgeBackground, badgeForeground, contrastBorder, focusBorder, listHighlightForeground, oneOf, quickInputBackground, quickInputForeground, registerColor, toolbarHoverBackground, widgetBorder, ColorTransformType } from '../../../../platform/theme/common/colorRegistry.js';
-import { EDITOR_GROUP_BORDER, PANEL_BACKGROUND, PANEL_BORDER, SIDE_BAR_BACKGROUND, TAB_ACTIVE_BACKGROUND, TAB_ACTIVE_BORDER_TOP, TAB_ACTIVE_FOREGROUND, TAB_INACTIVE_FOREGROUND } from '../../../common/theme.js';
+import { COMMAND_CENTER_ACTIVEBACKGROUND, EDITOR_GROUP_BORDER, PANEL_BACKGROUND, PANEL_BORDER, SIDE_BAR_BACKGROUND, TAB_ACTIVE_BORDER_TOP, TAB_ACTIVE_FOREGROUND, TAB_INACTIVE_FOREGROUND } from '../../../common/theme.js';
 import { TERMINAL_BACKGROUND_COLOR, TERMINAL_CURSOR_FOREGROUND_COLOR, TERMINAL_FOREGROUND_COLOR } from '../../terminal/common/terminalColorRegistry.js';
 
 /*
@@ -17,7 +17,8 @@ import { TERMINAL_BACKGROUND_COLOR, TERMINAL_CURSOR_FOREGROUND_COLOR, TERMINAL_F
 // Session strip
 
 export const TERMINAL_FIRST_SESSION_STRIP_BACKGROUND = registerColor('terminalFirst.sessionStrip.background', oneOf(TERMINAL_BACKGROUND_COLOR, PANEL_BACKGROUND), localize('terminalFirst.sessionStrip.background', "Background color of the title bar session strip while the shell is shown."));
-export const TERMINAL_FIRST_SESSION_TAB_ACTIVE_BACKGROUND = registerColor('terminalFirst.sessionTab.activeBackground', TAB_ACTIVE_BACKGROUND, localize('terminalFirst.sessionTab.activeBackground', "Background color of the active session tab."));
+// The strip sits on the title bar, so the active tab lifts off it the way the command center does instead of painting an editor tab color.
+export const TERMINAL_FIRST_SESSION_TAB_ACTIVE_BACKGROUND = registerColor('terminalFirst.sessionTab.activeBackground', COMMAND_CENTER_ACTIVEBACKGROUND, localize('terminalFirst.sessionTab.activeBackground', "Background color of the active session tab."));
 export const TERMINAL_FIRST_SESSION_TAB_ACTIVE_FOREGROUND = registerColor('terminalFirst.sessionTab.activeForeground', TAB_ACTIVE_FOREGROUND, localize('terminalFirst.sessionTab.activeForeground', "Foreground color of the active session tab."));
 export const TERMINAL_FIRST_SESSION_TAB_ACTIVE_BORDER = registerColor('terminalFirst.sessionTab.activeBorder', {
 	dark: TAB_ACTIVE_BORDER_TOP,

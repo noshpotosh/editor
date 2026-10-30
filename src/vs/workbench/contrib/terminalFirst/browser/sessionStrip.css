@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+/* The strip is title bar chrome: it paints no surface of its own, so it sits on any theme's title bar. */
 .monaco-workbench .titlebar-sessions {
 	display: flex;
 	align-items: stretch;
 	gap: var(--vscode-spacing-size40);
-	background: var(--vscode-editorGroupHeader-tabsBackground);
+	background: transparent;
 	color: var(--vscode-terminalFirst-sessionTab-inactiveForeground);
-	border-bottom: var(--vscode-strokeThickness) solid var(--vscode-editorGroupHeader-tabsBorder, transparent);
 	box-sizing: border-box;
 }
 .terminal-first-sessions .session-tabs { display: flex; overflow-x: auto; flex: 1; }
@@ -76,7 +76,6 @@
 .monaco-workbench .titlebar-sessions button { -webkit-app-region: no-drag; }
 /* The title bar paints its background inline, so the session strip color must take precedence. */
 .monaco-workbench.terminal-first-shell .part.titlebar { background-color: var(--vscode-terminalFirst-sessionStrip-background, var(--vscode-editor-background)) !important; }
-.monaco-workbench.terminal-first-shell .titlebar-sessions { background: transparent; }
 .monaco-workbench.terminal-first-shell .xterm,
 .monaco-workbench .terminal-first-floating .xterm { padding: var(--terminal-first-padding, 12px); }
 .monaco-workbench.terminal-first-shell .terminal-wrapper { padding-left: 0 !important; }
