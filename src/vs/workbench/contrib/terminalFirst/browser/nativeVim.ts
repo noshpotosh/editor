@@ -12,7 +12,7 @@ import { Emitter } from '../../../../base/common/event.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { validateVimRemaps, VimRemap } from '../../../../editor/contrib/nativeVim/common/vimRemapping.js';
-import { VimMode, VimSharedState } from '../../../../editor/contrib/nativeVim/common/nativeVim.js';
+import { restoreVimSharedState, serializeVimSharedState, VimMode, VimSharedState } from '../../../../editor/contrib/nativeVim/common/nativeVim.js';
 import { NativeVimContribution } from '../../../../editor/contrib/nativeVim/browser/nativeVimContribution.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { Range } from '../../../../editor/common/core/range.js';
@@ -39,6 +39,7 @@ import { dirname, joinPath } from '../../../../base/common/resources.js';
 /** App-owned navigation layer. It never dispatches keys to a terminal or unrelated input. */
 export class NativeVimService extends Disposable implements INativeVimService {
 	declare readonly _serviceBrand: undefined;
+	private static readonly SHARED_STATE_KEY = 'terminalFirst.vim.sharedState';
 	readonly shared = new VimSharedState();
 	private ready = false;
 	private readonly vimEnabledContext: IContextKey<boolean>;
@@ -69,6 +70,17 @@ export class NativeVimService extends Disposable implements INativeVimService {
 	) {
 		super();
 		this.vimEnabledContext = TerminalFirstVimEnabledContext.bindTo(contexts);
+		// Registers, marks, and macros persist per profile unless turned off.
+		if (configuration.getValue<boolean>('terminalFirst.vim.persistRegisters') !== false) {
+			restoreVimSharedState(this.shared, storage.getObject(NativeVimService.SHARED_STATE_KEY, StorageScope.PROFILE));
+		}
+		this._register(storage.onWillSaveState(() => {
+			if (configuration.getValue<boolean>('terminalFirst.vim.persistRegisters') !== false) {
+				storage.store(NativeVimService.SHARED_STATE_KEY, serializeVimSharedState(this.shared), StorageScope.PROFILE, StorageTarget.MACHINE);
+			} else {
+				storage.remove(NativeVimService.SHARED_STATE_KEY, StorageScope.PROFILE);
+			}
+		}));
 		this._register(this.leader.onDidChange(() => { this.hint = this.leader.hint; this.changed.fire(); }));
 		this._register(new NativeVimPickers(this, quickInput, commands, contexts));
 		this._register(sessions.onDidChangeSessions(() => {
@@ -205,6 +217,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfigurat
 		'terminalFirst.vim.engine': { type: 'string', enum: ['native', 'extension', 'off'], default: 'native', description: localize('engineSetting', "Vim engine. Reload required. Native is experimental until acceptance validation is complete.") },
 		'terminalFirst.vim.leader': { type: 'string', default: ' ', minLength: 1, maxLength: 1, description: localize('leaderSetting', "Normal-mode leader key.") },
 		'terminalFirst.vim.hintDelay': { type: 'number', default: 250, minimum: 0, maximum: 2000, description: localize('hintSetting', "Delay before showing leader hints, in milliseconds.") },
+		'terminalFirst.vim.persistRegisters': { type: 'boolean', default: true, description: localize('persistRegistersSetting', "Keep Vim registers, file marks, macros, and the last search across windows and restarts.") },
 		'terminalFirst.vim.listActionKeys': { type: 'boolean', default: false, description: localize('listActionKeysSetting', "In view tiles, single keys run row actions: s/u/d stage, unstage, and discard in Changes; r/a/A/d/D/y/x/p rename, create, delete, copy, cut, and paste in Explorer. Delete and discard still confirm. The '.' actions picker is always available.") },
 		'terminalFirst.vim.leaderBindings': { type: 'array', default: [], description: localize('leaderBindingsSetting', "Additional code-mode leader shortcuts. Bindings that conflict with existing shortcuts or menu prefixes are ignored."), items: { type: 'object', required: ['keys', 'label', 'command'], additionalProperties: false, properties: { keys: { type: 'string', minLength: 1 }, label: { type: 'string' }, command: { type: 'string', minLength: 1 } } } },
 		'terminalFirst.vim.remaps': { type: 'array', default: [], description: localize('remapsSetting', "Nonrecursive mode-specific key mappings."), items: { type: 'object', required: ['mode', 'before'], additionalProperties: false, properties: { mode: { type: 'string', enum: ['normal', 'insert', 'visual', 'visualLine', 'visualBlock', 'operator', 'replace'] }, before: { type: 'array', minItems: 1, items: { type: 'string' } }, after: { type: 'array', items: { type: 'string' } }, command: { type: 'string' } }, oneOf: [{ required: ['after'] }, { required: ['command'] }] } },

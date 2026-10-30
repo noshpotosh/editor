@@ -65,6 +65,7 @@ const editorActions: readonly ModalAction[] = [
 	{ keys: 'tt', label: localize('terminal', "Toggle Floating Terminal"), command: 'terminalFirst.toggleFloatingTerminal' },
 	{ keys: 'ts', label: localize('session', "Pick Session"), command: 'terminalFirst.pickTerminal' },
 	{ keys: 'tn', label: localize('newSession', "New Session"), command: 'terminalFirst.newTerminal' },
+	{ keys: 'tr', label: localize('renameSession', "Rename Session"), command: 'terminalFirst.renameSession' },
 	{ keys: 'q', label: localize('shell', "Return to Shell"), command: 'terminalFirst.showShell' },
 	{ keys: '[', label: localize('copyMode', "Copy Scrollback"), command: 'terminalFirst.copyMode.enter' },
 ];
@@ -77,6 +78,7 @@ const shellActions: readonly ModalAction[] = [
 	{ keys: 's', label: localize('pick', "Pick Session"), command: 'terminalFirst.pickTerminal' },
 	{ keys: 'c', label: localize('create', "New Session"), command: 'terminalFirst.newTerminal' },
 	{ keys: 'x', label: localize('close', "Close Session"), command: 'terminalFirst.closeSession' },
+	{ keys: 'R', label: localize('renameSessionShell', "Rename Session"), command: 'terminalFirst.renameSession' },
 	{ keys: '[', label: localize('copy', "Copy Scrollback"), command: 'terminalFirst.copyMode.enter' },
 	{ keys: 'r', label: localize('reload', "Reload Window"), command: 'workbench.action.reloadWindow' },
 ];

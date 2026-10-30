@@ -395,24 +395,25 @@ export class FloatingFileBrowser extends Disposable {
 function registerFileBrowserActions(): void {
 	const ctrl = KeyMod.WinCtrl;
 	const focused = ContextKeyExpr.and(TerminalFirstBrowserFocusedContext, ContextKeyExpr.not('quickInputVisible'));
-	const add = (id: string, label: string, keys: string, normal: number | undefined, insert?: number, common?: number[]) => {
+	const add = (id: string, label: string, keys: string, normal: number | number[] | undefined, insert?: number, common?: number[]) => {
 		fileBrowserActions.push({ id, label, keys });
 		const command = `terminalFirst.fileBrowser.${id}`;
 		KeybindingsRegistry.registerCommandAndKeybindingRule({ id: command, weight: KeybindingWeight.ExternalExtension + 1001, when: focused, primary: 0, handler: () => activeBrowser?.runAction(id) });
-		for (const [mode, bindings] of [['normal', normal === undefined ? [] : [normal]], ['insert', insert === undefined ? [] : [insert]], ['', common ?? []]] as const) {
+		for (const [mode, bindings] of [['normal', normal === undefined ? [] : Array.isArray(normal) ? normal : [normal]], ['insert', insert === undefined ? [] : [insert]], ['', common ?? []]] as const) {
 			for (const primary of bindings) {
 				KeybindingsRegistry.registerKeybindingRule({ id: command, weight: KeybindingWeight.ExternalExtension + 1001, when: mode ? ContextKeyExpr.and(focused, TerminalFirstBrowserModeContext.isEqualTo(mode)) : focused, primary });
 			}
 		}
 	};
+	// Vim vocabulary is canonical in every engine: h parent, l open, . hidden files, gg/G first/last (gg needs native Vim).
 	add('first', localize('firstAction', "First Row"), 'gg (Native Vim)', undefined);
-	add('last', localize('lastAction', "Last Row"), 'G (Native Vim)', undefined);
-	add('parent', localize('parentAction', "Parent Folder"), 'g / Ctrl+G', KeyCode.KeyG, ctrl | KeyCode.KeyG);
+	add('last', localize('lastAction', "Last Row"), 'G', KeyMod.Shift | KeyCode.KeyG);
+	add('parent', localize('parentAction', "Parent Folder"), 'h / g / Ctrl+G', [KeyCode.KeyH, KeyCode.KeyG], ctrl | KeyCode.KeyG);
 	add('home', localize('homeAction', "Home Folder"), 'e / Ctrl+E', KeyCode.KeyE, ctrl | KeyCode.KeyE);
 	add('root', localize('rootAction', "Browser Root"), 'w / Ctrl+W', KeyCode.KeyW, ctrl | KeyCode.KeyW);
 	add('setRoot', localize('setRootAction', "Set Browser Root"), 't / Ctrl+T', KeyCode.KeyT, ctrl | KeyCode.KeyT);
 	add('browser', localize('browserAction', "Toggle Folder Finder"), 'f / Ctrl+F', KeyCode.KeyF, ctrl | KeyCode.KeyF);
-	add('hidden', localize('hiddenAction', "Toggle Hidden Files"), 'h / Ctrl+H', KeyCode.KeyH, ctrl | KeyCode.KeyH);
+	add('hidden', localize('hiddenAction', "Toggle Hidden Files"), '. / Ctrl+H', KeyCode.Period, ctrl | KeyCode.KeyH);
 	add('all', localize('allAction', "Toggle All Marks"), 's / Ctrl+S', KeyCode.KeyS, ctrl | KeyCode.KeyS);
 	add('systemOpen', localize('systemOpenAction', "Open in Default Application"), 'o / Ctrl+O', KeyCode.KeyO, ctrl | KeyCode.KeyO);
 	add('create', localize('createAction', "Create File or Folder"), 'c / Alt+C', KeyCode.KeyC, KeyMod.Alt | KeyCode.KeyC);
@@ -422,7 +423,7 @@ function registerFileBrowserActions(): void {
 	add('delete', localize('deleteAction', "Delete"), 'd / Alt+D', KeyCode.KeyD, KeyMod.Alt | KeyCode.KeyD);
 	add('down', localize('downAction', "Next Row"), 'j / ↓ / Ctrl+J', KeyCode.KeyJ, undefined, [KeyCode.DownArrow, ctrl | KeyCode.KeyJ]);
 	add('up', localize('upAction', "Previous Row"), 'k / ↑ / Ctrl+K', KeyCode.KeyK, undefined, [KeyCode.UpArrow, ctrl | KeyCode.KeyK]);
-	add('accept', localize('acceptAction', "Open"), 'Enter', undefined, undefined, [KeyCode.Enter]);
+	add('accept', localize('acceptAction', "Open"), 'l / Enter', KeyCode.KeyL, undefined, [KeyCode.Enter]);
 	add('createPrompt', localize('createPromptAction', "Create From Prompt"), 'Shift+Enter', undefined, undefined, [KeyMod.Shift | KeyCode.Enter]);
 	add('mark', localize('markAction', "Mark and Advance"), 'Tab', undefined, undefined, [KeyCode.Tab]);
 	add('markPrevious', localize('markPreviousAction', "Mark and Reverse"), 'Shift+Tab', undefined, undefined, [KeyMod.Shift | KeyCode.Tab]);

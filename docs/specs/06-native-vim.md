@@ -92,9 +92,8 @@ Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer E
 ## Known gaps and risks
 
 - **Performance.** The engine works on the full document string (`model.getValue()`, cached per version id), and IME composition compares full-text snapshots. Each edit then copies the whole buffer. Large files will lag. A model-backed `VimHost` is needed before the engine becomes the default.
-- **Undo transaction safety.** If a transaction is not disposed (for example, an exception mid-insert, or a model swap), the model stops creating undo stops. The interface comment says the owner must end it before undo, model switch, or dispose. This needs defensive tests and a watchdog.
+- **Undo transaction safety.** A key that throws mid-edit closes the open transaction and resets the engine (`safeKey`), so the model keeps creating undo stops; model changes and undo/redo also clear it. Tested in `nativeVimContribution.test.ts`.
 - The `off` engine also disables VSCodeVim. Confirm this is intended.
-- Registers, marks, and macros are not persisted (no viminfo or shada equivalent).
 - The help picker, the browser's `(Native Vim)` labels, and the jump-list hints each describe keys separately. A single source of truth would keep them in sync.
 - The acceptance areas still required (from `TERMINAL_FIRST.md`): IME and keyboard layouts, completion and snippets, large files, shared models across sessions, and a full session workflow.
 
@@ -102,7 +101,7 @@ Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer E
 
 1. What is the bar for ending the native preview and removing the optional VSCodeVim fallback?
 2. Should the core undo transaction API be upstreamed, or isolated behind the gate?
-3. Persist registers, marks, and macros?
+3. Resolved: registers, file marks, macros, and the last search persist per profile (`terminalFirst.vim.persistRegisters`, default on).
 4. Which Ex commands are required for 1.0 (for example `:noh`, `:g`, `:norm`, `:r`)?
 5. Vim regex compatibility for `:s` and `/`: translate patterns, or document JavaScript regex?
 

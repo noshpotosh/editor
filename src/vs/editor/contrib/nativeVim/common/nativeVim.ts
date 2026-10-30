@@ -28,6 +28,58 @@ export class VimSharedState {
 	searchBackwards = false;
 }
 
+/** Storable form of the shared state: registers, file marks, macros, and the last search. */
+export interface VimSharedStateData {
+	readonly version: 1;
+	readonly registers: Record<string, VimRegister>;
+	readonly marks: Record<string, Record<string, number>>;
+	readonly macros: Record<string, string[]>;
+	readonly search: string;
+	readonly searchBackwards: boolean;
+}
+
+export function serializeVimSharedState(state: VimSharedState): VimSharedStateData {
+	return {
+		version: 1,
+		registers: Object.fromEntries(state.registers),
+		marks: Object.fromEntries(Array.from(state.marks, ([document, marks]) => [document, Object.fromEntries(marks)])),
+		macros: Object.fromEntries(state.macros),
+		search: state.search,
+		searchBackwards: state.searchBackwards,
+	};
+}
+
+/** Restores saved state into `state`, skipping anything malformed. Returns false when `data` is not recognizable. */
+export function restoreVimSharedState(state: VimSharedState, data: unknown): boolean {
+	if (!data || typeof data !== 'object' || (data as Partial<VimSharedStateData>).version !== 1) {
+		return false;
+	}
+	const saved = data as Partial<VimSharedStateData>;
+	for (const [name, register] of Object.entries(saved.registers ?? {})) {
+		if (register && typeof register.text === 'string' && typeof register.line === 'boolean') {
+			state.registers.set(name, { text: register.text, line: register.line, ...(register.block ? { block: true } : {}) });
+		}
+	}
+	for (const [document, marks] of Object.entries(saved.marks ?? {})) {
+		if (marks && typeof marks === 'object') {
+			const restored = new Map(Object.entries(marks).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] >= 0));
+			if (restored.size) {
+				state.marks.set(document, restored);
+			}
+		}
+	}
+	for (const [name, keys] of Object.entries(saved.macros ?? {})) {
+		if (Array.isArray(keys) && keys.every(key => typeof key === 'string')) {
+			state.macros.set(name, keys);
+		}
+	}
+	if (typeof saved.search === 'string') {
+		state.search = saved.search;
+		state.searchBackwards = saved.searchBackwards === true;
+	}
+	return true;
+}
+
 /** Modal grammar. Offsets are UTF-16 model offsets; character steps preserve surrogate pairs. */
 export class NativeVim {
 	mode: VimMode = 'normal';

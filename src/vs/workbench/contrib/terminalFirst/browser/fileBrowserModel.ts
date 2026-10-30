@@ -12,6 +12,7 @@ import { dirname, isEqual, relativePath } from '../../../../base/common/resource
 import { localize } from '../../../../nls.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IFileService, IFileStat } from '../../../../platform/files/common/files.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 
 export interface FileBrowserEntry {
 	readonly stat: IFileStat;
@@ -51,7 +52,28 @@ export class FileBrowserModel extends Disposable {
 	selected: URI | undefined;
 	entries: FileBrowserEntry[] = [];
 
-	constructor(@IFileService private readonly fileService: IFileService) { super(); }
+	constructor(
+		@IFileService private readonly fileService: IFileService,
+		@IStorageService private readonly storage: IStorageService,
+	) {
+		super();
+		try {
+			const saved = storage.getObject<Record<string, { directory: string; root: string; hidden: boolean }>>(FileBrowserModel.STORAGE_KEY, StorageScope.WORKSPACE, {});
+			for (const [sessionId, entry] of Object.entries(saved)) {
+				if (typeof entry?.directory === 'string' && typeof entry.root === 'string') {
+					this.remembered.set(sessionId, { directory: URI.parse(entry.directory), root: URI.parse(entry.root), hidden: entry.hidden === true });
+				}
+			}
+		} catch { /* Damaged saved browser state starts fresh. */ }
+	}
+
+	private static readonly STORAGE_KEY = 'terminalFirst.fileBrowser.sessions';
+
+	/** Remembered folders outlive the window; sessions are keyed by their persisted IDs. */
+	private persistRemembered(): void {
+		const entries = Object.fromEntries(Array.from(this.remembered, ([sessionId, state]) => [sessionId, { directory: state.directory.toString(), root: state.root.toString(), hidden: state.hidden }]));
+		this.storage.store(FileBrowserModel.STORAGE_KEY, entries, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+	}
 
 	show(root: URI, sessionId = ''): void {
 		this.hide();
@@ -65,7 +87,7 @@ export class FileBrowserModel extends Disposable {
 		this.navigate(saved?.directory ?? root, !!saved);
 	}
 
-	forgetSession(id: string): void { this.remembered.delete(id); }
+	forgetSession(id: string): void { if (this.remembered.delete(id)) { this.persistRemembered(); } }
 
 	toggleBrowser(): void {
 		this.browser = this.browser === 'files' ? 'folders' : 'files';
@@ -193,6 +215,7 @@ export class FileBrowserModel extends Disposable {
 	hide(): void {
 		if (this.sessionId && this.directory && this.root) {
 			this.remembered.set(this.sessionId, { directory: this.directory, root: this.root, hidden: this.hidden });
+			this.persistRemembered();
 		}
 		this.sessionId = '';
 		this.marked.clear();

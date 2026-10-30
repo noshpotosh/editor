@@ -586,7 +586,13 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | D2.1 blocked-command feedback | done | (see git log) | log once per id; one-time shell hint via notification center |
 | D2.3 CLI | done | (see git log) | directory arg, `-g file:line:col`, invoked name in help/errors |
 | D2.7 jump list slots | done | (see git log) | `j 1`…`j 9`, `J`/`K` reorder, undo kept across reopen |
-| D2.2, D2.4, D2.5, D2.6, D2.8, D2.9, D2.10 | todo | | |
+| D2.2 session rename | done | (see git log) | |
+| D2.4 status bar | done | (see git log) | documented: present() is the source of truth |
+| D2.5 floating terminal header | done | (see git log) | session, title, cwd, close control |
+| D2.6 file browser | done | (see git log) | Vim vocabulary everywhere; per-session state persisted |
+| D2.8 undo watchdog | done | (see git log) | `safeKey` + test |
+| D2.10 registers persistence | done | (see git log) | `terminalFirst.vim.persistRegisters` |
+| D2.9 native Vim performance | todo | | model-backed host; benchmark test |
 
 ## Definition of done (whole plan)
 

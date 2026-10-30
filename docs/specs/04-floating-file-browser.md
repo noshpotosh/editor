@@ -13,7 +13,7 @@ Explorer lives in a sidebar that VS NOSH keeps hidden. The user needs a keyboard
 ### Opening and layout
 
 - **S4.1** `Cmd+Shift+E`, leader `f b`, or the **Toggle Floating File Browser** command opens the browser over the editor area at 80% of its width and height. It is mutually exclusive with the other overlays, and it closes on a session or surface change.
-- **S4.2** The browser opens at the session's remembered folder, falling back to the session directory if the folder is missing. Each session remembers its last folder, browser root, and hidden-file preference in memory only. Reopening clears the filter and marks.
+- **S4.2** The browser opens at the session's remembered folder, falling back to the session directory if the folder is missing. Each session remembers its last folder, browser root, and hidden-file preference in memory only. Reopening clears the filter and marks. This state persists in workspace storage across restarts.
 - **S4.3** Results rise from a bottom prompt, with the best match nearest the prompt. A preview pane sits alongside and is hidden when the overlay is narrower than 600 px.
 - **S4.4** Browsing never changes the workspace folder or the shell cwd.
 
@@ -45,11 +45,11 @@ Explorer lives in a sidebar that VS NOSH keeps hidden. The user needs a keyboard
 | Action (`terminalFirst.fileBrowser.*`) | Normal | Insert | Both |
 | --- | --- | --- | --- |
 | `down` / `up` | `j` / `k` | | `↓`/`↑`, `Ctrl+J`/`Ctrl+K` |
-| `first` / `last` | `gg` / `G` (native Vim only) | | |
-| `parent` | `g` (`h` with native Vim) | `Ctrl+G` | |
+| `first` / `last` | `gg` (native Vim only) / `G` | | |
+| `parent` | `h` / `g` | `Ctrl+G` | |
 | `home` / `root` / `setRoot` | `e` / `w` / `t` | `Ctrl+E` / `Ctrl+W` / `Ctrl+T` | |
 | `browser` (folder finder) | `f` | `Ctrl+F` | |
-| `hidden` | `h` (`.` with native Vim) | `Ctrl+H` | |
+| `hidden` | `.` | `Ctrl+H` | |
 | `all` (toggle marks) | `s` | `Ctrl+S` | |
 | `systemOpen` | `o` | `Ctrl+O` | |
 | `create` / `rename` / `move` / `copy` / `delete` | `c` / `r` / `m` / `y` / `d` | `Alt+C/R/M/Y/D` | |
@@ -82,18 +82,16 @@ Bindings use weight `ExternalExtension + 1001`, scoped to `terminalFirstBrowserF
 
 ## Known gaps and risks
 
-- **Inconsistent keys between engines.** In normal mode, `h` toggles hidden files and `g` goes to the parent, but with native Vim `h` is parent, `.` is hidden, and `g` starts `gg`. The help picker labels `gg`/`G` "(Native Vim)" but shows `g` and `h` with their non-Vim meanings. Choose one vocabulary.
 - `Cmd+Shift+E` replaces "Focus Explorer"; the Explorer tile stays on Ctrl+Option+E and `f e`. `Cmd+E` keeps its upstream meaning.
 - There is no recursive *file* search; `Cmd+P` is the fallback.
-- Per-session state is not persisted across restarts.
 - A batch that fails partway can leave a partly applied state. Undo covers files but may not cover folder deletion.
 - Large folders render every entry. Folder-finder performance on large trees (for example, `node_modules`) is unmeasured.
 
 ## Open questions
 
-1. Which normal-mode vocabulary is canonical: oil, Telescope, netrw, or Vim (`h`/`l`)?
+1. Resolved: Vim. `h`/`l` parent/open, `.` hidden files, `G` last (and `gg` first with native Vim) apply in every engine; `g` stays as a second parent key.
 2. Should the folder finder honor `files.exclude` and `.gitignore` by default?
-3. Should browser state persist across restarts?
+3. Resolved: per-session folder, root, and hidden-file state persist in workspace storage (`terminalFirst.fileBrowser.sessions`).
 4. Should there be a "reveal current file" entry point (open the browser at the active file's folder with it focused)?
 
 ## Release acceptance

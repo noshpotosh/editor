@@ -45,8 +45,7 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 ## Known gaps and risks
 
 - `Cmd+Shift+T` replaces "Reopen Closed Editor"; `Cmd+T` keeps its upstream meaning.
-- With the Hide button gone, mouse-only users can dismiss the overlay only by clicking the editor.
-- The overlay has no visible indication of its owning session or cwd beyond the terminal title.
+- The header shows the owning session, the shell title, and the detected working directory, and has a close control.
 - No support for multiple companions, tabs, splits, dragging, or resizing.
 - Task and debug output cannot be routed here.
 

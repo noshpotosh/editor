@@ -144,7 +144,7 @@ suite('Floating File Browser Host', () => {
 		deepStrictEqual([count?.includes('1 marked'), f.container.ownerDocument.activeElement?.textContent, f.input.readOnly], [true, 'Actions / Help', true]);
 	});
 
-	test('hidden toggle replaces the old h-parent mapping; nonempty Backspace remains text input', async () => {
+	test('period toggles hidden files, h goes to the parent folder, and nonempty Backspace remains text input', async () => {
 		const f = fixture();
 		f.host.show(URI.file('/root'));
 		await f.settle();
@@ -153,8 +153,12 @@ suite('Floating File Browser Host', () => {
 		const backspace = new KeyboardEvent('keydown', { key: 'Backspace', keyCode: 8, bubbles: true, cancelable: true });
 		f.input.dispatchEvent(backspace);
 		await f.host.runAction('escape');
+		f.key('.');
+		await f.settle();
+		const afterHiddenToggle = f.paths.filter(path => path === '/').length;
 		f.key('h');
-		deepStrictEqual([backspace.defaultPrevented, f.paths.filter(path => path === '/').length, f.input.readOnly], [false, 0, true]);
+		await f.settle();
+		deepStrictEqual([backspace.defaultPrevented, afterHiddenToggle, f.paths.filter(path => path === '/').length, f.input.readOnly], [false, 0, 1, true]);
 	});
 
 });

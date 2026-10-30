@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
 import { validateVimRemaps } from '../../common/vimRemapping.js';
-import { NativeVim, VimHost, VimSharedState } from '../../common/nativeVim.js';
+import { NativeVim, restoreVimSharedState, serializeVimSharedState, VimHost, VimSharedState } from '../../common/nativeVim.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 class Host implements VimHost {
@@ -88,4 +88,27 @@ suite('Native Vim', () => {
 		], [false, false, true]);
 	});
 	test('colon delegates without modifying text', () => { const { host, keys } = setup('abc'); keys(':w'); keys(['<CR>']); assert.deepStrictEqual(host.commands, [['ex', 'w']]); });
+
+	test('shared state round-trips through storage and ignores malformed entries', () => {
+		const state = new VimSharedState();
+		state.registers.set('"', { text: 'yanked', line: false });
+		state.registers.set('a', { text: 'block', line: false, block: true });
+		state.marks.set('file:///a.ts', new Map([['a', 12], ['b', 0]]));
+		state.macros.set('q', ['d', 'w']);
+		state.search = 'needle'; state.searchBackwards = true;
+		const restored = new VimSharedState();
+		const accepted = restoreVimSharedState(restored, JSON.parse(JSON.stringify(serializeVimSharedState(state))));
+		const rejected = restoreVimSharedState(new VimSharedState(), { version: 2 });
+		const partial = new VimSharedState();
+		restoreVimSharedState(partial, { version: 1, registers: { ok: { text: 't', line: true }, bad: { text: 1 } }, marks: { 'file:///b': { a: -1, b: 'x', c: 3 } }, macros: { m: ['x'], broken: [1] } });
+		assert.deepStrictEqual({
+			accepted, rejected,
+			registers: [...restored.registers], marks: [...restored.marks].map(([document, marks]) => [document, [...marks]]), macros: [...restored.macros], search: [restored.search, restored.searchBackwards],
+			partial: { registers: [...partial.registers.keys()], marks: [...partial.marks.get('file:///b') ?? []], macros: [...partial.macros.keys()] },
+		}, {
+			accepted: true, rejected: false,
+			registers: [['"', { text: 'yanked', line: false }], ['a', { text: 'block', line: false, block: true }]], marks: [['file:///a.ts', [['a', 12], ['b', 0]]]], macros: [['q', ['d', 'w']]], search: ['needle', true],
+			partial: { registers: ['ok'], marks: [['c', 3]], macros: ['m'] },
+		});
+	});
 });

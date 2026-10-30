@@ -25,6 +25,8 @@ export interface ITerminalFirstService {
 	toggleFloatingJumpList(): Promise<void>;
 	/** Opens the jump list entry at a 1-based slot. */
 	jumpToSlot(slot: number): Promise<void>;
+	/** Prompts for a title for the active session. */
+	renameSession(): Promise<void>;
 	hideFloatingJumpList(focusEditor?: boolean): Promise<void>;
 	readonly floatingFileBrowserVisible: boolean;
 	toggleFloatingFileBrowser(): Promise<void>;

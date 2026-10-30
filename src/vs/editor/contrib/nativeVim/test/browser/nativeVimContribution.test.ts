@@ -92,6 +92,18 @@ suite('Native Vim editor integration', () => {
 		assert.deepStrictEqual({ handled: contribution.handle('x'), text: model.getValue() }, { handled: false, text: 'abc' });
 	});
 
+	test('a failing edit closes the undo transaction so later undo stops work', async () => {
+		const { model, editor, contribution } = setup('one two');
+		const failing = stub(editor, 'executeEdits').throws(new Error('edit failed'));
+		assert.throws(() => contribution.handle('c') && contribution.handle('w'), /edit failed/);
+		failing.restore();
+		editor.setPosition({ lineNumber: 1, column: 1 });
+		editor.trigger('keyboard', 'type', { text: 'b' }); model.pushStackElement();
+		editor.trigger('keyboard', 'type', { text: 'c' }); model.pushStackElement();
+		await model.undo();
+		assert.strictEqual(model.getValue(), 'bone two');
+	});
+
 	test('nested undo transactions restore ordinary boundaries afterward', async () => {
 		const { model, editor } = setup('a');
 		const first = model.beginUndoRedoTransaction(); const second = model.beginUndoRedoTransaction();

@@ -21,6 +21,35 @@
 	white-space: nowrap;
 }
 
+.terminal-first-floating .floating-terminal-header .floating-terminal-session {
+	font-weight: 600;
+}
+
+.terminal-first-floating .floating-terminal-header .floating-terminal-cwd {
+	flex: 1;
+	color: var(--vscode-descriptionForeground);
+}
+
+.terminal-first-floating .floating-terminal-header .floating-terminal-close {
+	display: inline-flex;
+	align-items: center;
+	margin-left: auto;
+	padding: var(--vscode-spacing-size20);
+	border: none;
+	border-radius: var(--vscode-cornerRadius-small);
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+
+.terminal-first-floating .floating-terminal-header .floating-terminal-close:hover {
+	background: var(--vscode-toolbar-hoverBackground);
+}
+
+.terminal-first-floating .floating-terminal-header .floating-terminal-close:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+}
+
 .terminal-first-floating .floating-terminal-body {
 	position: relative;
 	flex: 1;

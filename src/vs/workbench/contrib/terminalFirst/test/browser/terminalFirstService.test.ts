@@ -102,7 +102,7 @@ suite('Terminal First', () => {
 					disposed.fire(terminal);
 				},
 				title: `Shell ${id}`,
-				capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined }),
+				capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined, onDidAddCapability: Event.None }),
 				shellIntegrationNonce: `session-${id}`,
 				focusWhenReady: async () => { focused.fire(terminal); },
 			});

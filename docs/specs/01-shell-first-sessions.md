@@ -117,11 +117,10 @@ Design decisions:
 ## Known gaps and risks
 
 - Global leader navigation now preserves dirty buffers when returning to the shell (S1.15).
-- `present()` shows the status bar in editor mode, but the default settings set `workbench.statusBar.visible: false`. The effective behavior should be confirmed and one source of truth chosen.
+- Status bar visibility has one source of truth: `present()` hides it in shell mode and shows it in editor mode (through `setPartHidden`); the `workbench.statusBar.visible: false` default only sets the startup state before the first presentation.
 - The command gate returns `undefined` for blocked commands. Each blocked ID is logged once per window, and the first blocked workbench command in the shell shows a one-time hint that the command is available in the editor (Ctrl+Space e). Extensions still get no error.
 - Workspace-scoped settings are copied once into the managed workspace. Later edits to an original `.code-workspace` file are not synced.
 - Changing the workspace folder without an extension-host restart can leave language servers rooted at the previous folder.
-- Session titles come from the terminal title only. They cannot be renamed and are not stable across processes.
 - macOS and zsh only. Remote development, tmux, and per-session extension hosts are out of scope.
 
 ## Open questions
@@ -129,8 +128,8 @@ Design decisions:
 1. Resolved: global leader provides explicit editor/shell navigation.
 2. Resolved: title-bar tabs show mode and dirty state.
 3. Resolved: both; see Known gaps.
-4. Should session titles be user-renamable and persisted?
-5. Should the status bar be visible in editor mode by default?
+4. Resolved: `terminalFirst.renameSession` (leader `t r`, shell `Ctrl+Space R`) stores a custom title with the session; an empty title restores the shell title.
+5. Resolved: visible in editor mode, hidden in shell mode (see Known gaps).
 
 ## Release acceptance
 

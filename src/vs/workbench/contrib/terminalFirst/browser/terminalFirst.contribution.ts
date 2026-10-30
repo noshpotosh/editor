@@ -125,6 +125,7 @@ if (terminalFirstEnabled) {
 	}
 
 	CommandsRegistry.registerCommand('terminalFirst.showEditor', accessor => accessor.get(ITerminalFirstService).showEditor());
+	CommandsRegistry.registerCommand('terminalFirst.renameSession', accessor => accessor.get(ITerminalFirstService).renameSession());
 	for (let slot = 1; slot <= 9; slot++) {
 		CommandsRegistry.registerCommand(`terminalFirst.jumpToSlot${slot}`, accessor => accessor.get(ITerminalFirstService).jumpToSlot(slot));
 	}

@@ -31,7 +31,8 @@ suite('Floating Terminal Host', () => {
 		const calls: string[] = [];
 		const title = store.add(new Emitter<ITerminalInstance>());
 		const terminal = upcastPartial<ITerminalInstance>({
-			title: 'Companion', onTitleChanged: title.event,
+			title: 'Companion', onTitleChanged: title.event, initialCwd: '/project',
+			capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined, onDidAddCapability: Event.None }),
 			attachToElement: () => { calls.push('attach'); },
 			detachFromElement: () => { calls.push('detach'); },
 			setVisible: visible => { calls.push(`visible:${visible}`); },
@@ -46,6 +47,7 @@ suite('Floating Terminal Host', () => {
 		deepStrictEqual([calls, document.activeElement === input, title.hasListeners()], [['attach', 'visible:true', 'hide:false', 'visible:false', 'detach'], true, false]);
 		host.show(terminal);
 		host.hideTerminal();
-		deepStrictEqual([calls.slice(5), container.querySelector('.floating-terminal-header button')], [['attach', 'visible:true', 'visible:false', 'detach'], null]);
+		container.querySelector<HTMLButtonElement>('.floating-terminal-header button.floating-terminal-close')!.click();
+		deepStrictEqual([calls.slice(5), container.querySelector('.floating-terminal-header .floating-terminal-cwd')?.textContent], [['attach', 'visible:true', 'visible:false', 'detach', 'hide:true'], '/project']);
 	});
 });

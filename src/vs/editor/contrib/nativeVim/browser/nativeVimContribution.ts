@@ -129,7 +129,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 				if (this.engine.mode !== 'insert' && [...key].length === 1 && this.handle(key)) { event.preventDefault(); event.stopPropagation(); }
 				return;
 			}
-			if (this.engine.mode === 'insert' && normalized !== '<Esc>') { if (normalized === '<BS>' || normalized === '<CR>') { this.engine.key(normalized); } return; }
+			if (this.engine.mode === 'insert' && normalized !== '<Esc>') { if (normalized === '<BS>' || normalized === '<CR>') { this.safeKey(normalized); } return; }
 			if (this.handle(normalized)) { event.preventDefault(); event.stopPropagation(); }
 		}));
 		this.render();
@@ -153,7 +153,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 			void this.vim.readClipboard().then(value => {
 				if (generation !== this.clipboardGeneration || !this.active) { return; }
 				this.vim.shared.registers.set('+', { text: value, line: value.endsWith('\n') }); this.vim.shared.registers.set('*', { text: value, line: value.endsWith('\n') });
-				this.engine.key(text);
+				this.safeKey(text);
 			}).catch(() => { this.engine.error = 'clipboardUnavailable'; }).finally(() => {
 				if (generation === this.clipboardGeneration) { this.clipboardPending = false; for (const key of this.queuedKeys.splice(0)) { if (!this.handle(key)) { this.editor.trigger('nativeVim', key === '<BS>' ? 'deleteLeft' : 'type', { text: key === '<CR>' ? '\n' : key === '<Tab>' ? '\t' : key }); } } this.render(); }
 			});
@@ -161,7 +161,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		}
 		let handled = true;
 		for (const key of text.startsWith('<') && text.endsWith('>') ? [text] : [...text]) {
-			if (!this.vim.key(key, this.engine.mode)) { handled = this.engine.key(key); }
+			if (!this.vim.key(key, this.engine.mode)) { handled = this.safeKey(key); }
 		}
 		this.render(); return handled;
 	}
@@ -187,6 +187,18 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		};
 		return messages[error] ?? localize('unsupported', "Unsupported Vim command.");
 	}
+	/** A failure mid-edit must not leave an undo transaction open, or the model would stop recording undo stops. */
+	private safeKey(key: string): boolean {
+		try {
+			return this.engine.key(key);
+		} catch (error) {
+			this.transaction.clear();
+			this.engine.reset();
+			this.render();
+			throw error;
+		}
+	}
+
 	getId(): string { return NativeVimContribution.ID; }
 	getDomNode(): HTMLElement { return this.node; }
 	getPosition() { return { preference: OverlayWidgetPositionPreference.BOTTOM_RIGHT_CORNER }; }

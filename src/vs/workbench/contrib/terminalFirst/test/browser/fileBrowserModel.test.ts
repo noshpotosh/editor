@@ -10,6 +10,7 @@ import { URI } from '../../../../../base/common/uri.js';
 import { upcastPartial } from '../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { FileChangesEvent, IFileService, IFileStatWithMetadata } from '../../../../../platform/files/common/files.js';
+import { InMemoryStorageService } from '../../../../../platform/storage/common/storage.js';
 import { FileBrowserModel, filterFileBrowserEntries } from '../../browser/fileBrowserModel.js';
 
 suite('Floating File Browser Model', () => {
@@ -32,7 +33,7 @@ suite('Floating File Browser Model', () => {
 		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
 			resolve: resource => resource.path === '/first' ? first.p : second.p,
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => { disposed++; } }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/first'));
 		model.navigate(URI.file('/second'));
 		await second.complete({ ...stat('/second', true), children: [stat('/second/new.ts')] });
@@ -48,7 +49,7 @@ suite('Floating File Browser Model', () => {
 		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
 			resolve: async resource => { paths.push(resource.path); return { ...stat(resource.path, true), children: [] }; },
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => { } }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'));
 		model.parent();
 		model.parent();
@@ -66,7 +67,7 @@ suite('Floating File Browser Model', () => {
 				return { ...stat('/root', true), children: [stat('/root/a.ts'), stat('/root/b.ts')] };
 			},
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => { } }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'));
 		await settle();
 		model.selected = URI.file('/root/b.ts');
@@ -85,7 +86,7 @@ suite('Floating File Browser Model', () => {
 		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
 			resolve: async () => ({ ...stat('/root', true), children }),
 			createWatcher: () => ({ onDidChange: changes.event, dispose: () => { } }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'));
 		await settle();
 		model.selected = URI.file('/root/b.ts');
@@ -100,7 +101,7 @@ suite('Floating File Browser Model', () => {
 		const model = store.add(new FileBrowserModel(upcastPartial<IFileService>({
 			resolve: async resource => ({ ...stat(resource.path, true), children: [stat(resource.path + '/a')] }),
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/one'), 'one');
 		await settle();
 		model.toggleMark();
@@ -124,7 +125,7 @@ suite('Floating File Browser Model', () => {
 				return { ...stat(resource.path, true), children: resource.path === '/root' ? [stat('/root/empty', true), stat('/root/.hidden', true), { ...stat('/root/link', true), isSymbolicLink: true }] : [] };
 			},
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'));
 		await settle();
 		const loaded = Event.toPromise(Event.filter(model.onDidChange, () => !model.loading));
@@ -141,7 +142,7 @@ suite('Floating File Browser Model', () => {
 				return { ...stat(resource.path, true), children: [] };
 			},
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'), 'one');
 		model.navigate(URI.file('/gone'));
 		await settle();
@@ -164,7 +165,7 @@ suite('Floating File Browser Model', () => {
 				return { ...stat(resource.path, true), children: [stat('/root/slow', true)] };
 			},
 			createWatcher: () => ({ onDidChange: Event.None, dispose: () => {} }),
-		})));
+		}), store.add(new InMemoryStorageService())));
 		model.show(URI.file('/root'));
 		await settle();
 		model.toggleBrowser();

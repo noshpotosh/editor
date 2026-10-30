@@ -57,6 +57,8 @@ interface Session {
 	id: string;
 	nonce: string;
 	title: string;
+	/** A user-chosen title that outlives the terminal's own title. */
+	customTitle?: string;
 	mode: 'shell' | 'editor';
 	cwd?: string;
 	terminal?: ITerminalInstance;
@@ -105,7 +107,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	get floatingTerminalVisible(): boolean { return this.floatingVisible; }
 
 	get sessions(): readonly ITerminalFirstSession[] {
-		return this.sessionList.map(session => ({ id: session.id, title: session.terminal?.title || session.title, mode: session.mode, dirty: this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).some(({ editor, groupId }) => editor.isDirty() && this.editorSessions?.owns(session.id, groupId)), active: session === this.active }));
+		return this.sessionList.map(session => ({ id: session.id, title: session.customTitle || session.terminal?.title || session.title, mode: session.mode, dirty: this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).some(({ editor, groupId }) => editor.isDirty() && this.editorSessions?.owns(session.id, groupId)), active: session === this.active }));
 	}
 
 	constructor(
@@ -287,10 +289,10 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		const state: StoredSessions = {
 			active: this.active?.id,
 			managedWorkspace: this.managedWorkspace?.toString(),
-			sessions: this.sessionList.map(({ id, nonce, title, mode, cwd: savedCwd, terminal, floatingTerminal, floatingNonce, floatingCwd, tileNonces }) => {
+			sessions: this.sessionList.map(({ id, nonce, title, customTitle, mode, cwd: savedCwd, terminal, floatingTerminal, floatingNonce, floatingCwd, tileNonces }) => {
 				const cwd = terminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd();
 				return {
-					id, nonce, mode, title: terminal?.title || title,
+					id, nonce, mode, title: terminal?.title || title, customTitle,
 					cwd: cwd ? URI.file(cwd).toString() : savedCwd || (terminal?.initialCwd ? URI.file(terminal.initialCwd).toString() : undefined),
 					floatingNonce, tileNonces,
 					floatingCwd: floatingTerminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd() || floatingCwd,
@@ -303,6 +305,19 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private activeFile(): URI | undefined {
 		const resource = EditorResourceAccessor.getOriginalUri(this.editorService.activeEditor, { supportSideBySide: SideBySideEditor.PRIMARY });
 		return resource?.scheme === Schemas.file ? resource : undefined;
+	}
+
+	/** Asks for a new title for the active session; an empty answer restores the terminal's own title. */
+	renameSession(): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.active;
+			if (!session) { return; }
+			const value = await this.quickInputService.input({ prompt: localize('renameSessionPrompt', "Session title (leave empty to use the shell title)"), value: session.customTitle ?? '', placeHolder: session.terminal?.title || session.title });
+			if (value === undefined) { return; }
+			session.customTitle = value.trim() || undefined;
+			this.saveSessions();
+			this.changed.fire();
+		});
 	}
 
 	private readonly blockedCommands = new Set<string>();
@@ -464,7 +479,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 					this.floatingFocusedContext.set(focused);
 				}));
 			try {
-				this.floatingHost.show(session.floatingTerminal);
+				this.floatingHost.show(session.floatingTerminal, session.customTitle || session.terminal?.title || session.title);
 				this.floatingVisible = true;
 				terminalFirstPolicy.floatingVisible = true;
 				this.floatingVisibleContext.set(true);
