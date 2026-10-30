@@ -5,24 +5,18 @@
 
 import { deepStrictEqual } from 'assert';
 import { List } from '../../../../../base/browser/ui/list/listWidget.js';
-import { Emitter, Event } from '../../../../../base/common/event.js';
 import { toDisposable } from '../../../../../base/common/lifecycle.js';
 import { upcastPartial } from '../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { IContextKeyService, IScopedContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ContextKeyService } from '../../../../../platform/contextkey/browser/contextKeyService.js';
-import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import { INativeVimService } from '../../../../../editor/contrib/nativeVim/common/nativeVimService.js';
-import { PaneComposite, PaneCompositeDescriptor } from '../../../../browser/panecomposite.js';
-import { ViewContainer, ViewContainerLocation, IViewDescriptorService } from '../../../../common/views.js';
-import { IPaneCompositePartService } from '../../../../services/panecomposite/browser/panecomposite.js';
 import { workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
-import { focusFirstRowIfNone, ViewTileComposites } from '../../browser/tileEditor.js';
-import { TileContextMenuCapture, tileContextMenuCapture, TileContextMenuService } from '../../browser/tileContextMenu.js';
+import { focusFirstRowIfNone } from '../../browser/tileEditor.js';
+import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
+import { TileContextMenuCapture, tileContextMenuCapture } from '../../browser/tileContextMenu.js';
 import { flattenMenuActions, showTileListActions } from '../../browser/tileListActions.js';
+import { TileListFocusTracker } from '../../browser/tileListNavigation.js';
+import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { Action, Separator, SubmenuAction } from '../../../../../base/common/actions.js';
-import { IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
-import { IMenuService } from '../../../../../platform/actions/common/actions.js';
 import { IListService } from '../../../../../platform/list/browser/listService.js';
 import { IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
 import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
@@ -69,52 +63,38 @@ suite('Terminal First - tile list navigation', () => {
 			{ focusedInside: true, cursor: [1], keptExisting: true, ignoredOutside: false, elsewhereCursor: [], handledEmpty: true, emptyCursor: [], undefinedList: false });
 	});
 
-	test('view tile composites mark their scope and switch list type navigation with the Vim engine', () => {
+	test('the tile focus tracker follows keyboard focus into and out of view tiles', () => {
 		const instantiation = workbenchInstantiationService(undefined, store);
 		const contexts = store.add(instantiation.createInstance(ContextKeyService));
 		instantiation.stub(IContextKeyService, contexts);
-		let vimEnabled = true;
-		const vimChanged = store.add(new Emitter<void>());
-		instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ get enabled() { return vimEnabled; }, onDidChange: vimChanged.event }));
-		instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
-		instantiation.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({
-			onDidChangeViewContainers: Event.None,
-			getViewContainerById: id => upcastPartial<ViewContainer>({ id }),
-			getViewContainerLocation: () => ViewContainerLocation.Sidebar,
-		}));
-		let scoped: IScopedContextKeyService | undefined;
-		instantiation.stub(IPaneCompositePartService, upcastPartial<IPaneCompositePartService>({
-			getPaneComposite: () => upcastPartial<PaneCompositeDescriptor>({
-				instantiate: (services: IInstantiationService) => {
-					scoped = services.invokeFunction(accessor => accessor.get(IContextKeyService)) as IScopedContextKeyService;
-					let visible = false;
-					return upcastPartial<PaneComposite>({ getId: () => 'workbench.view.sample', create: () => { }, isVisible: () => visible, setVisible: value => { visible = value; }, getViewPaneContainer: () => undefined, dispose: () => { } });
-				},
-			}),
-		}));
-		const composites = store.add(instantiation.createInstance(ViewTileComposites));
-		composites.retain('workbench.view.sample');
-		composites.acquire('workbench.view.sample', { detach: () => { } });
-		const read = () => ({ tile: scoped?.getContextKeyValue('terminalFirstViewTile'), typeNavigation: scoped?.getContextKeyValue('listTypeNavigationMode') });
-		const withVim = read();
-		vimEnabled = false;
-		vimChanged.fire();
-		deepStrictEqual({ withVim, withoutVim: read() }, { withVim: { tile: true, typeNavigation: 'trigger' }, withoutVim: { tile: true, typeNavigation: undefined } });
+		const main = document.createElement('div');
+		document.body.appendChild(main);
+		store.add(toDisposable(() => main.remove()));
+		instantiation.stub(IWorkbenchLayoutService, upcastPartial<IWorkbenchLayoutService>({ mainContainer: main }));
+		const tile = main.appendChild(document.createElement('div'));
+		tile.className = 'terminal-first-tool-tile';
+		const inside = tile.appendChild(document.createElement('button'));
+		const outside = main.appendChild(document.createElement('button'));
+		store.add(instantiation.createInstance(TileListFocusTracker));
+		const key = () => contexts.getContextKeyValue('terminalFirstViewTile');
+		// Focus events are not guaranteed in a background test window, so drive the tracker the way a keystroke does.
+		const press = (element: HTMLElement) => { element.focus(); element.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true })); return key(); };
+		const whileInside = press(inside);
+		const whileOutside = press(outside);
+		inside.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+		const afterFocusIn = key();
+		inside.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: outside }));
+		deepStrictEqual({ whileInside, whileOutside, afterFocusIn, afterFocusOut: key() }, { whileInside: true, whileOutside: false, afterFocusIn: true, afterFocusOut: false });
 	});
 
-	test('the tile context menu service passes menus through unless the picker has armed a capture', async () => {
-		const shown: IContextMenuDelegate[] = [];
+	test('a capture hands over the next menu only while armed, and times out otherwise', async () => {
 		const capture = new TileContextMenuCapture();
-		const real = upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: delegate => { shown.push(delegate as IContextMenuDelegate); } });
-		const instantiation = workbenchInstantiationService(undefined, store);
-		const service = new TileContextMenuService(real, upcastPartial<IMenuService>({}), store.add(instantiation.createInstance(ContextKeyService)));
 		const delegate: IContextMenuDelegate = { getAnchor: () => document.body, getActions: () => [] };
-		service.showContextMenu(delegate);
-		const passedThrough = shown.length;
+		const unarmed = capture.capture(delegate);
 		const timedOut = await capture.arm(10);
 		const armed = capture.arm(1000);
 		const captured = capture.capture(delegate);
-		deepStrictEqual({ passedThrough, timedOut, captured, armedResolved: (await armed) === delegate, stillPassesThrough: (service.showContextMenu(delegate), shown.length) }, { passedThrough: 1, timedOut: undefined, captured: true, armedResolved: true, stillPassesThrough: 2 });
+		deepStrictEqual({ unarmed, timedOut, captured, armedResolved: (await armed) === delegate, afterwards: capture.capture(delegate) }, { unarmed: false, timedOut: undefined, captured: true, armedResolved: true, afterwards: false });
 	});
 
 	test('flattening keeps enabled actions in order and expands one level of submenus', () => {

@@ -154,6 +154,7 @@ import './contrib/terminal/electron-browser/terminal.contribution.js';
 import './contrib/terminalFirst/browser/terminalFirst.contribution.js';
 import './contrib/terminalFirst/browser/nativeVim.js';
 import './api/browser/terminalFirstVimStatus.js';
+import './contrib/terminalFirst/electron-browser/contextMenu.js';
 
 // Themes
 import './contrib/themes/browser/themes.test.contribution.js';

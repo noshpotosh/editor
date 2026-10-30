@@ -127,7 +127,7 @@ Every Terminal First surface is styled from design tokens (spacing, corner radiu
 | `terminalFirst.marker.foreground` | `list.highlightForeground` | File browser prompt and marked rows |
 | `terminalFirst.tile.border` | `editorGroup.border` (HC: `contrastBorder`) | Tile cards |
 | `terminalFirst.tile.activeBorder` | `focusBorder` (HC: `contrastActiveBorder`) | Active tile when more than one is open |
-| `terminalFirst.tile.hoverBorder` | `focusBorder` at 40% (HC: `contrastActiveBorder`) | Inactive tile under a resting pointer; halo of the active tile |
+| `terminalFirst.tile.hoverBorder` | opaque midpoint of `terminalFirst.tile.activeBorder` and `terminalFirst.tile.border` (HC: `contrastActiveBorder`) | Inactive tile under a resting pointer |
 | `terminalFirst.tile.gutterBackground` | `sideBar.background` | Gutter between tiles and view tiles |
 | `terminalFirst.copyMode.badgeBackground` | `badge.background` | Copy mode badge |
 | `terminalFirst.copyMode.badgeForeground` | `badge.foreground` | Copy mode badge |

@@ -20,7 +20,7 @@ export const TerminalFirstJumpListVisibleContext = new RawContextKey<boolean>('t
 export const TerminalFirstJumpListFocusedContext = new RawContextKey<boolean>('terminalFirstJumpListFocused', false);
 
 export const TerminalFirstShellContext = new RawContextKey<boolean>('terminalFirstShell', false);
-/** Set on the scoped context of every view tile, so lists inside tiles inherit it. */
+/** True while keyboard focus is inside a view tile (maintained from DOM focus, so extension trees count too). */
 export const TerminalFirstViewTileContext = new RawContextKey<boolean>('terminalFirstViewTile', false);
 /** True while the native Vim engine owns keyboard input. */
 export const TerminalFirstVimEnabledContext = new RawContextKey<boolean>('terminalFirstVimEnabled', false);

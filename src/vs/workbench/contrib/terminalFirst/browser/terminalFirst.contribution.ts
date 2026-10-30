@@ -24,7 +24,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ITerminalFirstService, TerminalFirstService } from './terminalFirstService.js';
 import './viewPruning.js';
-import './tileListNavigation.js';
+import { TileListFocusTracker } from './tileListNavigation.js';
 import { createTerminalFirstTerminalPolicy } from './terminalPolicy.js';
 import { SessionStripContribution } from './sessionStripContribution.js';
 import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';
@@ -48,6 +48,7 @@ if (terminalFirstEnabled) {
 	} });
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
 	registerWorkbenchContribution2(SessionStripContribution.ID, SessionStripContribution, WorkbenchPhase.BlockRestore);
+	registerWorkbenchContribution2(TileListFocusTracker.ID, TileListFocusTracker, WorkbenchPhase.BlockRestore);
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
 		overrides: {
 			'window.titleBarStyle': 'custom',
@@ -72,6 +73,8 @@ if (terminalFirstEnabled) {
 			'workbench.startupEditor': 'none',
 			'workbench.welcomePage.experimentalOnboarding': false,
 			'terminal.integrated.initialHint': false,
+			// Vim keys drive lists; type-ahead starts with `/` (list.triggerTypeNavigation) instead of eating letters.
+			'workbench.list.typeNavigationMode': 'trigger',
 			// Background reveals must not add tiles; the debug views open from the New Tile picker.
 			'debug.openDebug': 'neverOpen',
 			'debug.internalConsoleOptions': 'neverOpen',

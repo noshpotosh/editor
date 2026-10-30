@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
-import { activeContrastBorder, badgeBackground, badgeForeground, contrastBorder, focusBorder, listHighlightForeground, oneOf, quickInputBackground, quickInputForeground, registerColor, toolbarHoverBackground, transparent, widgetBorder } from '../../../../platform/theme/common/colorRegistry.js';
+import { activeContrastBorder, badgeBackground, badgeForeground, contrastBorder, focusBorder, listHighlightForeground, oneOf, quickInputBackground, quickInputForeground, registerColor, toolbarHoverBackground, widgetBorder, ColorTransformType } from '../../../../platform/theme/common/colorRegistry.js';
 import { EDITOR_GROUP_BORDER, PANEL_BACKGROUND, PANEL_BORDER, SIDE_BAR_BACKGROUND, TAB_ACTIVE_BACKGROUND, TAB_ACTIVE_BORDER_TOP, TAB_ACTIVE_FOREGROUND, TAB_INACTIVE_FOREGROUND } from '../../../common/theme.js';
 import { TERMINAL_BACKGROUND_COLOR, TERMINAL_CURSOR_FOREGROUND_COLOR, TERMINAL_FOREGROUND_COLOR } from '../../terminal/common/terminalColorRegistry.js';
 
@@ -55,8 +55,9 @@ export const TERMINAL_FIRST_TILE_ACTIVE_BORDER = registerColor('terminalFirst.ti
 	hcLight: activeContrastBorder
 }, localize('terminalFirst.tile.activeBorder', "Border color of the active tile when more than one tile is open."));
 export const TERMINAL_FIRST_TILE_HOVER_BORDER = registerColor('terminalFirst.tile.hoverBorder', {
-	dark: transparent(focusBorder, 0.4),
-	light: transparent(focusBorder, 0.4),
+	// An opaque midpoint, so the border transition never passes through transparency.
+	dark: { op: ColorTransformType.Mix, color: TERMINAL_FIRST_TILE_ACTIVE_BORDER, with: TERMINAL_FIRST_TILE_BORDER, ratio: 0.5 },
+	light: { op: ColorTransformType.Mix, color: TERMINAL_FIRST_TILE_ACTIVE_BORDER, with: TERMINAL_FIRST_TILE_BORDER, ratio: 0.5 },
 	hcDark: activeContrastBorder,
 	hcLight: activeContrastBorder
 }, localize('terminalFirst.tile.hoverBorder', "Border color of an inactive tile while the pointer rests on it."));

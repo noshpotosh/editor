@@ -67,7 +67,7 @@ Every upstream file VS NOSH modifies, the seam it uses, and how to re-validate i
 | `src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts` | gate | yes | platform/terminalFirst terminalFirstEnabled | Entering a workspace waits for the extension host that owns the CLI socket | `launch; e after cd` |
 | `src/vs/workbench/test/browser/notificationsToasts.test.ts` | test | no | none | Quiet-shell toast test | `vs/workbench/test/browser/notificationsToasts.test` |
 | `src/vs/workbench/test/browser/workbenchTestServices.ts` | test | no | none | TestEditorGroupView implements the added members | `npm run typecheck-client` |
-| `src/vs/workbench/workbench.desktop.main.ts` | hook-callout | no | fork entry imports | Loads the terminalFirst contribution, native Vim, and the Vim status widget | `launch` |
+| `src/vs/workbench/workbench.desktop.main.ts` | hook-callout | no | fork entry imports | Loads the terminalFirst contribution, native Vim, the Vim status widget, and the capturable context menu service | `launch` |
 
 ## Fork-owned files in upstream directories
 

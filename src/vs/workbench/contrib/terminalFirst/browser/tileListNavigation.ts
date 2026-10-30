@@ -7,7 +7,7 @@ import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { hasKey } from '../../../../base/common/types.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { ContextKeyExpr, ContextKeyExpression } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, ContextKeyExpression, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { KeybindingsRegistry, KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
@@ -21,6 +21,32 @@ import { ITerminalFirstLeaderService } from './terminalFirstLeader.js';
 import { ViewTileEditor } from './tileEditor.js';
 import { openContextMenu, runTileRowAction, showTileListActions } from './tileListActions.js';
 import { dockedNavigation } from './terminalFirstNavigation.js';
+import { addDisposableListener, EventType, getActiveElement, getWindow, isHTMLElement } from '../../../../base/browser/dom.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
+import { IWorkbenchContribution } from '../../../common/contributions.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
+
+/**
+ * Keeps `terminalFirstViewTile` true while keyboard focus is inside a view tile. The key is global
+ * rather than scoped because extension tree views are created from the root services, so a key on
+ * the tile's scoped context would never reach their lists.
+ */
+export class TileListFocusTracker extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.terminalFirstTileListFocus';
+
+	constructor(
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
+	) {
+		super();
+		const inTile = TerminalFirstViewTileContext.bindTo(contextKeyService);
+		const update = (target: EventTarget | null) => inTile.set(isHTMLElement(target) && !!target.closest('.terminal-first-tool-tile'));
+		this._register(addDisposableListener(layoutService.mainContainer, EventType.FOCUS_IN, event => update(event.target), true));
+		this._register(addDisposableListener(layoutService.mainContainer, EventType.FOCUS_OUT, event => update(event.relatedTarget), true));
+		// Keybindings resolve on keydown; refreshing from the active element here does not depend on focus events having fired.
+		this._register(addDisposableListener(getWindow(layoutService.mainContainer), EventType.KEY_DOWN, () => update(getActiveElement()), true));
+	}
+}
 
 /** A list inside a view tile has keyboard focus, native Vim is on, and no text input or find widget owns the keys. */
 export const tileListFocus = ContextKeyExpr.and(dockedNavigation, TerminalFirstViewTileContext, TerminalFirstVimEnabledContext, WorkbenchListFocusContextKey, WorkbenchTreeFindOpen.negate());

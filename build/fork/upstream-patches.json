@@ -94,6 +94,6 @@
 		{ "path": "src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts", "kind": "gate", "gated": true, "seam": "platform/terminalFirst terminalFirstEnabled", "why": "Entering a workspace waits for the extension host that owns the CLI socket", "validate": ["launch; e after cd"] },
 		{ "path": "src/vs/workbench/test/browser/notificationsToasts.test.ts", "kind": "test", "gated": false, "seam": "none", "why": "Quiet-shell toast test", "validate": ["vs/workbench/test/browser/notificationsToasts.test"] },
 		{ "path": "src/vs/workbench/test/browser/workbenchTestServices.ts", "kind": "test", "gated": false, "seam": "none", "why": "TestEditorGroupView implements the added members", "validate": ["npm run typecheck-client"] },
-		{ "path": "src/vs/workbench/workbench.desktop.main.ts", "kind": "hook-callout", "gated": false, "seam": "fork entry imports", "why": "Loads the terminalFirst contribution, native Vim, and the Vim status widget", "validate": ["launch"] }
+		{ "path": "src/vs/workbench/workbench.desktop.main.ts", "kind": "hook-callout", "gated": false, "seam": "fork entry imports", "why": "Loads the terminalFirst contribution, native Vim, the Vim status widget, and the capturable context menu service", "validate": ["launch"] }
 	]
 }

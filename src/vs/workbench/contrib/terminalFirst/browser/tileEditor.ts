@@ -30,11 +30,7 @@ import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser
 import { viewContainerHosts } from '../../../services/views/browser/viewContainerHost.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { getSelectionKeyboardEvent, IListService } from '../../../../platform/list/browser/listService.js';
-import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
-import { TerminalFirstViewTileContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { viewContainerDisplayName, viewContainerIcon } from './tileCatalog.js';
-import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
-import { TileContextMenuService } from './tileContextMenu.js';
 
 /** Container IDs of the built-in tool tiles; also maps tool tiles persisted before view tiles. */
 export const tileViewIds = { explorer: 'workbench.view.explorer', scm: 'workbench.view.scm' } as const;
@@ -71,7 +67,6 @@ export class ViewTileComposites extends Disposable {
 		@IPaneCompositePartService private readonly composites: IPaneCompositePartService,
 		@IViewDescriptorService private readonly descriptors: IViewDescriptorService,
 		@IContextKeyService private readonly contextKeys: IContextKeyService,
-		@INativeVimService private readonly vim: INativeVimService,
 	) {
 		super();
 		this._register(descriptors.onDidChangeViewContainers(({ removed }) => {
@@ -105,16 +100,7 @@ export class ViewTileComposites extends Disposable {
 			if (!descriptor) { return undefined; }
 			const store = new DisposableStore();
 			const element = $('.tile-tool-composite');
-			const scopedContextKeys = store.add(this.contextKeys.createScoped(element));
-			// Lists created by the views inherit these keys, so Vim keys apply to every list in a tile.
-			TerminalFirstViewTileContext.bindTo(scopedContextKeys).set(true);
-			// With Vim keys, type-ahead must wait for an explicit trigger (`/`) instead of eating j/k.
-			const typeNavigation = scopedContextKeys.createKey<string | undefined>('listTypeNavigationMode', undefined);
-			const syncTypeNavigation = () => this.vim.enabled ? typeNavigation.set('trigger') : typeNavigation.reset();
-			store.add(this.vim.onDidChange(syncTypeNavigation));
-			syncTypeNavigation();
-			// Views inside the tile get a context menu service the actions picker can borrow menus from.
-			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, scopedContextKeys], [IContextMenuService, this.instantiation.createInstance(TileContextMenuService)])));
+			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, store.add(this.contextKeys.createScoped(element))])));
 			const composite = store.add(descriptor.instantiate(scoped));
 			composite.create(element);
 			entry = { composite, element, store, owner: undefined, references: 0 };
