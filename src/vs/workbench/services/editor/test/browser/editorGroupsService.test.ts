@@ -20,6 +20,9 @@ import { TestInstantiationService } from '../../../../../platform/instantiation/
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { IContextKeyService, RawContextKey } from '../../../../../platform/contextkey/common/contextkey.js';
+import { Memento } from '../../../../common/memento.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { IEditorPartUIState } from '../../../../browser/parts/editor/editorPart.js';
 import { Emitter } from '../../../../../base/common/event.js';
 import { isEqual } from '../../../../../base/common/resources.js';
 import { CloseAllEditorGroupsAction } from '../../../../browser/parts/editor/editorActions.js';
@@ -2153,6 +2156,32 @@ suite('EditorGroupsService', () => {
 		assert.strictEqual(group.isPinned(input2), true);
 	});
 
+
+	test('terminal sessions recover colliding persisted group IDs without losing live groups', async () => {
+		const [part, instantiationService] = await createPart();
+		await part.whenRestored;
+		const first = part.activeGroup;
+		const input = createTestFileEditorInput(URI.file('/one/file.txt'), TEST_EDITOR_INPUT_ID);
+		await first.openEditor(input, { pinned: true });
+		const state = part.createState();
+		const memento = new Memento<{ 'editorpart.sessions': { active: string; states: Record<string, IEditorPartUIState> } }>(part.getId(), instantiationService.get(IStorageService));
+		memento.getMemento(StorageScope.WORKSPACE, StorageTarget.USER)['editorpart.sessions'] = { active: 'one', states: { one: state, two: structuredClone(state) } };
+		part.sessions.activate('one');
+		part.sessions.activate('two');
+		const second = part.activeGroup;
+		assert.notStrictEqual(second.id, first.id);
+		part.sessions.activate('one');
+		part.layout(1080, 800, 0, 0);
+		part.testSaveState();
+		assert.deepStrictEqual({ first: part.activeGroup === first, input: first.activeEditor === input, retained: part.getGroup(second.id) === second }, { first: true, input: true, retained: true });
+		part.sessions.activate('two');
+		part.layout(1080, 800, 0, 0);
+		part.testSaveState();
+		assert.strictEqual(part.activeGroup, second);
+		await part.sessions.close('one');
+		await part.sessions.close('two');
+		part.clearState();
+	});
 
 	test('terminal sessions retain live dirty groups without exposing them in active navigation', async () => {
 		const [part] = await createPart();

@@ -14,6 +14,8 @@ import { IEditorContribution } from '../../../common/editorCommon.js';
 import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { ICommandService, CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { ICodeEditorService } from '../../../browser/services/codeEditorService.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { ResultKind } from '../../../../platform/keybinding/common/keybindingResolver.js';
 import { NativeVim } from '../common/nativeVim.js';
 import { INativeVimService } from '../common/nativeVimService.js';
 import './nativeVim.css';
@@ -45,6 +47,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		@INativeVimService private readonly vim: INativeVimService,
 		@IContextKeyService context: IContextKeyService,
 		@ICommandService commands: ICommandService,
+		@IKeybindingService keybindings: IKeybindingService,
 	) {
 		super();
 		this.originalCursorStyle = editor.getRawOptions().cursorStyle;
@@ -109,8 +112,16 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		this._register(editor.onKeyDown(event => {
 			if (!this.active || event.browserEvent.isComposing || event.browserEvent.keyCode === 229 || event.metaKey || event.altKey) { return; }
 			const key = event.browserEvent.key;
+			// Let the leader and directional pane shortcuts (including user overrides) reach
+			// the workbench before Vim consumes an unknown Control key or a remap.
+			if (event.ctrlKey && !event.shiftKey && (key === ' ' || ['h', 'j', 'k', 'l'].includes(key.toLowerCase()))
+				&& context.getContextKeyValue('terminalFirstEnabled')
+				&& !['terminalFirstShell', 'terminalFirstBrowserVisible', 'terminalFirstFloatingVisible', 'terminalFirstJumpListVisible', 'inQuickOpen'].some(key => context.getContextKeyValue(key))) {
+				const resolution = keybindings.softDispatch(event, this.editor.getDomNode()!);
+				if (resolution.kind !== ResultKind.NoMatchingKb) { return; }
+			}
 			if (key === 'Escape' && (context.getContextKeyValue('suggestWidgetVisible') || context.getContextKeyValue('parameterHintsVisible'))) { return; }
-			const specialKeys: Record<string, string> = { Escape: '<Esc>', Enter: '<CR>', Backspace: '<BS>', Tab: '<Tab>' };
+			const specialKeys: Record<string, string> = { Escape: '<Esc>', Enter: '<CR>', Backspace: '<BS>', Tab: event.shiftKey ? '<S-Tab>' : '<Tab>' };
 			const normalized = event.ctrlKey ? `<C-${key.toLowerCase()}>` : specialKeys[key];
 			// Consume Normal-mode printable keys before workbench shortcuts or text input.
 			if (!normalized) {

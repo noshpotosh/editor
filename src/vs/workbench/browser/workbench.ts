@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SessionStripPart } from './parts/terminalFirst/sessionStripPart.js';
 import { terminalFirstEnabled } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 import './style.js';
 import { runWhenWindowIdle } from '../../base/browser/dom.js';
@@ -325,14 +324,10 @@ export class Workbench extends Layout {
 		// Warm up font cache information before building up too many dom elements
 		this.restoreFontInfo(storageService, configurationService);
 
-		if (terminalFirstEnabled) {
-			this._register(instantiationService.createInstance(SessionStripPart));
-		}
 		// Create Parts
 		for (const { id, role, classes, options } of [
 			{ id: Parts.TITLEBAR_PART, role: 'none', classes: ['titlebar'] },
 			{ id: Parts.BANNER_PART, role: 'banner', classes: ['banner'] },
-			...(terminalFirstEnabled ? [{ id: Parts.TERMINAL_FIRST_PART, role: 'navigation', classes: ['terminal-first-sessions'] }] : []),
 			{ id: Parts.ACTIVITYBAR_PART, role: 'none', classes: ['activitybar', this.getSideBarPosition() === Position.LEFT ? 'left' : 'right'] }, // Use role 'none' for some parts to make screen readers less chatty #114892
 			{ id: Parts.SIDEBAR_PART, role: 'none', classes: ['sidebar', this.getSideBarPosition() === Position.LEFT ? 'left' : 'right'] },
 			{ id: Parts.EDITOR_PART, role: 'main', classes: ['editor'], options: { restorePreviousState: this.willRestoreEditors() } },

@@ -3,8 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
+import { stub } from 'sinon';
 import { Selection } from '../../../../common/core/selection.js';
-import { Event } from '../../../../../base/common/event.js';
+import { Emitter, Event } from '../../../../../base/common/event.js';
+import { IKeyboardEvent, StandardKeyboardEvent } from '../../../../../base/browser/keyboardEvent.js';
+import { toDisposable } from '../../../../../base/common/lifecycle.js';
+import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
+import { IKeybindingService } from '../../../../../platform/keybinding/common/keybinding.js';
+import { ResultKind } from '../../../../../platform/keybinding/common/keybindingResolver.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { createCodeEditorServices, instantiateTestCodeEditor } from '../../../../test/browser/testCodeEditor.js';
 import { instantiateTextModel } from '../../../../test/common/testTextModel.js';
@@ -14,7 +20,7 @@ import { VimSharedState } from '../../common/nativeVim.js';
 
 suite('Native Vim editor integration', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
-	function setup(text: string, readOnly = false, hasTextFocus = true) {
+	function setup(text: string, readOnly = false, hasTextFocus = true, keyDown?: Event<IKeyboardEvent>) {
 		const services = createCodeEditorServices(store);
 		services.stub(INativeVimService, {
 			enabled: true, shared: new VimSharedState(), onDidChange: Event.None, hint: '',
@@ -22,10 +28,46 @@ suite('Native Vim editor integration', () => {
 		});
 		const model = store.add(instantiateTextModel(services, text));
 		const editor = store.add(instantiateTestCodeEditor(services, model, { readOnly, hasTextFocus }));
+		if (keyDown) {
+			const listener = stub(editor, 'onKeyDown').callsFake(keyDown);
+			store.add(toDisposable(() => listener.restore()));
+		}
 		const contribution = store.add(editor.registerAndInstantiateContribution(NativeVimContribution.ID, NativeVimContribution));
 		const keys = (sequence: string[]) => { for (const key of sequence) { if (!contribution.handle(key)) { editor.trigger('keyboard', 'type', { text: key }); } } };
-		return { editor, model, contribution, keys };
+		return { editor, model, contribution, keys, services };
 	}
+	test('resolved Ctrl+H/J/K/L and Ctrl+Space bypass Vim in every mode, including user overrides', () => {
+		const keyDown = store.add(new Emitter<IKeyboardEvent>());
+		const { services, contribution } = setup('abc', false, true, keyDown.event);
+		services.get(IContextKeyService).createKey('terminalFirstEnabled', true);
+		const dispatch = stub(services.get(IKeybindingService), 'softDispatch').returns({ kind: ResultKind.KbFound, commandId: 'user.command', commandArgs: undefined, isBubble: false });
+		store.add(toDisposable(() => dispatch.restore()));
+		const handled: string[] = [];
+		const handle = stub(contribution, 'handle').callsFake(key => { handled.push(key); return true; });
+		store.add(toDisposable(() => handle.restore()));
+		const prevented: boolean[] = [];
+		for (const mode of ['normal', 'visual', 'insert'] as const) {
+			contribution.engine.reset();
+			if (mode !== 'normal') { contribution.engine.key(mode === 'visual' ? 'v' : 'i'); }
+			for (const key of ['h', 'j', 'k', 'l', ' ']) {
+				const event = new KeyboardEvent('keydown', { key, ctrlKey: true, cancelable: true });
+				keyDown.fire(new StandardKeyboardEvent(event));
+				prevented.push(event.defaultPrevented);
+			}
+		}
+		assert.deepStrictEqual({ handled, prevented }, { handled: [], prevented: Array(15).fill(false) });
+	});
+	test('Tab and Shift+Tab reach remaps as distinct keys', () => {
+		const keyDown = store.add(new Emitter<IKeyboardEvent>());
+		const { contribution } = setup('abc', false, true, keyDown.event);
+		const handled: string[] = [];
+		const handle = stub(contribution, 'handle').callsFake(key => { handled.push(key); return true; });
+		store.add(toDisposable(() => handle.restore()));
+		for (const shiftKey of [false, true]) {
+			keyDown.fire(new StandardKeyboardEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey, cancelable: true })));
+		}
+		assert.deepStrictEqual(handled, ['<Tab>', '<S-Tab>']);
+	});
 	test('change and inserted text undo together', async () => {
 		const { model, keys } = setup('one two');
 		keys(['c', 'i', 'w', 'h', 'i', '<Esc>']); const changed = model.getValue(); await model.undo();

@@ -10,14 +10,14 @@
 	flex: 1;
 	min-height: 0;
 	display: flex;
-	gap: 8px;
+	gap: var(--vscode-spacing-size80);
 }
 .terminal-first-file-browser .file-browser-left {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
 	min-width: 0;
-	gap: 8px;
+	gap: var(--vscode-spacing-size80);
 }
 .terminal-first-file-browser .file-browser-results {
 	display: flex;
@@ -27,8 +27,7 @@
 }
 .terminal-first-file-browser .file-browser-path,
 .terminal-first-file-browser .file-browser-pane-title {
-	color: var(--vscode-descriptionForeground);
-	padding: 4px 8px;
+	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -43,26 +42,40 @@
 	align-items: center;
 }
 .terminal-first-file-browser .file-browser-marker {
-	width: 20px;
+	width: var(--vscode-spacing-size200);
 	flex-shrink: 0;
-	text-align: center;
-	color: transparent;
-}
-.terminal-first-file-browser .focused .file-browser-marker,
-.terminal-first-file-browser .file-browser-marker.marked {
-	color: var(--vscode-list-highlightForeground);
-}
-.terminal-first-file-browser .file-browser-prompt {
-	border: var(--vscode-strokeThickness, 1px) solid var(--vscode-widget-border, var(--vscode-panel-border));
-	border-radius: var(--vscode-cornerRadius-small, 4px);
-	padding: 4px;
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	justify-content: center;
+	color: var(--vscode-terminalFirst-marker-foreground);
+}
+.terminal-first-file-browser .file-browser-marker .codicon {
+	font-size: var(--vscode-codiconFontSize-compact);
+}
+.terminal-first-file-browser .file-browser-marker:not(.marked) {
+	visibility: hidden;
+}
+.terminal-first-file-browser .file-browser-prompt {
+	border: var(--vscode-strokeThickness) solid var(--vscode-input-border, var(--vscode-terminalFirst-floating-border, transparent));
+	border-radius: var(--vscode-cornerRadius-small);
+	background: var(--vscode-input-background);
+	padding: var(--vscode-spacing-size20) var(--vscode-spacing-size40);
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-spacing-size40);
+}
+.terminal-first-file-browser .file-browser-prompt:focus-within {
+	border-color: var(--vscode-focusBorder);
+}
+/* The prompt border carries focus, so the embedded input box must not draw a second ring. */
+.monaco-workbench .terminal-first-file-browser .file-browser-prompt .monaco-inputbox.synthetic-focus,
+.monaco-workbench .terminal-first-file-browser .file-browser-prompt input:focus {
+	outline: none;
 }
 .terminal-first-file-browser .file-browser-prompt-prefix {
-	color: var(--vscode-focusBorder);
-	padding-left: 8px;
+	display: flex;
+	color: var(--vscode-terminalFirst-marker-foreground);
+	padding-left: var(--vscode-spacing-size40);
 }
 .terminal-first-file-browser .monaco-inputbox {
 	flex: 1;
@@ -77,7 +90,8 @@
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
-	border-radius: var(--vscode-cornerRadius-medium, 6px);
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-floating-border, transparent);
+	border-radius: var(--vscode-cornerRadius-medium);
 	display: flex;
 	flex-direction: column;
 }
@@ -87,7 +101,8 @@
 	width: 100%;
 }
 .terminal-first-file-browser .file-browser-preview-message {
-	padding: 8px;
+	padding: var(--vscode-spacing-size80);
+	color: var(--vscode-descriptionForeground);
 	white-space: pre;
 	overflow: auto;
 	flex: 1;
@@ -96,17 +111,17 @@
 .terminal-first-file-browser .file-browser-footer {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 2px 8px;
-	border-radius: var(--vscode-cornerRadius-small, 4px);
+	gap: var(--vscode-spacing-size80);
+	padding: 0 var(--vscode-spacing-size40);
 }
 .terminal-first-file-browser .file-browser-status {
 	flex: 1;
 	min-width: 0;
-	color: var(--vscode-descriptionForeground);
-	font-size: var(--vscode-fontSize-label1);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .terminal-first-file-browser .file-browser-preview-message:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: -1px;
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: calc(-1 * var(--vscode-strokeThickness));
 }

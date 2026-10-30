@@ -304,6 +304,9 @@ export interface IEditorGroupMenuIds {
  * A helper to access and mutate an editor group within an editor part.
  */
 export interface IEditorGroupView extends IDisposable, ISerializableView, IEditorGroup {
+
+	/** Updates editor visibility when retaining or restoring a session. */
+	setVisible(visible: boolean): void;
 	/** Resolve save/discard/cancel decisions without removing any editor tabs. */
 	confirmCloseAllEditors(): Promise<boolean>;
 

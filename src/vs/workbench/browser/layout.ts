@@ -285,7 +285,6 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 
 	private titleBarPartView!: ISerializableView;
 	private bannerPartView!: ISerializableView;
-	private terminalFirstPartView: ISerializableView | undefined;
 	private activityBarPartView!: ISerializableView;
 	private sideBarPartView!: ISerializableView;
 	private panelPartView!: ISerializableView;
@@ -1647,7 +1646,6 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	protected createWorkbenchLayout(): void {
 		const titleBar = this.getPart(Parts.TITLEBAR_PART);
 		const bannerPart = this.getPart(Parts.BANNER_PART);
-		this.terminalFirstPartView = terminalFirstEnabled ? this.getPart(Parts.TERMINAL_FIRST_PART) : undefined;
 		const editorPart = this.getPart(Parts.EDITOR_PART);
 		const activityBar = this.getPart(Parts.ACTIVITYBAR_PART);
 		const panelPart = this.getPart(Parts.PANEL_PART);
@@ -1676,7 +1674,6 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			[Parts.AUXILIARYBAR_PART]: this.auxiliaryBarPartView
 		};
 
-		if (this.terminalFirstPartView) { viewMap[Parts.TERMINAL_FIRST_PART] = this.terminalFirstPartView; }
 		const fromJSON = ({ type }: { type: Parts }) => viewMap[type];
 		const workbenchGrid = SerializableGrid.deserialize(
 			this.createGridDescriptor(),
@@ -1953,7 +1950,8 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setSideBarHidden(hidden: boolean): void {
-		if (!hidden && terminalFirstPolicy.shell) { return; }
+		// VS NOSH hosts every view container in a tile, so the sidebar never shows.
+		if (!hidden && terminalFirstEnabled) { return; }
 		if (!hidden && this.setAuxiliaryBarMaximized(false) && this.isVisible(Parts.SIDEBAR_PART)) {
 			return; // return: leaving maximised auxiliary bar made this part visible
 		}
@@ -2016,20 +2014,20 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		const focusedPart = [Parts.PANEL_PART, Parts.SIDEBAR_PART, Parts.AUXILIARYBAR_PART].find(part => this.hasFocus(part)) as SINGLE_WINDOW_PARTS | undefined;
 
 		if (sideBarPosition === Position.LEFT) {
-			this.workbenchGrid.moveViewTo(this.activityBarPartView, [this.terminalFirstPartView ? 3 : 2, 0]);
+			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, 0]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Left : Direction.Right);
 			if (auxiliaryBarSiblingToEditor) {
 				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Right);
 			} else {
-				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [this.terminalFirstPartView ? 3 : 2, -1]);
+				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [2, -1]);
 			}
 		} else {
-			this.workbenchGrid.moveViewTo(this.activityBarPartView, [this.terminalFirstPartView ? 3 : 2, -1]);
+			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, -1]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Right : Direction.Left);
 			if (auxiliaryBarSiblingToEditor) {
 				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Left);
 			} else {
-				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [this.terminalFirstPartView ? 3 : 2, 0]);
+				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [2, 0]);
 			}
 		}
 
@@ -2297,7 +2295,8 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setAuxiliaryBarHidden(hidden: boolean, skipLayout?: boolean): void {
-		if (!hidden && terminalFirstPolicy.shell) { return; }
+		// VS NOSH hosts every view container in a tile, so the secondary sidebar never shows.
+		if (!hidden && terminalFirstEnabled) { return; }
 		if (hidden && this.setAuxiliaryBarMaximized(false) && !this.isVisible(Parts.AUXILIARYBAR_PART)) {
 			return; // return: leaving maximised auxiliary bar made this part hidden
 		}
@@ -2756,7 +2755,6 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 				size: width,
 				data: [
 					...(this.shouldShowBannerFirst() ? titleAndBanner.reverse() : titleAndBanner),
-					...(this.terminalFirstPartView ? [{ type: 'leaf' as const, data: { type: Parts.TERMINAL_FIRST_PART }, size: this.terminalFirstPartView.minimumHeight, visible: true }] : []),
 					{
 						type: 'branch',
 						data: middleSection,

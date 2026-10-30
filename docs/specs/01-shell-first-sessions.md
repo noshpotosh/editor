@@ -40,10 +40,10 @@ Goals:
 ### Surfaces
 
 - **S1.11** Shell mode: the panel is maximized and centered at the bottom with its header hidden. Activity bar, status bar, sidebar, auxiliary bar, sashes, and the panel frame are hidden. The title-bar toolbar and window title are hidden.
-- **S1.12** Editor mode: the panel is hidden. Activity bar and status bar are shown. The sidebar is hidden on every surface or session change, and the auxiliary bar is always hidden.
+- **S1.12** Editor mode: the panel is hidden and the status bar is shown. The activity bar, sidebar, and auxiliary bar are removed: `layout.ts` refuses to show the sidebar or auxiliary bar whenever `terminalFirstEnabled`, and views open as tiles (S9.18).
 - **S1.13** Entering editor mode sets the session's directory, using the first available of: an explicit `cwd` from the CLI, the shell's detected cwd (shell integration), the stored session cwd, the shell's initial cwd, or the current workspace folder. The managed workspace's single folder is then replaced with that directory. A missing directory is an error.
 - **S1.14** Closing the last editor in an editor-mode session returns that session to shell mode.
-- **S1.15** (Working tree) There is no command or button to go from editor to shell. The only path is S1.14. See Open questions.
+- **S1.15** `Ctrl+Space e` opens the editor; `Ctrl+Space q` or `Ctrl+Space Escape` returns to the shell without closing buffers.
 - **S1.16** All surface changes are serialized through one `Sequencer`, so rapid key presses cannot interleave transitions.
 
 ### Per-session editors
@@ -61,7 +61,7 @@ Goals:
 
 ### Session strip
 
-- **S1.24** A 36 px window part above both surfaces. It contains one tab per session (title plus `×` close button) and a `+` (New Terminal) button.
+- **S1.24** SessionTabsWidget occupies the main window’s 36 px custom title bar. Tabs display mode glyphs and dirty indicators, plus close and New Terminal buttons. Controls are not draggable; gaps retain window dragging.
 - **S1.25** The strip is a `tablist`. Only the active tab is in the tab order. Left/Right arrows switch sessions and keep focus on the newly active tab. Focus is restored after re-render.
 
 ### Persistence
@@ -95,7 +95,7 @@ Storage: `terminalFirst.sessions` (workspace).
 | Service interface | `src/vs/workbench/services/terminalFirst/common/terminalFirst.ts` |
 | Gate, policy, context keys | `src/vs/workbench/services/terminalFirst/common/terminalFirstPolicy.ts` |
 | Commands and default settings | `src/vs/workbench/contrib/terminalFirst/browser/terminalFirst.contribution.ts` |
-| Session strip part | `src/vs/workbench/browser/parts/terminalFirst/sessionStripPart.ts`, `sessionStrip.css` |
+| Session tabs widget | `src/vs/workbench/browser/parts/terminalFirst/sessionStripPart.ts`, `sessionStrip.css` |
 | Per-session editor groups | `src/vs/workbench/browser/parts/editor/editorPart.ts`, `editorGroupView.ts`, `editorGroupsService.ts` (`sessions` API) |
 | Command gate | `src/vs/workbench/services/commands/common/commandService.ts` |
 | Terminal creation gate | `src/vs/workbench/contrib/terminal/browser/terminalService.ts` |
@@ -116,7 +116,7 @@ Design decisions:
 
 ## Known gaps and risks
 
-- No UI path from editor to shell other than closing every editor (S1.15). A user with a dirty buffer they want to keep cannot get back to the shell.
+- Global leader navigation now preserves dirty buffers when returning to the shell (S1.15).
 - `present()` shows the status bar in editor mode, but the default settings set `workbench.statusBar.visible: false`. The effective behavior should be confirmed and one source of truth chosen.
 - The command gate silently returns `undefined` for blocked commands. Extensions and keybindings get no feedback, and users get no signal that a command was suppressed.
 - Workspace-scoped settings are copied once into the managed workspace. Later edits to an original `.code-workspace` file are not synced.
@@ -126,8 +126,8 @@ Design decisions:
 
 ## Open questions
 
-1. Is "enter with `code`, leave by closing all editors" the intended model? If not, restore a toggle. If so, where does it bind (`Cmd+Escape`, a strip control, `:term`)?
-2. Should the session strip show each session's mode (shell or editor) and a dirty indicator?
+1. Resolved: global leader provides explicit editor/shell navigation.
+2. Resolved: title-bar tabs show mode and dirty state.
 3. Should blocked commands produce a one-time notification or a log entry?
 4. Should session titles be user-renamable and persisted?
 5. Should the status bar be visible in editor mode by default?
@@ -145,3 +145,8 @@ Design decisions:
 - [ ] Tasks, debugging with a terminal, and extensions that create terminals fail gracefully.
 - [ ] Reload restores every session, its mode, its editors, and dirty buffers. PIDs are reported before and after.
 - [ ] Workspace trust prompt on first launch still works.
+
+
+### Startup integration update
+
+Local folder launches are translated to a managed workspace in the main process before loading the renderer. Other launches retain the existing managed-workspace transition. The renderer recognizes managed files in workspace storage and avoids re-entering them. Shell launch configs directly supply PATH, the Electron runtime, and the window-scoped CLI pointer; extension registration and CLI initialization finish after presentation. `code/terminalFirst/*` performance marks expose each phase. The helper retries a missing pointer for up to two seconds.

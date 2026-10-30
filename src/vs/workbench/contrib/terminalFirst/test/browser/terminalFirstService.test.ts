@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual, rejects, strictEqual } from 'assert';
+import { DeferredPromise } from '../../../../../base/common/async.js';
+import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { toDisposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
@@ -19,7 +21,7 @@ import { IEditorGroupsService, IEditorPart, IEditorGroup } from '../../../../ser
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { TestEditorInput, TestEditorService, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
-import { ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
+import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService, IWorkspace } from '../../../../../platform/workspace/common/workspace.js';
@@ -27,10 +29,12 @@ import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.j
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
 import { TestDialogService } from '../../../../../platform/dialogs/test/common/testDialogService.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
+import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
+	teardown(() => { terminalFirstPolicy.mode = 'starting'; });
 
 	/** Creates real controller behavior with terminal and layout boundaries replaced by small fakes. */
 	function fixture(filesToOpenOrCreate?: IPath[]) {
@@ -101,6 +105,7 @@ suite('Terminal First', () => {
 			return terminal;
 		};
 		instantiationService.stub(IEditorService, editors);
+		instantiationService.stub(ITerminalEditorService, upcastPartial<ITerminalEditorService>({ openEditor: async () => { } }));
 		instantiationService.stub(ITerminalService, upcastPartial<ITerminalService>({
 			whenConnected: Promise.resolve(),
 			instances: allTerminals,
@@ -126,9 +131,9 @@ suite('Terminal First', () => {
 			setPanelAlignment: () => { },
 			layout: () => { },
 		}));
-		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({ onDidLayout: Event.None, sessions: { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose } }), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
+		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart: upcastPartial<IEditorPart>({ groups: [upcastPartial<IEditorGroup>({ id: 0 })], count: 1, onDidAddGroup: Event.None, onDidRemoveGroup: Event.None, onDidLayout: Event.None, sessions: { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose } }), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
-		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate }));
+		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed') }));
 		instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('new.ts'));
 		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({}));
 		const managed = URI.file('/managed/vs-nosh.code-workspace');
@@ -141,6 +146,15 @@ suite('Terminal First', () => {
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
 		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: () => { cancelEditorClose = true; }, dialog, config, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
 	}
+
+	test('presents the shell before extension registration completes', async () => {
+		const state = fixture();
+		const registered = new DeferredPromise<boolean>();
+		state.instantiationService.stub(IExtensionService, 'whenInstalledExtensionsRegistered', () => registered.p);
+		await state.service.initialize();
+		deepStrictEqual({ shell: state.mainContainer.classList.contains('terminal-first-shell'), cli: state.commands.includes('terminalFirst.initializeShell') }, { shell: true, cli: false });
+		await registered.complete(true);
+	});
 
 	test('reveals the settled shell after startup', async () => {
 		const state = fixture();
@@ -467,31 +481,56 @@ suite('Terminal First', () => {
 		strictEqual(state.hidden.get(Parts.STATUSBAR_PART), false);
 	});
 
-	test('editor starts with a collapsed sidebar and preserves user visibility while opening files', async () => {
+	test('editor has no sidebar, secondary sidebar, or activity bar', async () => {
 		const state = fixture();
 		await state.service.initialize();
 		await state.service.showEditor();
-		deepStrictEqual([state.hidden.get(Parts.SIDEBAR_PART), state.hidden.get(Parts.ACTIVITYBAR_PART), state.commands.includes('workbench.view.explorer')], [true, false, false]);
-		state.hidden.set(Parts.SIDEBAR_PART, false);
-		await state.service.openFiles(['file:///project/file.ts'], state.active!.shellIntegrationNonce, false);
-		strictEqual(state.hidden.get(Parts.SIDEBAR_PART), false);
-		await state.service.showShell();
-		await state.service.showEditor();
-		strictEqual(state.hidden.get(Parts.SIDEBAR_PART), true);
+		deepStrictEqual([state.hidden.get(Parts.SIDEBAR_PART), state.hidden.get(Parts.AUXILIARYBAR_PART), state.hidden.get(Parts.ACTIVITYBAR_PART), state.commands.includes('workbench.view.explorer')], [true, true, true, false]);
 	});
 
-	test('closing the last file returns to the shell', async () => {
+	test('terminal tile CLI requests return to their owning session', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		const ownerId = state.service.sessions.find(session => session.active)!.id;
+		await state.service.openTerminalTile(0);
+		const tile = state.created[state.created.length - 1];
+		await state.service.newTerminal();
+		await state.service.openFiles(['file:///project/from-tile.ts'], tile.shellIntegrationNonce, false);
+		deepStrictEqual({ active: state.service.sessions.find(session => session.active)?.id, opened: state.opened.at(-1)?.map(input => input.resource.path) }, { active: ownerId, opened: ['/project/from-tile.ts'] });
+	});
+
+	test('closed terminal tiles stop routing CLI requests to their session', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		await state.service.openTerminalTile(0);
+		const tile = state.created[state.created.length - 1];
+		const tileNonces = () => state.storage.getObject<{ sessions: { tileNonces?: string[] }[] }>('terminalFirst.sessions', StorageScope.WORKSPACE)?.sessions.flatMap(session => session.tileNonces ?? []);
+		const open = tileNonces();
+		tile.dispose();
+		deepStrictEqual({ open, closed: tileNonces() }, { open: [tile.shellIntegrationNonce], closed: [] });
+	});
+
+	test('terminal tile launch failure preserves its owning session', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		const before = state.service.sessions;
+		state.failCreation();
+		await rejects(state.service.openTerminalTile(0), /launch failed/);
+		deepStrictEqual(state.service.sessions, before);
+	});
+
+	test('closing the last file preserves the empty tiling workspace', async () => {
 		const state = fixture();
 		await state.service.initialize();
 		await state.service.openFiles(['file:///project/file.ts'], state.active!.shellIntegrationNonce, false);
 		const editor = state.editors.editors[0];
 		state.editors.editors = [];
-		const returned = new Promise<void>(resolve => {
-			const listener = state.focused.event(() => { listener.dispose(); resolve(); });
-		});
 		state.closed.fire({ editor, groupId: 0, context: EditorCloseContext.UNKNOWN, index: 0, sticky: false });
-		await returned;
-		strictEqual(state.maximized, true);
+		await state.service.showEditor(false);
+		deepStrictEqual([state.service.sessions[0].mode, state.maximized], ['editor', false]);
 	});
 
 	test('--wait survives mode switches and releases only on file close', async () => {

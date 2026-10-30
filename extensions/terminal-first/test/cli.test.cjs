@@ -129,3 +129,14 @@ test('bare code opens the editor at the shell current directory', async t => {
 		cwd: pathToFileURL(await fs.realpath(cwd)).href,
 	}]);
 });
+
+
+test('waits briefly for a cold-start pointer to be published', async t => {
+	const window = await createWindow(t);
+	await fs.unlink(window.pointerPath);
+	const pending = openFiles([], window.environment, window.directory);
+	await new Promise(resolve => setTimeout(resolve, 75));
+	await fs.writeFile(window.pointerPath, JSON.stringify({ socketPath: window.socketPath }));
+	await pending;
+	assert.equal(window.requests.length, 1);
+});

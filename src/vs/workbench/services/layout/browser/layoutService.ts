@@ -21,7 +21,6 @@ export const IWorkbenchLayoutService = refineServiceDecorator<ILayoutService, IW
 export const enum Parts {
 	TITLEBAR_PART = 'workbench.parts.titlebar',
 	BANNER_PART = 'workbench.parts.banner',
-	TERMINAL_FIRST_PART = 'workbench.parts.terminalFirst',
 	ACTIVITYBAR_PART = 'workbench.parts.activitybar',
 	SIDEBAR_PART = 'workbench.parts.sidebar',
 	PANEL_PART = 'workbench.parts.panel',

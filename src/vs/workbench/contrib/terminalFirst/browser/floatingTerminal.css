@@ -11,8 +11,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
-	font-size: var(--vscode-fontSize-body1);
+	gap: var(--vscode-spacing-size80);
+	padding: 0 var(--vscode-spacing-size40);
 }
 
 .terminal-first-floating .floating-terminal-header span {
@@ -26,6 +26,7 @@
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
+	border-radius: var(--vscode-cornerRadius-medium);
 }
 
 .monaco-workbench .terminal-first-floating .floating-terminal-body .terminal-wrapper {

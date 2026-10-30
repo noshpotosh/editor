@@ -520,6 +520,11 @@ export interface IEditorPart extends IEditorGroupsContainer {
 	hasMaximizedGroup(): boolean;
 
 	/**
+	 * Exchange the grid positions of two groups of this part. Each group takes the other's cell size.
+	 */
+	swapGroups(group: IEditorGroup | GroupIdentifier, other: IEditorGroup | GroupIdentifier): void;
+
+	/**
 	 * Enable or disable centered editor layout.
 	 */
 	centerLayout(active: boolean): void;

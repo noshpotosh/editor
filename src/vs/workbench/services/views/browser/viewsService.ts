@@ -33,6 +33,7 @@ import { FilterViewPaneContainer } from '../../../browser/parts/views/viewsViewl
 import { IPaneCompositePartService } from '../../panecomposite/browser/panecomposite.js';
 import { ICommandActionTitle, ILocalizedString } from '../../../../platform/action/common/action.js';
 import { IEditorService } from '../../editor/common/editorService.js';
+import { viewContainerHosts } from './viewContainerHost.js';
 import { IViewsService } from '../common/viewsService.js';
 
 export class ViewsService extends Disposable implements IViewsService {
@@ -84,6 +85,11 @@ export class ViewsService extends Disposable implements IViewsService {
 		this._register(this.paneCompositeService.onDidPaneCompositeClose(e => this._onDidChangeViewContainerVisibility.fire({ id: e.composite.getId(), visible: false, location: e.viewContainerLocation })));
 
 		this.focusedViewContextKey = FocusedViewContext.bindTo(contextKeyService);
+		this._register(viewContainerHosts.onDidChangeVisibility(({ id, visible }) => {
+			const container = this.viewDescriptorService.getViewContainerById(id);
+			const location = container && this.viewDescriptorService.getViewContainerLocation(container);
+			if (location !== null && location !== undefined) { this._onDidChangeViewContainerVisibility.fire({ id, visible, location }); }
+		}));
 	}
 
 	private onViewsAdded(added: IView[]): void {
@@ -93,6 +99,9 @@ export class ViewsService extends Disposable implements IViewsService {
 	}
 
 	private onViewsVisibilityChanged(view: IView, visible: boolean): void {
+		const container = this.viewDescriptorService.getViewContainerByViewId(view.id);
+		const hostedView = container && viewContainerHosts.get(container.id)?.get()?.getViewPaneContainer()?.getView(view.id);
+		if (hostedView && hostedView !== view) { return; }
 		this.getOrCreateActiveViewContextKey(view).set(visible);
 		this._onDidChangeViewVisibility.fire({ id: view.id, visible: visible });
 	}
@@ -201,6 +210,8 @@ export class ViewsService extends Disposable implements IViewsService {
 
 	// One view container can be visible at a time in a location
 	isViewContainerVisible(id: string): boolean {
+		const host = viewContainerHosts.get(id);
+		if (host) { return !!host.get()?.isVisible(); }
 		const viewContainer = this.viewDescriptorService.getViewContainerById(id);
 		if (!viewContainer) {
 			return false;
@@ -252,6 +263,8 @@ export class ViewsService extends Disposable implements IViewsService {
 	}
 
 	async closeViewContainer(id: string): Promise<void> {
+		const host = viewContainerHosts.get(id);
+		if (host) { return host.close(); }
 		const viewContainer = this.viewDescriptorService.getViewContainerById(id);
 		if (viewContainer) {
 			const viewContainerLocation = this.viewDescriptorService.getViewContainerLocation(viewContainer);
@@ -281,7 +294,8 @@ export class ViewsService extends Disposable implements IViewsService {
 	getViewWithId<T extends IView>(id: string): T | null {
 		const viewContainer = this.viewDescriptorService.getViewContainerByViewId(id);
 		if (viewContainer) {
-			const viewPaneContainer: IViewPaneContainer | undefined = this.viewPaneContainers.get(viewContainer.id);
+			const host = viewContainerHosts.get(viewContainer.id);
+			const viewPaneContainer: IViewPaneContainer | undefined = host ? host.get()?.getViewPaneContainer() : this.viewPaneContainers.get(viewContainer.id);
 			if (viewPaneContainer) {
 				return viewPaneContainer.getView(id) as T;
 			}
@@ -331,6 +345,8 @@ export class ViewsService extends Disposable implements IViewsService {
 				const view = activeViewPaneContainer.getView(id);
 				if (view) {
 					if (activeViewPaneContainer.views.length === 1) {
+						const host = viewContainerHosts.get(viewContainer.id);
+						if (host) { void host.close(); return; }
 						const location = this.viewDescriptorService.getViewContainerLocation(viewContainer);
 						if (location === ViewContainerLocation.Sidebar) {
 							this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
@@ -353,6 +369,8 @@ export class ViewsService extends Disposable implements IViewsService {
 	}
 
 	private getActiveViewPaneContainer(viewContainer: ViewContainer): IViewPaneContainer | null {
+		const host = viewContainerHosts.get(viewContainer.id);
+		if (host) { return host.get()?.getViewPaneContainer() ?? null; }
 		const location = this.viewDescriptorService.getViewContainerLocation(viewContainer);
 		if (location === null) {
 			return null;
@@ -689,7 +707,11 @@ export class ViewsService extends Disposable implements IViewsService {
 		const viewPaneContainer: ViewPaneContainer = instantiationService.createInstance(viewContainer.ctorDescriptor.ctor, ...(viewContainer.ctorDescriptor.staticArguments || []));
 
 		this.viewPaneContainers.set(viewPaneContainer.getId(), viewPaneContainer);
-		disposables.add(toDisposable(() => this.viewPaneContainers.delete(viewPaneContainer.getId())));
+		disposables.add(toDisposable(() => {
+			if (this.viewPaneContainers.get(viewPaneContainer.getId()) === viewPaneContainer) {
+				this.viewPaneContainers.delete(viewPaneContainer.getId());
+			}
+		}));
 		disposables.add(viewPaneContainer.onDidAddViews(views => this.onViewsAdded(views)));
 		disposables.add(viewPaneContainer.onDidChangeViewVisibility(view => this.onViewsVisibilityChanged(view, view.isBodyVisible())));
 		disposables.add(viewPaneContainer.onDidRemoveViews(views => this.onViewsRemoved(views)));

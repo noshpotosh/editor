@@ -52,7 +52,16 @@ async function openFiles(args, environment = process.env, cwd = process.cwd()) {
 		}
 		fileURIs.push(pathToFileURL(absolutePath).href);
 	}
-	const { socketPath } = JSON.parse(await fs.readFile(environment.TERMINAL_FIRST_CLI_POINTER, 'utf8'));
+	let pointer;
+	const deadline = Date.now() + 2000;
+	while (true) {
+		try { pointer = await fs.readFile(environment.TERMINAL_FIRST_CLI_POINTER, 'utf8'); break; }
+		catch (error) {
+			if (error.code !== 'ENOENT' || Date.now() >= deadline) { throw error; }
+			await new Promise(resolve => setTimeout(resolve, Math.min(50, deadline - Date.now())));
+		}
+	}
+	const { socketPath } = JSON.parse(pointer);
 	if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath)) {
 		throw new Error('The window CLI pointer is invalid. Reload the window to retry.');
 	}

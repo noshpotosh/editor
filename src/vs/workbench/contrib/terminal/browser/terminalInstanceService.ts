@@ -48,7 +48,7 @@ export class TerminalInstanceService extends Disposable implements ITerminalInst
 	createInstance(profile: ITerminalProfile, target: TerminalLocation): ITerminalInstance;
 	createInstance(shellLaunchConfig: IShellLaunchConfig, target: TerminalLocation): ITerminalInstance;
 	createInstance(config: IShellLaunchConfig | ITerminalProfile, target: TerminalLocation): ITerminalInstance {
-		if (terminalFirstEnabled && (target !== TerminalLocation.Panel || !consumeTerminalFirstLaunch(config))) {
+		if (terminalFirstEnabled && !consumeTerminalFirstLaunch(config)) {
 			throw new Error(localize('sessionTerminalOnly', "Use the session strip to open a terminal. Editor terminals, splits, tasks, and extension-created terminals are unavailable."));
 		}
 		const shellLaunchConfig = this.convertProfileToShellLaunchConfig(config);

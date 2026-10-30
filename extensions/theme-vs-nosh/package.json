@@ -1,0 +1,30 @@
+{
+	"name": "theme-vs-nosh",
+	"publisher": "vscode",
+	"displayName": "VS NOSH Themes",
+	"description": "Terminal-first dark and light color themes.",
+	"version": "1.0.0",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": [
+		"Themes"
+	],
+	"contributes": {
+		"themes": [
+			{
+				"id": "VS NOSH Dark",
+				"label": "VS NOSH Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/dark.json"
+			},
+			{
+				"id": "VS NOSH Light",
+				"label": "VS NOSH Light",
+				"uiTheme": "vs",
+				"path": "./themes/light.json"
+			}
+		]
+	}
+}

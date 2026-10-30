@@ -24,12 +24,8 @@ exports.activate = context => {
 		await fs.writeFile(temporaryPath, JSON.stringify({ socketPath }), { mode: 0o600 });
 		await fs.rename(temporaryPath, pointerPath);
 
-		const environment = context.environmentVariableCollection;
-		environment.persistent = true;
-		environment.description = vscode.l10n.t('Enables the code and e commands for opening the editor and files in this window.');
-		environment.prepend('PATH', `${path.join(context.extensionPath, 'bin')}${path.delimiter}`);
-		environment.replace('TERMINAL_FIRST_NODE', process.execPath);
-		environment.replace('TERMINAL_FIRST_CLI_POINTER', pointerPath);
+		// Clear legacy persistent mutations; the workbench now supplies each shell environment.
+		context.environmentVariableCollection.clear();
 	};
 	const ready = initialize();
 	context.subscriptions.push(vscode.commands.registerCommand('terminalFirst.initializeShell', () => ready));

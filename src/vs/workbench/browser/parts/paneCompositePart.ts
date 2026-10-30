@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { viewContainerHosts } from '../../services/views/browser/viewContainerHost.js';
 import { terminalFirstPolicy, terminalFirstEnabled } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/paneCompositePart.css';
 import { Event } from '../../../base/common/event.js';
@@ -504,6 +505,8 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 
 	async openPaneComposite(id?: string, focus?: boolean): Promise<PaneComposite | undefined> {
 		if ((terminalFirstPolicy.shell && id !== 'terminal') || (terminalFirstEnabled && terminalFirstPolicy.mode === 'editor' && id === 'terminal')) { return undefined; }
+		const host = id ? viewContainerHosts.get(id) : undefined;
+		if (host) { return host.open(focus); }
 		if (typeof id === 'string' && this.getPaneComposite(id)) {
 			return this.doOpenPaneComposite(id, focus);
 		}

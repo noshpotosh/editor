@@ -8,13 +8,15 @@ User-facing documentation lives in [`TERMINAL_FIRST.md`](../../TERMINAL_FIRST.md
 
 | # | Feature | Status | Spec |
 | --- | --- | --- | --- |
-| 1 | Shell-first sessions (session strip, shell/editor surfaces, per-session editors, managed workspace, policy gate) | Committed, reworked in working tree | [01-shell-first-sessions.md](01-shell-first-sessions.md) |
+| 1 | Shell-first sessions (title-bar tabs, shell/editor surfaces, per-session editors, managed workspace, policy gate) | Committed, reworked in working tree | [01-shell-first-sessions.md](01-shell-first-sessions.md) |
 | 2 | `code` / `e` shell commands | Committed (`e`), `code` uncommitted | [02-shell-cli.md](02-shell-cli.md) |
 | 3 | Floating terminal (per-session companion shell) | Committed, restyled in working tree | [03-floating-terminal.md](03-floating-terminal.md) |
 | 4 | Floating file browser (Telescope-style file manager) | Committed, file operations uncommitted | [04-floating-file-browser.md](04-floating-file-browser.md) |
 | 5 | Jump list (per-project curated file bookmarks) | Uncommitted, undocumented | [05-jump-list.md](05-jump-list.md) |
-| 6 | Native Vim engine (preview) and VSCodeVim integration | Uncommitted, opt-in | [06-native-vim.md](06-native-vim.md) |
+| 6 | Native Vim engine (preview) and VSCodeVim integration | Preview, enabled by default | [06-native-vim.md](06-native-vim.md) |
 | 7 | Workbench simplification, branding, and distribution | Mixed | [07-workbench-branding-distribution.md](07-workbench-branding-distribution.md) |
+| 8 | Terminal configuration roadmap | Planned | [08-terminal-configuration-roadmap.md](08-terminal-configuration-roadmap.md) |
+| 9 | Tiling code workspace (tiles, layout commands, chords, focus-follows-mouse) | Uncommitted | [09-tiling-workspace.md](09-tiling-workspace.md) |
 
 ## Product summary
 
@@ -34,27 +36,17 @@ When that check is false, the fork should behave like upstream VS Code. One exce
 
 These items affect several features. Each one is also covered in the relevant spec.
 
-1. **No explicit way back to the shell from the editor (working tree).** The uncommitted changes removed the `terminalFirst.toggle` command (`Cmd+Escape`) and the strip's "Open Editor / Return to Terminal" button. The editor is now entered with `code` and left only by closing every editor in the session. `ITerminalFirstService.toggle()` and `showShell()` still exist but nothing calls them from the UI. Decide whether this is the intended model (spec 1).
+1. **Global leader acceptance.** Ctrl+Space now enters the editor (`e`) and returns to shell (`q`/Escape), preserving dirty buffers; verify across Vim engines and keyboard layouts.
 2. **Keybinding collisions with macOS conventions.** `Cmd+A` (Select All) is taken over by Add File to Jump List whenever a file editor has focus. `Cmd+T` and `Cmd+E` are also rebound. See spec 5 and spec 7.
 3. **`code` shadows the real VS Code CLI** inside VS NOSH shells (spec 2).
-4. **Documentation drift.** Both user docs describe shortcuts and controls that no longer exist (below).
+4. **Documentation drift.** User-facing workflow shortcuts have been reconciled with the new leader controls.
 5. **Native Vim acceptance.** The engine reads the full document text on every key and has not been accepted for IME, large files, or shared models (spec 6).
-6. **Distribution.** There is no packaged installer, signing, notarization, update channel, or CI pipeline for the fork. It runs only as a source build (spec 7).
+6. **Distribution.** There is no packaged installer, signing, notarization, update channel, or CI pipeline for the fork. A packaged-app launcher is provided; signing, notarization, and distribution acceptance remain outstanding (spec 7).
 7. **Upstream maintenance cost.** The fork edits about 40 upstream files (terminal service, editor part, command service, layout, text model, SCM, and others). Each upstream merge needs a re-validation pass. The list is in spec 7.
 
-## Documentation drift
+## Documentation alignment
 
-As of this snapshot, `TERMINAL_FIRST.md` and `README.md` still describe:
-
-| Documented | Actual (working tree) |
-| --- | --- |
-| `Cmd+Escape` switches shell / editor | No such command; `code` opens the editor, closing all editors returns to the shell |
-| `Ctrl+Backtick` toggles the floating terminal | `Cmd+T` |
-| `Cmd+Shift+E` opens the file browser (in the workflow table) | `Cmd+E` (the prose section was updated) |
-| Session strip has Files, Terminal, Open Editor / Return to Terminal buttons | Strip has session tabs, close buttons, and `+` only |
-| Floating terminal has a **Hide** button | Removed; hide with `Cmd+T` or a click outside |
-| Only `e` is installed | `code` and `e` are both on `PATH` |
-| Jump list | Not documented anywhere |
+The workflow guide now documents title-bar tabs, `code`/`e`, Ctrl+Space navigation, copy mode, `Cmd+T` for the floating terminal, `Cmd+E` for the file browser, and deferred trust prompting. The former Cmd+Escape toggle and visible Hide/surface-toggle buttons remain removed.
 
 ## Validation entry points
 
@@ -70,6 +62,8 @@ npm run build-fast -- --client-only
 	--run vs/workbench/contrib/terminalFirst/test/browser/fileBrowserOperations.test \
 	--run vs/workbench/contrib/terminalFirst/test/browser/jumpListModel.test \
 	--run vs/workbench/contrib/terminalFirst/test/browser/floatingJumpList.test \
+	--run vs/workbench/contrib/terminalFirst/test/browser/tiles.test \
+	--run vs/workbench/contrib/terminalFirst/test/browser/nativeVim.test \
 	--run vs/editor/contrib/nativeVim/test/common/nativeVim.test \
 	--run vs/editor/contrib/nativeVim/test/browser/nativeVimContribution.test \
 	--run vs/workbench/services/editor/test/browser/editorGroupsService.test \

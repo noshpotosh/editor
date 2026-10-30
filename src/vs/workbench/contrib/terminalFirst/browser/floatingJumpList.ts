@@ -73,7 +73,7 @@ export class FloatingJumpList extends Disposable {
 			disposeTemplate: template => template.label.dispose(),
 		};
 		this.list = this._register(instantiation.createInstance(WorkbenchList<URI>, 'FloatingJumpList', this.listContainer,
-			{ getHeight: () => 24, getTemplateId: () => 'jumpFile' }, [renderer], {
+			{ getHeight: () => 22, getTemplateId: () => 'jumpFile' }, [renderer], {
 				identityProvider: { getId: resource => this.identity.extUri.getComparisonKey(resource) },
 				accessibilityProvider: { getAriaLabel: resource => this.label(resource), getWidgetAriaLabel: () => localize('jumpFiles', "Jump List Files") },
 				multipleSelectionSupport: false, typeNavigationEnabled: false,

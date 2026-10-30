@@ -282,6 +282,47 @@ suite('EditorService', () => {
 		assert.strictEqual(part.activeGroup, input1Group);
 	});
 
+	test('dedicated tool groups route files to the last editor group, including explicit targets', async () => {
+		const [part, service] = await createEditorService();
+		const editorGroup = part.activeGroup;
+		const file = disposables.add(new TestFileEditorInput(URI.parse('file:///tile-file'), TEST_EDITOR_INPUT_ID));
+		await service.openEditor(file, { pinned: true }, editorGroup);
+		const tool = disposables.add(new TestFileEditorInput(URI.parse('test:///tool-tile'), TEST_EDITOR_INPUT_ID));
+		tool.capabilities = EditorInputCapabilities.RequiresDedicatedGroup;
+		const toolGroup = part.addGroup(editorGroup, GroupDirection.RIGHT);
+		await service.openEditor(tool, { pinned: true }, toolGroup);
+		const second = disposables.add(new TestFileEditorInput(URI.parse('file:///tile-second'), TEST_EDITOR_INPUT_ID));
+		await service.openEditor(second, { pinned: true }, toolGroup);
+		assert.deepStrictEqual({ tools: toolGroup.editors, files: editorGroup.editors }, { tools: [tool], files: [file, second] });
+	});
+
+	test('dedicated tool groups create an editor tile only when it fits', async () => {
+		const [part, service] = await createEditorService();
+		const tool = disposables.add(new TestFileEditorInput(URI.parse('test:///only-tool'), TEST_EDITOR_INPUT_ID));
+		tool.capabilities = EditorInputCapabilities.RequiresDedicatedGroup;
+		await service.openEditor(tool, { pinned: true });
+		const file = disposables.add(new TestFileEditorInput(URI.parse('file:///new-tile-file'), TEST_EDITOR_INPUT_ID));
+		part.layout(300, 250, 0, 0);
+		await assert.rejects(service.openEditor(file), /not enough room/);
+		assert.deepStrictEqual({ count: part.count, inputs: part.activeGroup.editors }, { count: 1, inputs: [tool] });
+		part.layout(1080, 800, 0, 0);
+		await service.openEditor(file);
+		assert.deepStrictEqual(part.groups.map(group => group.editors), [[tool], [file]]);
+	});
+
+	test('dedicated tool groups reject tab moves and retain their input', async () => {
+		const [part, service] = await createEditorService();
+		const editorGroup = part.activeGroup;
+		const file = disposables.add(new TestFileEditorInput(URI.parse('file:///tile-file'), TEST_EDITOR_INPUT_ID));
+		await service.openEditor(file, { pinned: true }, editorGroup);
+		const tool = disposables.add(new TestFileEditorInput(URI.parse('test:///tool-tile'), TEST_EDITOR_INPUT_ID));
+		tool.capabilities = EditorInputCapabilities.RequiresDedicatedGroup;
+		const toolGroup = part.addGroup(editorGroup, GroupDirection.RIGHT);
+		await service.openEditor(tool, { pinned: true }, toolGroup);
+		editorGroup.moveEditor(file, toolGroup);
+		assert.deepStrictEqual({ tools: toolGroup.editors, files: editorGroup.editors }, { tools: [tool], files: [file] });
+	});
+
 	test('openEditor() - locked groups', async () => {
 		disposables.add(registerTestFileEditor());
 

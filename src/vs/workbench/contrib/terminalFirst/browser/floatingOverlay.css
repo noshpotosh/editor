@@ -3,18 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+/* Floating surfaces sit at the outer elevation tier and follow the command palette's colors. */
 .monaco-workbench .terminal-first-jump-list,
 .monaco-workbench .terminal-first-file-browser,
 .monaco-workbench .terminal-first-floating,
 .monaco-workbench .native-vim-leader {
 	position: absolute;
 	box-sizing: border-box;
-	padding: var(--vscode-spacing-size80, 8px);
-	background: var(--vscode-editorWidget-background);
-	color: var(--vscode-foreground);
-	border: var(--vscode-strokeThickness, 1px) solid var(--vscode-widget-border, var(--vscode-panel-border));
-	border-radius: var(--vscode-cornerRadius-large, 8px);
-	box-shadow: var(--vscode-shadow-lg);
+	padding: var(--vscode-spacing-size80);
+	background: var(--vscode-terminalFirst-floating-background);
+	color: var(--vscode-terminalFirst-floating-foreground);
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-floating-border, transparent);
+	border-radius: var(--vscode-cornerRadius-large);
+	box-shadow: 0 0 12px var(--vscode-widget-shadow);
 }
 
 .monaco-workbench .terminal-first-jump-list,
@@ -23,16 +24,35 @@
 	z-index: 30;
 	display: flex;
 	flex-direction: column;
-	gap: var(--vscode-spacing-size80, 8px);
+	gap: var(--vscode-spacing-size80);
+}
+
+/* Shared header role: floating terminal title, jump list heading and file browser pane titles. */
+.terminal-first-floating .floating-terminal-header,
+.terminal-first-jump-list .jump-list-header,
+.terminal-first-file-browser .file-browser-pane-title {
+	font-size: var(--vscode-fontSize-label1);
+	font-weight: var(--vscode-fontWeight-semiBold);
+}
+
+/* Shared supporting-text role: hints, status lines and paths. */
+.terminal-first-jump-list .jump-list-status,
+.terminal-first-jump-list .jump-list-hints,
+.terminal-first-file-browser .file-browser-status,
+.terminal-first-file-browser .file-browser-path {
+	color: var(--vscode-descriptionForeground);
+	font-size: var(--vscode-fontSize-label2);
 }
 
 .terminal-first-jump-list button,
 .terminal-first-file-browser button {
-	color: var(--vscode-foreground);
+	color: inherit;
 	background: transparent;
 	border: none;
-	border-radius: var(--vscode-cornerRadius-small, 4px);
-	padding: var(--vscode-spacing-size40, 4px) var(--vscode-spacing-size80, 8px);
+	border-radius: var(--vscode-cornerRadius-small);
+	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80);
+	font: inherit;
+	font-size: var(--vscode-fontSize-label1);
 	cursor: pointer;
 }
 
@@ -43,6 +63,6 @@
 
 .terminal-first-jump-list button:focus-visible,
 .terminal-first-file-browser button:focus-visible {
-	outline: var(--vscode-strokeThickness, 1px) solid var(--vscode-focusBorder);
-	outline-offset: -1px;
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: calc(-1 * var(--vscode-strokeThickness));
 }

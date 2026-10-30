@@ -10,6 +10,7 @@ export interface ITerminalFirstSession {
 	readonly id: string;
 	readonly title: string;
 	readonly mode: 'shell' | 'editor';
+	readonly dirty?: boolean;
 	readonly active: boolean;
 }
 
@@ -33,6 +34,8 @@ export interface ITerminalFirstService {
 	showShell(): Promise<void>;
 	showEditor(focus?: boolean): Promise<void>;
 	newTerminal(): Promise<void>;
+	/** Resolves `false` without opening anything when the session can no longer host the tile. */
+	openTerminalTile(groupId: number): Promise<boolean>;
 	selectSession(id: string): Promise<void>;
 	closeSession(id: string): Promise<void>;
 	switchTerminal(offset: number): Promise<void>;

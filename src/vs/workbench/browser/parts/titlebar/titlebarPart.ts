@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/titlebarpart.css';
+import { SessionTabsWidget } from '../terminalFirst/sessionStripPart.js';
 import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MultiWindowParts, Part } from '../../part.js';
@@ -297,7 +298,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	private titleBarStyle: TitlebarStyle;
 	private activeWindowId: number | undefined;
 
-	private readonly isAuxiliary: boolean;
+	protected readonly isAuxiliary: boolean;
 	private isCompact = false;
 
 	private readonly isCompactContextKey: IContextKey<boolean>;
@@ -472,6 +473,10 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		this.titleBarToolBarOverflowScheduler = this._register(new AnimationFrameScheduler(this.rootContainer, () => this.updateTitleBarToolBarOverflow()));
 
 		this.leftContent = append(this.rootContainer, $('.titlebar-left'));
+		if (terminalFirstEnabled && !this.isAuxiliary) {
+			this.rootContainer.classList.add('terminal-first-titlebar');
+			this._register(this.instantiationService.createInstance(SessionTabsWidget, append(this.leftContent, $('.titlebar-sessions.terminal-first-sessions'))));
+		}
 		this.centerContent = append(this.rootContainer, $('.titlebar-center'));
 		this.rightContent = append(this.rootContainer, $('.titlebar-right'));
 

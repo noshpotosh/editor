@@ -7,14 +7,20 @@
 	display: none;
 }
 
+/* Matches the native Vim status (nativeVim.css) so both engines share one floating surface. */
 .terminal-first-minimal .terminal-first-vim-status:not(:empty) {
 	display: block;
 	max-width: 100%;
 	box-sizing: border-box;
-	padding: 4px 8px;
-	color: var(--vscode-editorWidget-foreground);
-	background: var(--vscode-editorWidget-background);
+	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80);
+	margin: var(--vscode-spacing-size80);
+	color: var(--vscode-terminalFirst-floating-foreground, var(--vscode-editorWidget-foreground));
+	background: var(--vscode-terminalFirst-floating-background, var(--vscode-editorWidget-background));
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-floating-border, var(--vscode-editorWidget-border, transparent));
+	border-radius: var(--vscode-cornerRadius-large);
+	box-shadow: 0 0 12px var(--vscode-widget-shadow);
 	font-family: var(--monaco-monospace-font);
+	font-size: var(--vscode-fontSize-label1);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	pointer-events: none;

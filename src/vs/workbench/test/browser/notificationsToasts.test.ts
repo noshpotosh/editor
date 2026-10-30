@@ -8,7 +8,8 @@ import { Dimension, getWindow } from '../../../base/browser/dom.js';
 import { Event } from '../../../base/common/event.js';
 import { DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
-import { Severity } from '../../../platform/notification/common/notification.js';
+import { terminalFirstEnabled, terminalFirstPolicy } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { NotificationPriority, Severity } from '../../../platform/notification/common/notification.js';
 import { NotificationsToasts } from '../../browser/parts/notifications/notificationsToasts.js';
 import { NotificationsModel } from '../../common/notifications.js';
 import { workbenchInstantiationService } from './workbenchTestServices.js';
@@ -63,6 +64,21 @@ suite('NotificationsToasts', () => {
 			flushAnimationFrame: () => new Promise(resolve => targetWindow.requestAnimationFrame(() => resolve()))
 		};
 	}
+
+	test('shell retains ordinary notifications in the center and permits urgent toasts', async function () {
+		if (!terminalFirstEnabled) { this.skip(); }
+		const previous = terminalFirstPolicy.mode;
+		try {
+			terminalFirstPolicy.mode = 'shell';
+			const { container, model, flushAnimationFrame } = await createToasts();
+			model.addNotification({ severity: Severity.Info, message: 'Quiet shell notification' });
+			await flushAnimationFrame();
+			const quiet = container.querySelectorAll('.notification-toast-container').length;
+			model.addNotification({ severity: Severity.Error, message: 'Urgent shell notification', priority: NotificationPriority.URGENT });
+			await flushAnimationFrame();
+			assert.deepStrictEqual({ quiet, urgent: container.querySelectorAll('.notification-toast-container').length, retained: model.notifications.length }, { quiet: 0, urgent: 1, retained: 2 });
+		} finally { terminalFirstPolicy.mode = previous; }
+	});
 
 	test('shows one toast for rapidly added duplicate notifications', async () => {
 		const { container, model, toasts } = await createToasts();

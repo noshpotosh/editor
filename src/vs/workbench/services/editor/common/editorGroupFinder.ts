@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { noRoomForTileMessage, tileSplitDirection } from './editorTileLayout.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { EditorActivation } from '../../../../platform/editor/common/editor.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
@@ -52,6 +53,16 @@ function handleGroupResult(group: IEditorGroup, editor: EditorInputWithOptions |
 		return handleModalEditorPart(group, editor, modalEditorPart, editorGroupService, preferredGroup);
 	}
 
+	if (isGroupDedicatedForEditor(group, editorInput)) {
+		const candidate = editorGroupService.getGroups(GroupsOrder.MOST_RECENTLY_ACTIVE).find(candidate => !isGroupDedicatedForEditor(candidate, editorInput) && !candidate.isLocked);
+		if (candidate) {
+			group = candidate;
+		} else {
+			const direction = tileSplitDirection(editorGroupService.getSize(group));
+			if (direction === undefined) { throw new Error(noRoomForTileMessage()); }
+			group = editorGroupService.addGroup(group, direction);
+		}
+	}
 	return handleGroupActivation(group, editor, preferredGroup, editorGroupService);
 }
 
@@ -266,4 +277,9 @@ function isOpened(group: IEditorGroup, editor: EditorInput | IUntypedEditorInput
 	}
 
 	return false;
+}
+
+/** Dedicated tool groups cannot accept another input, even with an explicit target. */
+export function isGroupDedicatedForEditor(group: IEditorGroup, editor: EditorInput | undefined): boolean {
+	return group.editors.some(existing => (!editor || !existing.matches(editor)) && (existing.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup) || !!editor?.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup)));
 }

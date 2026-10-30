@@ -81,6 +81,10 @@ import { getPartsSplashColors, getPartsSplashLayoutMetrics } from './partsSplash
 			}
 		}
 
+		if (safeProcess.platform === 'darwin' && configuration.product.urlProtocol === 'terminal-first' && !configuration.colorScheme.highContrast) {
+			shellBackground = data?.colorInfo.background ?? (configuration.autoDetectColorScheme && !configuration.colorScheme.dark ? '#FFFFFF' : '#181818');
+		}
+
 		const style = document.createElement('style');
 		style.className = 'initialShellColors';
 		window.document.head.appendChild(style);

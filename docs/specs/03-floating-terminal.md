@@ -65,3 +65,8 @@ The editor has no integrated panel terminal. The user still needs a quick shell 
 - [ ] Reload: the companion PID survives and the overlay starts hidden.
 - [ ] Session switch hides the overlay. Each session has its own companion.
 - [ ] Light, dark, and high-contrast themes. Resize the window and sidebar while open.
+
+
+## Shared terminal controls
+
+The companion uses the same configured terminal padding, font, and theme as the main shell. Ctrl+Space invokes the global leader regardless of Vim engine; leader `[` copies scrollback, and editor leader `t t` toggles the companion. Copy mode consumes keys while active and leaves the shell running. Session/surface changes cancel it. CLI environment injection is workbench-owned for both shells.

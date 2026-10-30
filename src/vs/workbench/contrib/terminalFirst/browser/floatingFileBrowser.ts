@@ -7,6 +7,7 @@ import './floatingOverlay.css';
 import './floatingFileBrowser.css';
 import { $, append, addDisposableListener, EventType, getWindow, trackFocus } from '../../../../base/browser/dom.js';
 import { status } from '../../../../base/browser/ui/aria/aria.js';
+import { renderIcon } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { IListRenderer } from '../../../../base/browser/ui/list/list.js';
 import { Disposable, MutableDisposable, IReference, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -36,8 +37,11 @@ import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser
 import { TerminalFirstBrowserFocusedContext, TerminalFirstBrowserModeContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { FileBrowserEntry, FileBrowserModel } from './fileBrowserModel.js';
+import { fileBrowserMarkedIcon, fileBrowserPromptIcon } from '../../../browser/parts/terminalFirst/terminalFirstIcons.js';
 
 const fileBrowserActions: { id: string; label: string; keys: string }[] = [];
+/** Matches the workbench list row height so file rows read like the Explorer. */
+const fileBrowserRowHeight = 22;
 let activeBrowser: FloatingFileBrowser | undefined;
 
 /** A session-owned picker; previewing never opens an editor tab. */
@@ -99,22 +103,25 @@ export class FloatingFileBrowser extends Disposable {
 		this.listContainer = append(results, $('.file-browser-list.show-file-icons'));
 		const prompt = append(left, $('.file-browser-prompt'));
 		const prefix = append(prompt, $('span.file-browser-prompt-prefix'));
-		prefix.textContent = '❯';
+		append(prefix, renderIcon(fileBrowserPromptIcon));
 		prefix.setAttribute('aria-hidden', 'true');
 		this.input = this._register(new InputBox(prompt, undefined, { inputBoxStyles: defaultInputBoxStyles, ariaLabel: localize('filterFiles', "Filter Files"), placeholder: localize('filterPlaceholder', "Filter this folder…") }));
 		const labels = this._register(instantiationService.createInstance(ResourceLabels, DEFAULT_LABELS_CONTAINER));
 		const renderer: IListRenderer<FileBrowserEntry, { label: IResourceLabel; marker: HTMLElement }> = {
 			templateId: 'file',
-			renderTemplate: container => ({ marker: append(container, $('span.file-browser-marker')), label: labels.create(container, { supportHighlights: true }) }),
+			renderTemplate: container => {
+				const marker = append(container, $('span.file-browser-marker'));
+				append(marker, renderIcon(fileBrowserMarkedIcon));
+				return { marker, label: labels.create(container, { supportHighlights: true }) };
+			},
 			renderElement: (entry, _index, template) => {
-				template.marker.textContent = this.model.marked.has(entry.stat.resource.toString()) ? '●' : '›';
 				template.marker.classList.toggle('marked', this.model.marked.has(entry.stat.resource.toString()));
 				template.label.setResource({ resource: entry.stat.resource, name: entry.stat.name }, { fileKind: entry.stat.isDirectory ? FileKind.FOLDER : FileKind.FILE, matches: entry.matches });
 			},
 			disposeTemplate: template => template.label.dispose(),
 		};
 		this.list = this._register(instantiationService.createInstance(WorkbenchList<FileBrowserEntry>, 'FloatingFileBrowser', this.listContainer,
-			{ getHeight: () => 24, getTemplateId: () => 'file' }, [renderer], {
+			{ getHeight: () => fileBrowserRowHeight, getTemplateId: () => 'file' }, [renderer], {
 				identityProvider: { getId: entry => entry.stat.resource.toString() },
 				accessibilityProvider: { getAriaLabel: entry => this.model.marked.has(entry.stat.resource.toString()) ? localize('markedEntry', "{0}, marked", entry.stat.name) : entry.stat.name, getWidgetAriaLabel: () => localize('files', "Files") },
 				multipleSelectionSupport: false, typeNavigationEnabled: false,
@@ -377,7 +384,7 @@ export class FloatingFileBrowser extends Disposable {
 		Object.assign(this.element.style, { width: `${width}px`, height: `${height}px`, left: `${area.left - container.left + (area.width - width) / 2}px`, top: `${area.top - container.top + (area.height - height) / 2}px` });
 		this.previewContainer.hidden = width < 600;
 		const available = this.listContainer.parentElement!.clientHeight - this.path.offsetHeight;
-		this.listContainer.style.height = `${Math.min(available, this.list.length * 24)}px`;
+		this.listContainer.style.height = `${Math.min(available, this.list.length * fileBrowserRowHeight)}px`;
 		this.list.layout(this.listContainer.clientHeight, this.listContainer.clientWidth);
 		this.preview.layout({ width: this.previewEditorContainer.clientWidth, height: this.previewEditorContainer.clientHeight });
 	}

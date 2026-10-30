@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { Part } from '../../part.js';
 import { Dimension, $, EventHelper, addDisposableGenericMouseDownListener, getWindow, isAncestorOfActiveElement, getActiveElement, isHTMLElement, computeScreenAwareSize } from '../../../../base/browser/dom.js';
@@ -11,7 +12,7 @@ import { contrastBorder, editorBackground } from '../../../../platform/theme/com
 import { GroupDirection, GroupsArrangement, GroupOrientation, IMergeGroupOptions, MergeGroupMode, GroupsOrder, GroupLocation, IFindGroupScope, EditorGroupLayout, GroupLayoutArgument, IEditorSideGroup, IEditorDropTargetDelegate, IEditorPart, GroupActivationReason, IEditorGroupActivationEvent } from '../../../services/editor/common/editorGroupsService.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IView, orthogonal, LayoutPriority, IViewSize, Direction, SerializableGrid, Sizing, ISerializedGrid, ISerializedNode, Orientation, GridBranchNode, isGridBranchNode, GridNode, createSerializedGrid, Grid } from '../../../../base/browser/ui/grid/grid.js';
-import { GroupIdentifier, EditorInputWithOptions, IEditorPartOptions, IEditorPartOptionsChangeEvent, GroupModelChangeKind } from '../../../common/editor.js';
+import { GroupIdentifier, EditorInputWithOptions, IEditorPartOptions, IEditorPartOptionsChangeEvent, GroupModelChangeKind, EditorInputCapabilities } from '../../../common/editor.js';
 import { EDITOR_GROUP_BORDER, EDITOR_PANE_BACKGROUND } from '../../../common/theme.js';
 import { distinct, coalesce } from '../../../../base/common/arrays.js';
 import { IEditorGroupView, getEditorPartOptions, impactsEditorPartOptions, IEditorPartCreationOptions, IEditorPartsView, IEditorGroupsView, IEditorGroupViewOptions } from './editor.js';
@@ -186,6 +187,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 			this.activeSessionGroups = new Set(this.groupViews.keys());
 			if (this.activeSession === id) { return; }
 		}
+		for (const group of this.groups) { group.setVisible(false); }
 		this.retainedSessions.set(this.activeSession, { state: this.createState(), groups: this.getGroups(GroupsOrder.GRID_APPEARANCE) });
 		this.activeSession = id;
 		this.activeSessionGroups = new Set();
@@ -193,6 +195,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		const newGroups: IEditorGroupView[] = [];
 		const retained = this.retainedSessions.get(id);
 		if (retained) {
+			if (!retained.groups.length) { retained.state = this.resolveSessionGroupIds(retained.state); }
 			for (const group of retained.groups) { this.activeSessionGroups.add(group.id); }
 			this.doCreateGridControlWithState(retained.state.serializedGrid, retained.state.activeGroup, retained.groups.length ? retained.groups : undefined);
 			// Deserialized groups need the same registration as freshly created groups.
@@ -211,7 +214,34 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		this.notifyGroupIndexChange();
 		this.updateContainer();
 		if (this._contentDimension) { this.doLayout(this._contentDimension); }
+		for (const group of this.groups) { group.setVisible(true); }
 		for (const group of newGroups) { this._onDidAddGroup.fire(group); }
+	}
+
+	/** Old session snapshots can share IDs. Never overwrite another session's live group. */
+	private resolveSessionGroupIds(state: IEditorPartUIState): IEditorPartUIState {
+		const occupied = new Set(this.groupViews.keys());
+		const serializedIds = new Set<GroupIdentifier>();
+		const collect = (node: ISerializedNode): void => {
+			if (node.type === 'branch') { node.data.forEach(collect); }
+			else if (isSerializedEditorGroupModel(node.data)) { serializedIds.add(node.data.id); }
+		};
+		collect(state.serializedGrid.root);
+		let nextId = Math.max(-1, ...occupied, ...serializedIds) + 1;
+		const replacements = new Map<GroupIdentifier, GroupIdentifier>();
+		const remap = (node: ISerializedNode): ISerializedNode => {
+			if (node.type === 'branch') { return { ...node, data: node.data.map(remap) }; }
+			if (!isSerializedEditorGroupModel(node.data) || !occupied.has(node.data.id)) { return node; }
+			const id = nextId++;
+			replacements.set(node.data.id, id);
+			return { ...node, data: { ...node.data, id } };
+		};
+		const root = remap(state.serializedGrid.root);
+		return {
+			serializedGrid: { ...state.serializedGrid, root },
+			activeGroup: replacements.get(state.activeGroup) ?? state.activeGroup,
+			mostRecentActiveGroups: state.mostRecentActiveGroups.map(id => replacements.get(id) ?? id)
+		};
 	}
 
 	private async closeSession(id: string): Promise<boolean> {
@@ -859,7 +889,8 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 			}
 
 			const viewSize = this.gridWidget.getViewSize(group);
-			if (viewSize.width === group.minimumWidth || viewSize.height === group.minimumHeight) {
+			// Tiled workspaces keep their chosen sizes when focus follows the pointer.
+			if (!terminalFirstEnabled && (viewSize.width === group.minimumWidth || viewSize.height === group.minimumHeight)) {
 				this.arrangeGroups(GroupsArrangement.EXPAND, group);
 			}
 		} catch (error) {
@@ -1001,14 +1032,34 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		return movedView;
 	}
 
+	swapGroups(group: IEditorGroupView | GroupIdentifier, other: IEditorGroupView | GroupIdentifier): void {
+		const groupView = this.assertGroupView(group);
+		const otherView = this.assertGroupView(other);
+		if (groupView === otherView) {
+			return;
+		}
+
+		const restoreFocus = this.shouldRestoreFocus(groupView.element) || this.shouldRestoreFocus(otherView.element);
+		this.gridWidget.swapViews(groupView, otherView);
+		if (restoreFocus) {
+			this.activeGroup.focus();
+		}
+
+		this._onDidMoveGroup.fire(groupView);
+		this._onDidMoveGroup.fire(otherView);
+		this.notifyGroupIndexChange();
+	}
+
 	copyGroup(group: IEditorGroupView | GroupIdentifier, location: IEditorGroupView | GroupIdentifier, direction: GroupDirection): IEditorGroupView {
 		const groupView = this.assertGroupView(group);
 		const locationView = this.assertGroupView(location);
 
 		const restoreFocus = this.shouldRestoreFocus(groupView.element);
 
-		// Copy the group view
-		const copiedGroupView = this.addGroup(locationView, direction, groupView);
+		// Copy the group view. Dedicated editors (terminals, tool tiles) own their
+		// group and are not duplicated; the split then starts empty instead.
+		const dedicated = groupView.editors.some(editor => editor.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup));
+		const copiedGroupView = this.addGroup(locationView, direction, dedicated ? undefined : groupView);
 
 		// Restore focus if we had it
 		if (restoreFocus) {
@@ -1125,6 +1176,7 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 	readonly priority: LayoutPriority = LayoutPriority.High;
 
 	private get gridSeparatorBorder(): Color {
+		if (terminalFirstEnabled) { return Color.transparent; }
 		return this.theme.getColor(EDITOR_GROUP_BORDER) || this.theme.getColor(contrastBorder) || Color.transparent;
 	}
 

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { onDidChangeFullscreen, isFullscreen } from '../../../../base/browser/browser.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { Color } from '../../../../base/common/color.js';
@@ -79,7 +80,7 @@ export class PartsSplash {
 			baseTheme: getThemeTypeSelector(theme.type),
 			colorInfo: {
 				foreground: theme.getColor(foreground)?.toString(),
-				background: Color.Format.CSS.formatHex(theme.getColor(editorBackground) || themes.WORKBENCH_BACKGROUND(theme)),
+				background: Color.Format.CSS.formatHex((terminalFirstEnabled ? theme.getColor('terminal.background') || theme.getColor(themes.PANEL_BACKGROUND) : undefined) || theme.getColor(editorBackground) || themes.WORKBENCH_BACKGROUND(theme)),
 				editorBackground: theme.getColor(editorBackground)?.toString(),
 				titleBarBackground: theme.getColor(themes.TITLE_BAR_ACTIVE_BACKGROUND)?.makeOpaque(themes.WORKBENCH_BACKGROUND(theme)).toString(),
 				titleBarInactiveBackground: theme.getColor(themes.TITLE_BAR_INACTIVE_BACKGROUND)?.makeOpaque(themes.WORKBENCH_BACKGROUND(theme)).toString(),

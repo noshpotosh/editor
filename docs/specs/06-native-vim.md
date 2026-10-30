@@ -3,7 +3,7 @@
 ## Status
 
 - VSCodeVim integration (pinned VSIX, setup script, inline mode indicator) is committed.
-- The native engine is uncommitted and opt-in (`terminalFirst.vim.engine: "native"`). The default remains `"extension"`.
+- The native engine is a preview enabled by default (`terminalFirst.vim.engine: "native"`). Explicit engine settings remain respected.
 
 ## Problem and goals
 
@@ -11,7 +11,7 @@ Modal editing is a core part of the terminal-first workflow. VSCodeVim works, bu
 
 ## Behavior: engine selection
 
-- **S6.1** `terminalFirst.vim.engine` is `native`, `extension` (default), or `off`. Changing it shows "Reload the window to change the Vim engine."
+- **S6.1** `terminalFirst.vim.engine` is `native` (default), `extension`, or `off`. Changing it shows "Reload the window to change the Vim engine."
 - **S6.2** `native` or `off` with VSCodeVim enabled: VS NOSH disables VSCodeVim for the profile, records that it did so (`terminalFirst.vim.disabledExtension`), and asks for one more reload. Native input takes over only after that reload.
 - **S6.3** `extension` after a native-initiated disable: VS NOSH re-enables VSCodeVim and asks for a reload. VSCodeVim disabled by the user is left alone.
 - **S6.4** With `extension`, VSCodeVim's status entries are shown as an inline overlay in the focused editor (`terminalFirstVimStatus.ts`), because the status bar is hidden by default.
@@ -34,13 +34,15 @@ Modal editing is a core part of the terminal-first workflow. VSCodeVim works, bu
   | Group | Keys → command |
   | --- | --- |
   | `f` files | `ff` Quick Open · `fe` file browser · `fs` save |
-  | `b` buffers | `bb` all editors · `bn` / `bp` next / previous · `bd` close |
-  | `w` panes (also `Ctrl+W`) | `wh` `wj` `wk` `wl` focus · `wv` / `ws` split · `wq` close group |
+  | `b` buffers | `bb` buffers in current pane (recent use) · `bn` / `bp` next / previous in pane (tab order) · `bd` close |
+  | `w` panes (also `Ctrl+W`) | `wh` `wj` `wk` `wl` focus · `wn` / `wp` next / previous pane · `wH` `wJ` `wK` `wL` move active buffer · `wv` / `ws` split · `wq` close group |
   | `s` search | `ss` find in files · `sy` workspace symbols |
   | `c` code | `ca` quick fix · `cr` rename · `cf` format · `cd` next diagnostic |
   | `j` jumps | `jj` open jump list · `ja` add file |
   | `t` terminal | `tt` floating terminal · `ts` pick session · `tn` new session |
   | `?` | Search all actions (also the command **Search Native Vim Actions**) |
+
+Pane actions also accept `Ctrl+W` followed by the suffix after `w` (for example `Ctrl+W L`). Directional buffer moves target only the active editor, even with multiple tabs selected; they create a neighboring pane if necessary and focus the destination. Pane cycling follows workbench order and wraps. Buffer Ex commands (`:bn`/`:bnext`, `:bp`/`:bprevious`, `:buffers`/`:ls`) use the same pane-local scope as leader actions. Hints and searchable help display the configured leader and pane alternatives.
 
 ## Behavior: remaps
 
@@ -57,7 +59,7 @@ Modal editing is a core part of the terminal-first workflow. VSCodeVim works, bu
 
 | Setting | Type | Default |
 | --- | --- | --- |
-| `terminalFirst.vim.engine` | `native` \| `extension` \| `off` | `extension` |
+| `terminalFirst.vim.engine` | `native` \| `extension` \| `off` | `native` |
 | `terminalFirst.vim.leader` | 1 character | `" "` |
 | `terminalFirst.vim.hintDelay` | 0–2000 ms | `250` |
 | `terminalFirst.vim.remaps` | array | `[]` |
@@ -85,13 +87,12 @@ Command: `terminalFirst.vim.help` (Search Native Vim Actions). Storage: `termina
 - `nativeVim.test.ts` (24 tests): grammar.
 - `nativeVimContribution.test.ts` (13 tests): editor host.
 
-The workbench service, leader menu, Ex commands, remap validation UI, and pickers have no dedicated tests.
+Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer Ex aliases, cancellation, custom-leader help, and single-editor movement. Remap validation UI and picker integration still need dedicated coverage.
 
 ## Known gaps and risks
 
 - **Performance.** The engine works on the full document string (`model.getValue()`, cached per version id), and IME composition compares full-text snapshots. Each edit then copies the whole buffer. Large files will lag. A model-backed `VimHost` is needed before the engine becomes the default.
 - **Undo transaction safety.** If a transaction is not disposed (for example, an exception mid-insert, or a model swap), the model stops creating undo stops. The interface comment says the owner must end it before undo, model switch, or dispose. This needs defensive tests and a watchdog.
-- **Leader hints** hard-code "Space" in the `?` picker descriptions even when the leader is changed.
 - The `off` engine also disables VSCodeVim. Confirm this is intended.
 - Registers, marks, and macros are not persisted (no viminfo or shada equivalent).
 - The help picker, the browser's `(Native Vim)` labels, and the jump-list hints each describe keys separately. A single source of truth would keep them in sync.
@@ -99,7 +100,7 @@ The workbench service, leader menu, Ex commands, remap validation UI, and picker
 
 ## Open questions
 
-1. What is the bar for switching the default to `native` and dropping the VSCodeVim setup step?
+1. What is the bar for ending the native preview and removing the optional VSCodeVim fallback?
 2. Should the core undo transaction API be upstreamed, or isolated behind the gate?
 3. Persist registers, marks, and macros?
 4. Which Ex commands are required for 1.0 (for example `:noh`, `:g`, `:norm`, `:r`)?
@@ -114,3 +115,16 @@ The workbench service, leader menu, Ex commands, remap validation UI, and picker
 - [ ] The same file open in two sessions: edits, undo, and marks behave.
 - [ ] Every leader action, `Ctrl+W`, remap validation errors, and picker normal mode.
 - [ ] `:w`, `:q`, `:wq`, `:x` with dirty buffers, `e --wait` release, and `:s` with flags and ranges.
+
+
+## Engine-independent leader and terminal copy mode
+
+`TerminalFirstLeaderService` owns the shared action table, pending sequence, capture listener, hints, help picker, and pane moves. Native Vim delegates its configured leader and Ctrl+W to it; remaps and document editing remain native Vim responsibilities. Ctrl+Space starts the same service with native Vim, VSCodeVim, or Vim disabled and supersedes manual Trigger Suggest on that chord. Shell tables contain only session/surface actions permitted by the policy; editor tables retain the existing groups and add `q`/Escape to return to shell. Leader `[` is available for the main or visible floating terminal.
+
+VSCodeVim users can set `vim.normalModeKeyBindingsNonRecursive` to `[{ "before": ["<space>"], "commands": ["terminalFirst.leader"] }]`. Copy mode reuses `NativeVim` with a read-only terminal snapshot host. Counts, motions, search, and character/line visual selection remain shared grammar; prompt jumps and clipboard exit are terminal-specific. The COPY badge shows pending search text. Resize or trimmed-away cursor lines cancel safely.
+
+### Docked pane and Explorer navigation
+
+In VS NOSH's editor workbench, physical **Ctrl+H** and **Ctrl+L** focus the visible pane to the left and right. They cross editor splits, the Explorer, secondary sidebar, and docked panels using the current layout; they do not wrap, reveal hidden panes, or switch sidebar tabs. These defaults apply with native Vim, VSCodeVim, or Vim disabled, including Insert mode and docked terminals. Where active, they replace Ctrl+H backspace and Ctrl+L terminal clear. User keybinding overrides take precedence.
+
+In the focused Explorer file tree, **j/k** move down/up and **h/l** collapse/expand using the standard tree behavior. Rename and filter inputs retain ordinary typing. These shortcuts are inactive in shell-only mode, while floating terminal/file-browser/jump-list overlays are visible, and in Quick Open; floating controls retain their existing bindings.

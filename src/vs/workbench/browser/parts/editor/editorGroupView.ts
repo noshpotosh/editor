@@ -3,7 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstEnabled, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH, EDITOR_TILE_MIN_HEIGHT } from '../../../services/editor/common/editorTileLayout.js';
+import { isGroupDedicatedForEditor } from '../../../services/editor/common/editorGroupFinder.js';
 import './media/editorgroupview.css';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
+import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
 import { EditorGroupModel, IEditorOpenOptions, IGroupModelChangeEvent, ISerializedEditorGroupModel, isGroupEditorCloseEvent, isGroupEditorOpenEvent, isSerializedEditorGroupModel } from '../../../common/editor/editorGroupModel.js';
 import { GroupIdentifier, CloseDirection, IEditorCloseEvent, IEditorPane, SaveReason, IEditorPartOptionsChangeEvent, EditorsOrder, IVisibleEditorPane, EditorResourceAccessor, EditorInputCapabilities, IUntypedEditorInput, DEFAULT_EDITOR_ASSOCIATION, SideBySideEditor, EditorCloseContext, IEditorWillMoveEvent, IEditorWillOpenEvent, IMatchEditorOptions, GroupModelChangeKind, IActiveEditorChangeEvent, IFindEditorOptions, TEXT_DIFF_EDITOR_ID } from '../../../common/editor.js';
 import { ActiveEditorGroupLockedContext, ActiveEditorDirtyContext, EditorGroupEditorsCountContext, ActiveEditorStickyContext, ActiveEditorPinnedContext, ActiveEditorLastInGroupContext, ActiveEditorFirstInGroupContext, ResourceContextKey, applyAvailableEditorIds, ActiveEditorAvailableEditorIdsContext, ActiveEditorCanSplitInGroupContext, SideBySideEditorActiveContext, TextCompareEditorVisibleContext, TextCompareEditorActiveContext, ActiveEditorContext, ActiveEditorReadonlyContext, ActiveEditorCanRevertContext, ActiveEditorCanToggleReadonlyContext, ActiveCompareEditorCanSwapContext, MultipleEditorsSelectedInGroupContext, TwoEditorsSelectedInGroupContext, SelectedEditorsInGroupFileOrUntitledResourceContextKey, ActiveEditorCannotCloseContext } from '../../../common/contextkeys.js';
@@ -26,7 +33,7 @@ import { localize } from '../../../../nls.js';
 import { coalesce } from '../../../../base/common/arrays.js';
 import { DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { ITelemetryData, ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { DeferredPromise, Promises, RunOnceWorker } from '../../../../base/common/async.js';
+import { DeferredPromise, Promises, RunOnceScheduler, RunOnceWorker } from '../../../../base/common/async.js';
 import { EventType as TouchEventType, GestureEvent } from '../../../../base/browser/touch.js';
 import { IEditorGroupsView, IEditorGroupView, fillActiveEditorViewState, EditorServiceImpl, IEditorGroupTitleHeight, IInternalEditorOpenOptions, IInternalMoveCopyOptions, IInternalEditorCloseOptions, IInternalEditorTitleControlOptions, IEditorPartsView, IEditorGroupViewOptions } from './editor.js';
 import { ActionBar } from '../../../../base/browser/ui/actionbar/actionbar.js';
@@ -39,6 +46,7 @@ import { IContextMenuService } from '../../../../platform/contextview/browser/co
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { createEditorTypeActions, getAvailableEditorTypes } from './editorTypePicker.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { hash } from '../../../../base/common/hash.js';
 import { getMimeTypes } from '../../../../editor/common/services/languagesAssociations.js';
 import { extname, isEqual } from '../../../../base/common/resources.js';
@@ -149,6 +157,9 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 
 	private readonly containerToolBarMenuDisposable = this._register(new MutableDisposable());
 
+	/** How long the pointer must rest on a tile before it takes focus. */
+	static readonly HOVER_FOCUS_DELAY = 120;
+
 	private readonly whenRestoredPromise = new DeferredPromise<void>();
 	readonly whenRestored = this.whenRestoredPromise.p;
 
@@ -175,7 +186,9 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 		@IHostService private readonly hostService: IHostService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@IFileService private readonly fileService: IFileService,
-		@ICommandService private readonly commandService: ICommandService
+		@ICommandService private readonly commandService: ICommandService,
+		@IHoverService private readonly hoverService: IHoverService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(themeService);
 
@@ -193,7 +206,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 			this.scopedContextKeyService = this._register(this.contextKeyService.createScoped(this.element));
 
 			// Container
-			this.element.classList.add(...coalesce(['editor-group-container', this.model.isLocked ? 'locked' : undefined]));
+			this.element.classList.add(...coalesce(['editor-group-container', terminalFirstEnabled ? 'terminal-first-tile' : undefined, this.model.isLocked ? 'locked' : undefined]));
 
 			// Container listeners
 			this.registerContainerListeners();
@@ -398,6 +411,60 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	private registerContainerListeners(): void {
+
+		if (terminalFirstEnabled) {
+			// Focus follows the pointer once it rests on a tile, so passing over a tile
+			// on the way elsewhere, or an open menu or widget, keeps keyboard focus put.
+			let contextMenuVisible = false;
+			this._register(this.contextMenuService.onDidShowContextMenu(() => contextMenuVisible = true));
+			this._register(this.contextMenuService.onDidHideContextMenu(() => contextMenuVisible = false));
+			const hoverFocus = this._register(new RunOnceScheduler(() => {
+				const context = this.contextKeyService.getContext(getActiveElement());
+				if (!contextMenuVisible && terminalFirstPolicy.mode === 'editor' && !terminalFirstPolicy.floatingVisible &&
+					this.groupsView.activeGroup !== this && this.groupsView.groups.includes(this) &&
+					!['inQuickInput', 'dialogVisible', 'suggestWidgetVisible', 'findWidgetVisible', 'parameterHintsVisible', 'renameInputVisible'].some(key => context.getValue(key))) {
+					this.focus();
+				}
+			}, EditorGroupView.HOVER_FOCUS_DELAY));
+			this._register(addDisposableListener(this.element, EventType.MOUSE_ENTER, event => {
+				if (!event.buttons && this.configurationService.getValue<boolean>('terminalFirst.tiles.focusFollowsMouse') !== false) {
+					hoverFocus.schedule();
+				}
+			}));
+			this._register(addDisposableListener(this.element, EventType.MOUSE_LEAVE, () => hoverFocus.cancel()));
+			this._register(addDisposableListener(this.element, EventType.MOUSE_DOWN, () => hoverFocus.cancel()));
+
+			const closeTile = this.element.ownerDocument.createElement('button');
+			closeTile.className = 'terminal-first-close-tile';
+			closeTile.type = 'button';
+			const closeLabel = localize('closeTile', "Close Tile");
+			closeTile.setAttribute('aria-label', closeLabel);
+			const closeIcon = closeTile.appendChild($('span'));
+			closeIcon.className = ThemeIcon.asClassName(Codicon.close);
+			closeIcon.setAttribute('aria-hidden', 'true');
+			this.element.appendChild(closeTile);
+			this._register(this.hoverService.setupDelayedHover(closeTile, { content: closeLabel }));
+			this._register(addDisposableListener(closeTile, EventType.MOUSE_DOWN, event => {
+				hoverFocus.cancel();
+				EventHelper.stop(event);
+			}));
+			this._register(addDisposableListener(closeTile, EventType.CLICK, event => {
+				EventHelper.stop(event);
+				void this.commandService.executeCommand('terminalFirst.tile.close', this.id).catch(onUnexpectedError);
+			}));
+			this._register(addDisposableListener(closeTile, EventType.DBLCLICK, event => EventHelper.stop(event)));
+
+			const newTile = this.element.ownerDocument.createElement('button');
+			newTile.className = 'terminal-first-empty-new-tile';
+			newTile.type = 'button';
+			newTile.textContent = localize('newTile', "New Tile");
+			this.element.appendChild(newTile);
+			this._register(addDisposableListener(newTile, EventType.CLICK, event => {
+				EventHelper.stop(event);
+				void this.commandService.executeCommand('terminalFirst.tile.new').catch(onUnexpectedError);
+			}));
+			this._register(addDisposableListener(newTile, EventType.DBLCLICK, event => EventHelper.stop(event)));
+		}
 
 		// Open new file via doubleclick on empty container
 		this._register(addDisposableListener(this.element, EventType.DBLCLICK, e => {
@@ -612,7 +679,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 		this._register(this.groupsView.onDidChangeEditorPartOptions(e => this.onDidChangeEditorPartOptions(e)));
 
 		// Visibility
-		this._register(this.groupsView.onDidVisibilityChange(e => this.onDidVisibilityChange(e)));
+		this._register(this.groupsView.onDidVisibilityChange(e => this.setVisible(e && this.groupsView.groups.includes(this))));
 
 		// Focus
 		this._register(this.onDidFocus(() => this.onDidGainFocus()));
@@ -894,7 +961,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 		this.titleControl.updateEditorSelections();
 	}
 
-	private onDidVisibilityChange(visible: boolean): void {
+	setVisible(visible: boolean): void {
 
 		// Forward to active editor pane
 		this.editorPane.setVisible(visible);
@@ -946,7 +1013,8 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	get titleHeight(): IEditorGroupTitleHeight {
-		return this.titleControl.getHeight();
+		const height = this.titleControl.getHeight();
+		return terminalFirstEnabled ? { total: Math.max(32, height.total), offset: height.offset } : height;
 	}
 
 	notifyIndexChanged(newIndex: number): void {
@@ -1188,6 +1256,10 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	private async doOpenEditor(editor: EditorInput, options?: IEditorOptions, internalOptions?: IInternalEditorOpenOptions): Promise<IEditorPane | undefined> {
+
+		if (isGroupDedicatedForEditor(this, editor)) {
+			return this.editorService.openEditor(editor, options);
+		}
 
 		// Guard against invalid editors. Disposed editors
 		// should never open because they emit no events
@@ -1469,6 +1541,7 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 	}
 
 	private doMoveOrCopyEditorAcrossGroups(editor: EditorInput, target: EditorGroupView, openOptions?: IEditorOpenOptions, internalOptions?: IInternalMoveCopyOptions): boolean {
+		if (isGroupDedicatedForEditor(target, editor)) { return false; }
 		const keepCopy = internalOptions?.keepCopy;
 
 		// Validate that we can move
@@ -2218,8 +2291,8 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 
 	readonly element: HTMLElement = $('div');
 
-	get minimumWidth(): number { return this.editorPane.minimumWidth; }
-	get minimumHeight(): number { return this.editorPane.minimumHeight; }
+	get minimumWidth(): number { return terminalFirstEnabled ? Math.max(EDITOR_TILE_MIN_WIDTH, this.editorPane.minimumWidth + EDITOR_TILE_INSET * 2) : this.editorPane.minimumWidth; }
+	get minimumHeight(): number { return terminalFirstEnabled ? Math.max(EDITOR_TILE_MIN_HEIGHT, this.editorPane.minimumHeight + EDITOR_TILE_INSET * 2) : this.editorPane.minimumHeight; }
 	get maximumWidth(): number { return this.editorPane.maximumWidth; }
 	get maximumHeight(): number { return this.editorPane.maximumHeight; }
 
@@ -2236,26 +2309,36 @@ export class EditorGroupView extends Themable implements IEditorGroupView {
 
 	layout(width: number, height: number, top: number, left: number): void {
 		this.lastLayout = { width, height, top, left };
+		if (terminalFirstEnabled) {
+			width = Math.max(0, width - EDITOR_TILE_INSET * 2);
+			height = Math.max(0, height - EDITOR_TILE_INSET * 2);
+			top += EDITOR_TILE_INSET;
+			left += EDITOR_TILE_INSET;
+		}
 		this.element.classList.toggle('max-height-478px', height <= 478);
 
 		const contentWidth = Math.max(0, width - this._contentRightInset);
 		this.titleContainer.style.setProperty('--title-border-bottom-width', `${contentWidth}px`);
 
-		// Keep tabs full-width while the header and editor pane follow the content inset.
-		const titleControlSize = this.titleControl.layout({
-			container: new Dimension(width, height),
-			available: new Dimension(width, height - this.editorPane.minimumHeight)
-		}, contentWidth);
+		// Reserve the top-right corner for the tile close button.
+		const titleWidth = terminalFirstEnabled ? Math.max(0, width - 32) : width;
+		this.titleContainer.style.width = `${titleWidth}px`;
+
+		// The header and editor pane follow the content inset.
+		this.titleControl.layout({
+			container: new Dimension(titleWidth, height),
+			available: new Dimension(titleWidth, height - this.editorPane.minimumHeight)
+		}, Math.min(titleWidth, contentWidth));
 
 		// Update progress bar location
 		this.progressBar.getContainer().style.top = `${Math.max(this.titleHeight.offset - 2, 0)}px`;
 
 		// The editor pane is inset on the right by `_contentRightInset` so a docked
 		// panel can sit beside it under the full-width title (0 = fill the group).
-		const editorHeight = Math.max(0, height - titleControlSize.height);
+		const editorHeight = Math.max(0, height - this.titleHeight.total);
 		this.editorContainer.style.width = `${contentWidth}px`;
 		this.editorContainer.style.height = `${editorHeight}px`;
-		this.editorPane.layout({ width: contentWidth, height: editorHeight, top: top + titleControlSize.height, left });
+		this.editorPane.layout({ width: contentWidth, height: editorHeight, top: top + this.titleHeight.total, left });
 	}
 
 	/**

@@ -2,16 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { append, $ } from '../../../../base/browser/dom.js';
-import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import './floatingOverlay.css';
-import './nativeVim.css';
+import { ITerminalFirstLeaderService } from './terminalFirstLeader.js';
 import { NativeVimPickers } from './nativeVimPickers.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
-import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { validateVimRemaps, VimRemap } from '../../../../editor/contrib/nativeVim/common/vimRemapping.js';
@@ -39,42 +36,14 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { URI } from '../../../../base/common/uri.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
 
-interface ModalAction { keys: string; label: string; command: string }
-const actions: readonly ModalAction[] = [
-	{ keys: 'ff', label: localize('findFile', "Find File"), command: 'workbench.action.quickOpen' },
-	{ keys: 'fe', label: localize('browse', "Browse Directory"), command: 'terminalFirst.toggleFloatingFileBrowser' },
-	{ keys: 'fs', label: localize('save', "Save File"), command: 'workbench.action.files.save' },
-	{ keys: 'bb', label: localize('buffers', "Pick Buffer"), command: 'workbench.action.showAllEditors' },
-	{ keys: 'bn', label: localize('nextBuffer', "Next Buffer"), command: 'workbench.action.nextEditor' },
-	{ keys: 'bp', label: localize('previousBuffer', "Previous Buffer"), command: 'workbench.action.previousEditor' },
-	{ keys: 'bd', label: localize('closeBuffer', "Close Buffer"), command: 'workbench.action.closeActiveEditor' },
-	...(['h', 'j', 'k', 'l'] as const).map((key, index) => ({ keys: `w${key}`, label: [localize('left', "Focus Left Pane"), localize('down', "Focus Pane Below"), localize('up', "Focus Pane Above"), localize('right', "Focus Right Pane")][index], command: ['workbench.action.focusLeftGroup', 'workbench.action.focusBelowGroup', 'workbench.action.focusAboveGroup', 'workbench.action.focusRightGroup'][index] })),
-	{ keys: 'wv', label: localize('vertical', "Split Vertically"), command: 'workbench.action.splitEditorRight' },
-	{ keys: 'ws', label: localize('horizontal', "Split Horizontally"), command: 'workbench.action.splitEditorDown' },
-	{ keys: 'wq', label: localize('closePane', "Close Pane"), command: 'workbench.action.closeEditorsInGroup' },
-	{ keys: 'ss', label: localize('searchText', "Search Project Text"), command: 'workbench.action.findInFiles' },
-	{ keys: 'sy', label: localize('symbols', "Search Project Symbols"), command: 'workbench.action.showAllSymbols' },
-	{ keys: 'ca', label: localize('codeAction', "Code Actions"), command: 'editor.action.quickFix' },
-	{ keys: 'cr', label: localize('rename', "Rename Symbol"), command: 'editor.action.rename' },
-	{ keys: 'cf', label: localize('format', "Format Document"), command: 'editor.action.formatDocument' },
-	{ keys: 'cd', label: localize('diagnostic', "Next Diagnostic"), command: 'editor.action.marker.nextInFiles' },
-	{ keys: 'jj', label: localize('jumpList', "Open Jump List"), command: 'terminalFirst.toggleFloatingJumpList' },
-	{ keys: 'ja', label: localize('addJump', "Add File to Jump List"), command: 'terminalFirst.addToJumpList' },
-	{ keys: 'tt', label: localize('terminal', "Toggle Floating Terminal"), command: 'terminalFirst.toggleFloatingTerminal' },
-	{ keys: 'ts', label: localize('session', "Pick Session"), command: 'terminalFirst.pickTerminal' },
-	{ keys: 'tn', label: localize('newSession', "New Session"), command: 'terminalFirst.newTerminal' },
-];
-
 /** App-owned navigation layer. It never dispatches keys to a terminal or unrelated input. */
-class NativeVimService extends Disposable implements INativeVimService {
+export class NativeVimService extends Disposable implements INativeVimService {
 	declare readonly _serviceBrand: undefined;
 	readonly shared = new VimSharedState();
 	private ready = false;
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChange = this.changed.event;
 	hint = '';
-	private sequence: string | undefined;
-	private readonly hints = this._register(new RunOnceScheduler(() => this.showHints(), 250));
 	private remapBuffer: string[] = [];
 	private expanding = false;
 	private remaps: readonly VimRemap[] = [];
@@ -82,7 +51,7 @@ class NativeVimService extends Disposable implements INativeVimService {
 	private readonly jumps = new Map<string, { entries: { resource: URI; offset: number }[]; index: number }>();
 
 	constructor(
-		@IWorkbenchLayoutService layout: IWorkbenchLayoutService,
+		@ITerminalFirstLeaderService private readonly leader: ITerminalFirstLeaderService,
 		@IStorageService storage: IStorageService,
 		@ITerminalFirstService private readonly sessions: ITerminalFirstService,
 		@IContextKeyService contexts: IContextKeyService,
@@ -91,18 +60,15 @@ class NativeVimService extends Disposable implements INativeVimService {
 		@ICodeEditorService private readonly editors: ICodeEditorService,
 		@IEditorService private readonly editorService: IEditorService,
 		@IClipboardService private readonly clipboard: IClipboardService,
-		@IQuickInputService private readonly quickInput: IQuickInputService,
+		@IQuickInputService quickInput: IQuickInputService,
 		@INotificationService private readonly notifications: INotificationService,
 		@IDialogService private readonly dialogs: IDialogService,
 		@IExtensionManagementService extensions: IExtensionManagementService,
 		@IWorkbenchExtensionEnablementService enablement: IWorkbenchExtensionEnablementService,
 	) {
 		super();
+		this._register(this.leader.onDidChange(() => { this.hint = this.leader.hint; this.changed.fire(); }));
 		this._register(new NativeVimPickers(this, quickInput, commands, contexts));
-		const menu = append(layout.mainContainer, $('.native-vim-leader'));
-		menu.hidden = true; menu.setAttribute('role', 'status'); menu.setAttribute('aria-live', 'polite');
-		this._register(toDisposable(() => menu.remove()));
-		this._register(this.onDidChange(() => { menu.textContent = this.hint; menu.hidden = !this.hint; }));
 		this._register(sessions.onDidChangeSessions(() => {
 			this.cancel();
 			for (const id of this.jumps.keys()) { if (!sessions.sessions.some(session => session.id === id)) { this.jumps.delete(id); } }
@@ -138,21 +104,13 @@ class NativeVimService extends Disposable implements INativeVimService {
 	}
 	readClipboard(): Promise<string> { return this.clipboard.readText(); }
 	get enabled(): boolean { return this.ready; }
-	cancel(): void { this.sequence = undefined; this.remapBuffer = []; this.hint = ''; this.hints.cancel(); this.changed.fire(); }
+	cancel(): void { this.leader.cancel(); this.remapBuffer = []; this.hint = ''; this.changed.fire(); }
 	key(key: string, mode: VimMode, allowRemaps = true): boolean {
 		if (this.expanding) { return false; }
-		if (key === '<Esc>') { const pending = this.sequence !== undefined || this.remapBuffer.length > 0; this.cancel(); return pending; }
-		if (this.sequence !== undefined) {
-			this.sequence += key;
-			if (this.sequence === '?') { this.cancel(); this.execute('help'); return true; }
-			const action = actions.find(action => action.keys === this.sequence);
-			if (action) { this.cancel(); this.execute(action.command); }
-			else if (actions.some(action => action.keys.startsWith(this.sequence!))) { this.showHints(); }
-			else { this.cancel(); }
-			return true;
-		}
+		if (this.leader.active) { return this.leader.key(key); }
+		if (key === '<Esc>') { const pending = this.remapBuffer.length > 0; this.cancel(); return pending; }
 		if (mode === 'normal' && (key === this.configuration.getValue<string>('terminalFirst.vim.leader') || key === '<C-w>')) {
-			this.sequence = key === '<C-w>' ? 'w' : ''; this.hints.schedule(this.configuration.getValue<number>('terminalFirst.vim.hintDelay')); return true;
+			this.leader.start(key === '<C-w>' ? 'w' : ''); return true;
 		}
 		if (!allowRemaps) { return false; }
 		const remaps = this.remaps;
@@ -182,12 +140,6 @@ class NativeVimService extends Disposable implements INativeVimService {
 		const editor = this.editors.getFocusedCodeEditor(); const contribution = editor?.getContribution<NativeVimContribution>(NativeVimContribution.ID);
 		if (contribution && !contribution.handle(key)) { editor?.trigger('nativeVim', 'type', { text: key }); }
 	}
-	private showHints(): void {
-		if (this.sequence === undefined) { return; }
-		const groups: Record<string, string> = { f: localize('filesGroup', "Files"), b: localize('buffersGroup', "Buffers"), w: localize('panesGroup', "Panes"), s: localize('searchGroup', "Search"), c: localize('codeGroup', "Code"), j: localize('jumpsGroup', "Jump List"), t: localize('sessionsGroup', "Sessions and Terminal"), '?': localize('helpGroup', "Search All Actions") };
-		this.hint = this.sequence ? actions.filter(action => action.keys.startsWith(this.sequence!)).map(action => `${action.keys}  ${action.label}`).join('\n') : Object.entries(groups).map(([key, label]) => `${key}  ${label}`).join('\n');
-		this.changed.fire();
-	}
 	execute(command: string, argument?: string): void { void this.run(command, argument).catch(error => this.notifications.error(error)); }
 	private async run(command: string, argument?: string): Promise<void> {
 		if (command === 'recordJump' || command === 'jumpBack' || command === 'jumpForward') {
@@ -206,10 +158,7 @@ class NativeVimService extends Disposable implements INativeVimService {
 			return;
 		}
 		if (command === 'clipboardWrite') { await this.clipboard.writeText(argument ?? ''); return; }
-		if (command === 'help') {
-			const item = await this.quickInput.pick(actions.map(action => ({ label: action.label, description: `Space ${action.keys}`, command: action.command })), { placeHolder: localize('helpPlaceholder', "Search Vim Actions") });
-			if (item) { await this.commands.executeCommand(item.command); } return;
-		}
+		if (command === 'help' || command.startsWith('workbench.action.moveEditorTo')) { await this.leader.execute(command); return; }
 		if (command !== 'ex') { await this.commands.executeCommand(command); return; }
 		await this.ex(argument?.trim() ?? '');
 	}
@@ -217,7 +166,7 @@ class NativeVimService extends Disposable implements INativeVimService {
 		const editor = this.editors.getFocusedCodeEditor() ?? this.editors.getActiveCodeEditor(); const model = editor?.getModel();
 		if (!editor || !model) { return; }
 		if (/^\d+$/.test(line)) { editor.setPosition({ lineNumber: Math.min(model.getLineCount(), Math.max(1, Number(line))), column: 1 }); return; }
-		const simple: Record<string, string> = { w: 'workbench.action.files.save', wa: 'workbench.action.files.saveAll', q: 'workbench.action.closeActiveEditor', bd: 'workbench.action.closeActiveEditor', bdelete: 'workbench.action.closeActiveEditor', bn: 'workbench.action.nextEditor', bnext: 'workbench.action.nextEditor', bp: 'workbench.action.previousEditor', bprevious: 'workbench.action.previousEditor', buffers: 'workbench.action.showAllEditors', ls: 'workbench.action.showAllEditors', split: 'workbench.action.splitEditorDown', sp: 'workbench.action.splitEditorDown', vsplit: 'workbench.action.splitEditorRight', vs: 'workbench.action.splitEditorRight' };
+		const simple: Record<string, string> = { w: 'workbench.action.files.save', wa: 'workbench.action.files.saveAll', q: 'workbench.action.closeActiveEditor', bd: 'workbench.action.closeActiveEditor', bdelete: 'workbench.action.closeActiveEditor', bn: 'workbench.action.nextEditorInGroup', bnext: 'workbench.action.nextEditorInGroup', bp: 'workbench.action.previousEditorInGroup', bprevious: 'workbench.action.previousEditorInGroup', buffers: 'workbench.action.showEditorsInActiveGroup', ls: 'workbench.action.showEditorsInActiveGroup', split: 'terminalFirst.tile.splitEditorDown', sp: 'terminalFirst.tile.splitEditorDown', vsplit: 'terminalFirst.tile.splitEditorRight', vs: 'terminalFirst.tile.splitEditorRight' };
 		if (simple[line]) { await this.commands.executeCommand(simple[line]); return; }
 		if (line === 'wq' || line === 'x') { const input = this.editorService.activeEditor; await this.commands.executeCommand('workbench.action.files.save'); if (input && this.editorService.activeEditor === input && !input.isDirty()) { await this.commands.executeCommand('workbench.action.closeActiveEditor'); } return; }
 		if (line.startsWith('e ')) { const path = line.slice(2).trim(); await this.editorService.openEditor({ resource: path.startsWith('/') ? URI.file(path) : joinPath(dirname(model.uri), path), options: { pinned: true } }); return; }
@@ -251,9 +200,10 @@ class NativeVimService extends Disposable implements INativeVimService {
 registerSingleton(INativeVimService, NativeVimService, InstantiationType.Delayed);
 Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({
 	id: 'terminalFirst.vim', title: localize('settings', "Native Vim"), type: 'object', properties: {
-		'terminalFirst.vim.engine': { type: 'string', enum: ['native', 'extension', 'off'], default: 'extension', description: localize('engineSetting', "Vim engine. Reload required. Native is experimental until acceptance validation is complete.") },
+		'terminalFirst.vim.engine': { type: 'string', enum: ['native', 'extension', 'off'], default: 'native', description: localize('engineSetting', "Vim engine. Reload required. Native is experimental until acceptance validation is complete.") },
 		'terminalFirst.vim.leader': { type: 'string', default: ' ', minLength: 1, maxLength: 1, description: localize('leaderSetting', "Normal-mode leader key.") },
 		'terminalFirst.vim.hintDelay': { type: 'number', default: 250, minimum: 0, maximum: 2000, description: localize('hintSetting', "Delay before showing leader hints, in milliseconds.") },
+		'terminalFirst.vim.leaderBindings': { type: 'array', default: [], description: localize('leaderBindingsSetting', "Additional code-mode leader shortcuts. Bindings that conflict with existing shortcuts or menu prefixes are ignored."), items: { type: 'object', required: ['keys', 'label', 'command'], additionalProperties: false, properties: { keys: { type: 'string', minLength: 1 }, label: { type: 'string' }, command: { type: 'string', minLength: 1 } } } },
 		'terminalFirst.vim.remaps': { type: 'array', default: [], description: localize('remapsSetting', "Nonrecursive mode-specific key mappings."), items: { type: 'object', required: ['mode', 'before'], additionalProperties: false, properties: { mode: { type: 'string', enum: ['normal', 'insert', 'visual', 'visualLine', 'visualBlock', 'operator', 'replace'] }, before: { type: 'array', minItems: 1, items: { type: 'string' } }, after: { type: 'array', items: { type: 'string' } }, command: { type: 'string' } }, oneOf: [{ required: ['after'] }, { required: ['command'] }] } },
 	}
 });

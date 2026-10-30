@@ -988,7 +988,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	async createTerminal(options?: ICreateTerminalOptions): Promise<ITerminalInstance> {
-		if (terminalFirstEnabled && !options?.terminalFirstSession && !options?.terminalFirstFloating) {
+		if (terminalFirstEnabled && !options?.terminalFirstSession && !options?.terminalFirstFloating && !options?.terminalFirstTile) {
 			throw new Error(nls.localize('terminalFirst.creationBlocked', "Use the session strip to open a terminal. Integrated terminals, terminal tasks, and terminal-backed debugging are unavailable."));
 		}
 		// Await the initialization of available profiles as long as this is not a pty terminal or a
@@ -1029,7 +1029,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		}
 
 		// Get the contributed profile if it was provided
-		const contributedProfile = options?.skipContributedProfileCheck || options?.terminalFirstFloating ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
+		const contributedProfile = options?.skipContributedProfileCheck || options?.terminalFirstFloating || options?.terminalFirstTile ? undefined : await this._getContributedProfile(shellLaunchConfig, options);
 
 		const splitActiveTerminal = typeof options?.location === 'object' && hasKey(options.location, { splitActiveTerminal: true })
 			? options.location.splitActiveTerminal
@@ -1250,7 +1250,7 @@ export class TerminalService extends Disposable implements ITerminalService {
 		let instance;
 		if (location === TerminalLocation.Editor) {
 			instance = this._terminalInstanceService.createInstance(shellLaunchConfig, TerminalLocation.Editor);
-			if (!shellLaunchConfig.hideFromUser) {
+			if (!shellLaunchConfig.hideFromUser && !options?.terminalFirstTile) {
 				const editorOptions = this._getEditorOptions(options?.location);
 				this._terminalEditorService.openEditor(instance, editorOptions);
 			}

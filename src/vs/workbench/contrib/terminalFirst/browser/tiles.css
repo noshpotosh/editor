@@ -1,0 +1,123 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-workbench .terminal-first-tool-tile {
+	background: var(--vscode-terminalFirst-tile-gutterBackground);
+	color: var(--vscode-sideBar-foreground);
+	overflow: hidden;
+}
+
+/* Tool tiles host sidebar views, so their action row matches a view pane header. */
+.monaco-workbench .terminal-first-tool-tile .tile-tool-actions {
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 0 var(--vscode-spacing-size80);
+}
+
+.monaco-workbench .terminal-first-tool-tile .tile-tool-body {
+	height: calc(100% - 22px);
+	position: relative;
+}
+
+/* The composite host moves between session tiles, so it fills whichever body holds it. */
+.monaco-workbench .terminal-first-tool-tile .tile-tool-composite {
+	height: 100%;
+}
+
+/* Shown until an extension registers the tile's view container. */
+.monaco-workbench .terminal-first-tool-tile .tile-tool-placeholder {
+	padding: var(--vscode-spacing-size80);
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Each grid cell is its own card; the sash remains in the gutter between cards. */
+.monaco-workbench .part.editor > .content .editor-group-container.terminal-first-tile {
+	margin: var(--vscode-spacing-size40);
+	width: calc(100% - 2 * var(--vscode-spacing-size40));
+	height: calc(100% - 2 * var(--vscode-spacing-size40));
+	box-sizing: border-box;
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-tile-border, transparent);
+	border-radius: var(--vscode-cornerRadius-large);
+	overflow: hidden;
+	background: var(--vscode-editor-background);
+}
+
+.monaco-workbench:not(.terminal-first-single-tile) .part.editor > .content .editor-group-container.terminal-first-tile.active {
+	border-color: var(--vscode-terminalFirst-tile-activeBorder, var(--vscode-terminalFirst-tile-border, transparent));
+}
+
+.monaco-workbench.terminal-first-tiles .monaco-grid-view .part.editor:not(.modal-editor-part) {
+	--modern-ui-editor-border-color: transparent;
+	border-color: transparent;
+	border-radius: 0;
+	background: var(--vscode-terminalFirst-tile-gutterBackground);
+	box-shadow: none;
+}
+
+.monaco-workbench.terminal-first-tiles .part.editor > .content .monaco-grid-view {
+	background: var(--vscode-terminalFirst-tile-gutterBackground);
+}
+
+.monaco-workbench .terminal-first-empty-new-tile {
+	display: none;
+	position: absolute;
+	bottom: var(--vscode-spacing-size160);
+	right: var(--vscode-spacing-size160);
+	z-index: 1;
+	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size120);
+	border: var(--vscode-strokeThickness) solid var(--vscode-button-border, transparent);
+	border-radius: var(--vscode-cornerRadius-small);
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.monaco-workbench.terminal-first-tiles .part.editor > .content.empty .terminal-first-empty-new-tile {
+	display: block;
+}
+
+.monaco-workbench .terminal-first-empty-new-tile:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.monaco-workbench .terminal-first-empty-new-tile:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: var(--vscode-spacing-size20);
+}
+
+/* Keep the close control clear of tabs and of content when tabs are hidden. */
+.monaco-workbench .part.editor > .content .editor-group-container.terminal-first-tile > .title {
+	min-height: 32px;
+}
+
+.monaco-workbench .terminal-first-close-tile {
+	position: absolute;
+	top: var(--vscode-spacing-size40);
+	right: var(--vscode-spacing-size40);
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: var(--vscode-cornerRadius-small);
+	background: transparent;
+	color: var(--vscode-icon-foreground);
+	cursor: pointer;
+}
+
+.monaco-workbench .terminal-first-close-tile:hover {
+	background: var(--vscode-toolbar-hoverBackground);
+}
+
+.monaco-workbench .terminal-first-close-tile:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: -2px;
+}

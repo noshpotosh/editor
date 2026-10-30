@@ -3,11 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import '../common/terminalFirstColorRegistry.js';
+import './tiles.js';
+import './terminalCopyMode.js';
+import './terminalFirstLeader.js';
+import './terminalFirstNavigation.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { terminalFirstEnabled, TerminalFirstFloatingEnabledContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
-import { localize2 } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { Extensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
@@ -32,13 +37,35 @@ class TerminalFirstContribution {
 }
 
 if (terminalFirstEnabled) {
+	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({ id: 'terminalFirst.terminal', title: localize('terminalSettings', "Terminal First"), type: 'object', properties: {
+		'terminalFirst.terminal.padding': { type: 'number', default: 12, minimum: 0, maximum: 100, description: localize('padding', "Terminal padding in pixels.") },
+	} });
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
 		overrides: {
+			'window.titleBarStyle': 'custom',
+			'window.customTitleBarVisibility': 'auto',
+			'terminal.integrated.fontFamily': '"JetBrains Mono", "SF Mono", Menlo, monospace',
+			'terminal.integrated.fontSize': 13,
+			'terminal.integrated.lineHeight': 1.2,
+			'terminal.integrated.cursorStyle': 'block',
+			'terminal.integrated.cursorBlinking': true,
+			'terminal.integrated.scrollback': 10000,
+			'terminal.integrated.gpuAcceleration': 'on',
+			'terminal.integrated.minimumContrastRatio': 1,
+			'security.workspace.trust.startupPrompt': 'never',
+			'extensions.ignoreRecommendations': true,
+			'update.mode': 'none',
+			'update.showReleaseNotes': false,
+			'workbench.tips.enabled': false,
+			'workbench.enableExperiments': false,
+			'git.openRepositoryInParentFolders': 'never',
+			'git.autoRepositoryDetection': 'subFolders',
+
 			'workbench.startupEditor': 'none',
 			'workbench.welcomePage.experimentalOnboarding': false,
 			'terminal.integrated.initialHint': false,
-			'workbench.editor.showTabs': 'single',
+			'workbench.editor.showTabs': 'multiple',
 			'workbench.editor.enablePreview': false,
 			'workbench.editor.focusRecentEditorAfterClose': true,
 			'workbench.editor.editorActionsLocation': 'hidden',
@@ -46,8 +73,7 @@ if (terminalFirstEnabled) {
 			'scm.showActionButton': false,
 			'scm.showInputActionButton': false,
 			'workbench.statusBar.visible': false,
-			'workbench.activityBar.location': 'top',
-			'workbench.sideBar.location': 'right',
+			'workbench.activityBar.location': 'hidden',
 			'workbench.secondarySideBar.defaultVisibility': 'hidden',
 			'window.commandCenter': false,
 			'workbench.layoutControl.enabled': false,
@@ -82,6 +108,13 @@ if (terminalFirstEnabled) {
 		});
 	}
 
+	CommandsRegistry.registerCommand('terminalFirst.showEditor', accessor => accessor.get(ITerminalFirstService).showEditor());
+	CommandsRegistry.registerCommand('terminalFirst.showShell', accessor => accessor.get(ITerminalFirstService).showShell());
+	CommandsRegistry.registerCommand('terminalFirst.closeSession', accessor => {
+		const service = accessor.get(ITerminalFirstService);
+		const active = service.sessions.find(session => session.active);
+		return active ? service.closeSession(active.id) : undefined;
+	});
 	const actions = [
 		{ id: 'terminalFirst.toggleFloatingFileBrowser', title: localize2('terminalFirst.toggleFloatingFileBrowser', "Toggle Floating File Browser"), key: KeyMod.CtrlCmd | KeyCode.KeyE, run: (service: ITerminalFirstService) => service.toggleFloatingFileBrowser() },
 		{ id: 'terminalFirst.toggleFloatingTerminal', title: localize2('terminalFirst.toggleFloatingTerminal', "Toggle Floating Terminal"), key: KeyMod.CtrlCmd | KeyCode.KeyT, run: (service: ITerminalFirstService) => service.toggleFloatingTerminal() },

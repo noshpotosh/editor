@@ -4,6 +4,9 @@
 set -euo pipefail
 
 TERMINAL_FIRST_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -d "$TERMINAL_FIRST_ROOT/.build/electron" && -d "$TERMINAL_FIRST_ROOT/out" ]]; then
+	export VSCODE_SKIP_PRELAUNCH=1
+fi
 exec "$TERMINAL_FIRST_ROOT/scripts/code.sh" \
 	--user-data-dir "$TERMINAL_FIRST_ROOT/.build/terminal-first/user-data" \
 	--extensions-dir "$TERMINAL_FIRST_ROOT/.build/terminal-first/extensions" \

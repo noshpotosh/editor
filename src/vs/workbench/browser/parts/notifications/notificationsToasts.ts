@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/notificationsToasts.css';
 import { localize } from '../../../../nls.js';
 import { INotificationsModel, NotificationChangeType, INotificationChangeEvent, INotificationViewItem, NotificationViewItemContentChangeKind, NotificationsSettings, NotificationsPosition, getNotificationsPosition } from '../../../common/notifications.js';
@@ -193,6 +194,7 @@ export class NotificationsToasts extends Themable implements INotificationsToast
 	}
 
 	private addToast(item: INotificationViewItem): void {
+		if (terminalFirstPolicy.shell && item.priority !== NotificationPriority.URGENT) { return; }
 		if (this.isNotificationsCenterVisible) {
 			return; // do not show toasts while notification center is visible
 		}

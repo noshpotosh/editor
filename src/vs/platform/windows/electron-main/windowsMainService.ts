@@ -1510,6 +1510,15 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 	}
 
 	private async openInBrowserWindow(options: IOpenBrowserWindowOptions): Promise<ICodeWindow> {
+		if (isMacintosh && product.urlProtocol === 'terminal-first' && !options.remoteAuthority && options.workspace && isSingleFolderWorkspaceIdentifier(options.workspace) && options.workspace.uri.scheme === Schemas.file) {
+			const directory = URI.joinPath(this.environmentMainService.workspaceStorageHome, options.workspace.id);
+			const configPath = URI.joinPath(directory, 'vs-nosh.code-workspace');
+			if (!await this.fileService.exists(configPath)) {
+				await this.fileService.createFolder(directory);
+				await this.fileService.writeFile(configPath, VSBuffer.fromString(JSON.stringify({ folders: [{ path: options.workspace.uri.fsPath }] }, null, '\t')));
+			}
+			options = { ...options, workspace: getWorkspaceIdentifier(configPath) };
+		}
 		const windowConfig = this.configurationService.getValue<IWindowSettings | undefined>('window');
 
 		const lastActiveWindow = this.getLastActiveWindow();

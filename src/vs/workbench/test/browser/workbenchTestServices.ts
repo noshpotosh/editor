@@ -942,6 +942,7 @@ export class TestEditorGroupsService implements IEditorGroupsService {
 	addGroup(_location: number | IEditorGroup, _direction: GroupDirection): IEditorGroup { throw new Error('not implemented'); }
 	removeGroup(_group: number | IEditorGroup): void { }
 	moveGroup(_group: number | IEditorGroup, _location: number | IEditorGroup, _direction: GroupDirection): IEditorGroup { throw new Error('not implemented'); }
+	swapGroups(_group: number | IEditorGroup, _other: number | IEditorGroup): void { }
 	mergeGroup(_group: number | IEditorGroup, _target: number | IEditorGroup, _options?: IMergeGroupOptions): boolean { throw new Error('not implemented'); }
 	mergeAllGroups(_group: number | IEditorGroup, _options?: IMergeGroupOptions): boolean { throw new Error('not implemented'); }
 	copyGroup(_group: number | IEditorGroup, _location: number | IEditorGroup, _direction: GroupDirection): IEditorGroup { throw new Error('not implemented'); }
@@ -962,6 +963,7 @@ export class TestEditorGroupsService implements IEditorGroupsService {
 }
 
 export class TestEditorGroupView implements IEditorGroupView {
+	setVisible(_visible: boolean): void { }
 	async confirmCloseAllEditors(): Promise<boolean> { return true; }
 
 	constructor(public id: number) { }

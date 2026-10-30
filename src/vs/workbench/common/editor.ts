@@ -880,7 +880,10 @@ export const enum EditorInputCapabilities {
 	 * click, or close commands. Callers with an explicit lifecycle
 	 * requirement can force the editor to close.
 	 */
-	CannotClose = 1 << 13
+	CannotClose = 1 << 13,
+
+	/** This input occupies a group exclusively; unrelated editors must open elsewhere. */
+	RequiresDedicatedGroup = 1 << 14
 }
 
 export type IUntypedEditorInput = IResourceEditorInput | ITextResourceEditorInput | IUntitledTextResourceEditorInput | IResourceDiffEditorInput | IResourceMultiDiffEditorInput | IResourceSideBySideEditorInput | IResourceMergeEditorInput;

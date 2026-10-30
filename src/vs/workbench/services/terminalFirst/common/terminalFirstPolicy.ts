@@ -37,7 +37,7 @@ export function isTerminalFirstInteraction(id: string): boolean {
 export function isTerminalFirstCommandAllowed(id: string, mode = terminalFirstPolicy.mode, enabled = terminalFirstEnabled): boolean {
 	if (!enabled) { return true; }
 	if (id.startsWith('workbench.action.terminal.')) {
-		return (mode !== 'editor' || terminalFirstPolicy.floatingVisible) && isTerminalFirstInteraction(id);
+		return isTerminalFirstInteraction(id);
 	}
 	if (mode !== 'shell') { return true; }
 	return !id.startsWith('workbench.') || ['workbench.action.reloadWindow', 'workbench.action.closeWindow', 'workbench.action.quit', 'workbench.action.toggleFullScreen', 'workbench.action.zoomIn', 'workbench.action.zoomOut', 'workbench.action.zoomReset'].includes(id);

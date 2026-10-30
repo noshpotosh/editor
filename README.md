@@ -10,12 +10,12 @@ This is an early macOS source build aimed at becoming a personal daily driver. P
 
 - **Shell on launch.** Ordinary windows start in the terminal; explicit file launches open the editor.
 - **An editor on demand.** `e file` opens local files in the originating window, including paths with spaces and files that do not exist yet. `e --wait file` waits until the requested files close.
-- **Vim-style editing.** VSCodeVim remains the default. An opt-in first-party native Vim preview adds modal editing, Space-led command menus, and consistent picker navigation; see [Native Vim preview](TERMINAL_FIRST.md#native-vim-preview) for setup and current limits.
+- **Vim-style editing.** The first-party native Vim preview is enabled by default and adds modal editing, Space-led command menus, and consistent picker navigation; see [Native Vim preview](TERMINAL_FIRST.md#native-vim-preview) for setup and current limits.
 - **Plain terminal mode.** Only the terminal and persistent session strip remain. Sidebar, panel, and workbench shortcuts cannot reveal tools until you open the editor. The title-bar layout and Open in Agents controls are removed.
 - **Independent session tabs.** Each tab retains its shell, files, diffs, unsaved buffers, and editor layout. The strip stays visible in both modes; its plus button creates a separate shell tab. The editor has no embedded terminal.
 - **An isolated profile.** Development launchers keep settings, extensions, and shared data under `.build/terminal-first`, separate from an installed VS Code profile.
 
-The editing engine is VS Code with VSCodeVim; this version does not embed a Neovim runtime. Your existing shell tools can remain at the center of navigation, builds, Git, and other development work, while VS Code's language and workbench features remain accessible.
+The editing engine is VS Code with native Vim controls; this version does not embed a Neovim runtime. Your existing shell tools can remain at the center of navigation, builds, Git, and other development work, while VS Code's language and workbench features remain accessible.
 
 ## Build and run
 
@@ -26,11 +26,10 @@ git clone --branch terminal-first https://github.com/noshpotosh/editor.git
 cd editor
 npm run install-fast
 npm run build-fast
-./scripts/setup-terminal-first-vim.sh
 ./scripts/terminal-first.sh /path/to/project
 ```
 
-The setup script installs VSCodeVim `1.32.4` from its GitHub release and verifies its SHA-256 checksum. The initial launch downloads the development Electron runtime and prepares upstream built-in extensions. Complete the normal workspace trust prompt before starting a shell in a new workspace.
+For optional VSCodeVim support, run `./scripts/setup-terminal-first-vim.sh` and set `"terminalFirst.vim.engine": "extension"`. The setup script installs VSCodeVim `1.32.4` from its GitHub release and verifies its SHA-256 checksum. The initial launch downloads the development Electron runtime and prepares upstream built-in extensions. Complete the normal workspace trust prompt before starting a shell in a new workspace.
 
 The launcher does not install a global command or edit shell dotfiles. To install another extension from a VSIX:
 
@@ -88,3 +87,5 @@ Based on [microsoft/vscode](https://github.com/microsoft/vscode), release `1.144
 VSCodeVim is maintained by [VSCodeVim/Vim](https://github.com/VSCodeVim/Vim) and installed separately by the setup script. This is an independent source fork, not Microsoft's Visual Studio Code distribution.
 
 Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the [MIT license](LICENSE.txt); third-party notices remain in [ThirdPartyNotices.txt](ThirdPartyNotices.txt).
+
+Shell mode now has title-bar session tabs, **Ctrl+Space** global navigation, Vim scrollback copy mode, and theme-aware terminal styling. See [the workflow guide](TERMINAL_FIRST.md), [startup/distribution notes](docs/specs/07-workbench-branding-distribution.md), and [terminal configuration roadmap](docs/specs/08-terminal-configuration-roadmap.md).

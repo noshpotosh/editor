@@ -1,26 +1,47 @@
-/* Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. */
-.monaco-workbench .part.terminal-first-sessions {
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-workbench .titlebar-sessions {
 	display: flex;
 	align-items: stretch;
-	gap: 4px;
+	gap: var(--vscode-spacing-size40);
 	background: var(--vscode-editorGroupHeader-tabsBackground);
-	color: var(--vscode-tab-inactiveForeground);
-	border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, transparent);
+	color: var(--vscode-terminalFirst-sessionTab-inactiveForeground);
+	border-bottom: var(--vscode-strokeThickness) solid var(--vscode-editorGroupHeader-tabsBorder, transparent);
 	box-sizing: border-box;
 }
 .terminal-first-sessions .session-tabs { display: flex; overflow-x: auto; flex: 1; }
-.terminal-first-sessions .session-tab { display: flex; flex-shrink: 0; }
+.terminal-first-sessions .session-tab { display: flex; flex-shrink: 0; border-top: var(--vscode-strokeThickness) solid transparent; }
 .terminal-first-sessions button {
+	display: flex;
+	align-items: center;
+	gap: var(--vscode-spacing-size60);
 	color: inherit;
 	background: transparent;
 	border: 0;
-	padding: 0 12px;
+	padding: 0 var(--vscode-spacing-size120);
 	font: inherit;
 	cursor: pointer;
 }
-.terminal-first-sessions .active { color: var(--vscode-tab-activeForeground); background: var(--vscode-tab-activeBackground); border-top: 1px solid var(--vscode-tab-activeBorderTop, transparent); }
-.terminal-first-sessions button:hover { background: var(--vscode-toolbar-hoverBackground); }
-.terminal-first-sessions button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+.terminal-first-sessions button .codicon { font-size: var(--vscode-codiconFontSize); }
+.terminal-first-sessions .session-label { white-space: nowrap; }
+.terminal-first-sessions .session-tab.active {
+	color: var(--vscode-terminalFirst-sessionTab-activeForeground);
+	background: var(--vscode-terminalFirst-sessionTab-activeBackground);
+	border-top-color: var(--vscode-terminalFirst-sessionTab-activeBorder, transparent);
+}
+.terminal-first-sessions button:hover { background: var(--vscode-terminalFirst-sessionTab-hoverBackground); }
+.terminal-first-sessions button:focus-visible { outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder); outline-offset: calc(-1 * var(--vscode-strokeThickness)); }
+
+/* Quiet at rest: close is revealed on the active tab or on intent, and a dirty dot stands in for it. */
+.terminal-first-sessions .session-close { padding: 0 var(--vscode-spacing-size40); }
+.terminal-first-sessions .session-close .codicon { font-size: var(--vscode-codiconFontSize-compact); }
+.terminal-first-sessions .session-tab:not(.active):not(:hover):not(:focus-within) .session-close > .codicon:not(.session-dirty-indicator) { visibility: hidden; }
+.terminal-first-sessions .session-close > .session-dirty-indicator { display: none; }
+.terminal-first-sessions .session-tab.dirty:not(:hover):not(:focus-within) .session-close > .codicon:not(.session-dirty-indicator) { display: none; }
+.terminal-first-sessions .session-tab.dirty:not(:hover):not(:focus-within) .session-close > .session-dirty-indicator { display: inline-block; }
 .terminal-first-sessions .session-new { flex-shrink: 0; }
 .monaco-workbench.terminal-first-shell .part.panel > .title { display: none; }
 
@@ -47,3 +68,36 @@
 .monaco-workbench.terminal-first-shell > .monaco-grid-view .monaco-sash {
 	display: none;
 }
+
+/* One quiet chrome surface, with interactive controls excluded from window dragging. */
+.monaco-workbench .terminal-first-titlebar .titlebar-left { flex: 1; min-width: 0; }
+.monaco-workbench .terminal-first-titlebar .titlebar-center { display: none; }
+.monaco-workbench .titlebar-sessions { flex: 1; min-width: 0; height: 100%; -webkit-app-region: drag; }
+.monaco-workbench .titlebar-sessions button { -webkit-app-region: no-drag; }
+/* The title bar paints its background inline, so the session strip color must take precedence. */
+.monaco-workbench.terminal-first-shell .part.titlebar { background-color: var(--vscode-terminalFirst-sessionStrip-background, var(--vscode-editor-background)) !important; }
+.monaco-workbench.terminal-first-shell .titlebar-sessions { background: transparent; }
+.monaco-workbench.terminal-first-shell .xterm,
+.monaco-workbench .terminal-first-floating .xterm { padding: var(--terminal-first-padding, 12px); }
+.monaco-workbench.terminal-first-shell .terminal-wrapper { padding-left: 0 !important; }
+.terminal-first-copy-badge {
+	position: absolute;
+	right: var(--vscode-spacing-size120);
+	top: var(--vscode-spacing-size40);
+	z-index: 40;
+	color: var(--vscode-terminalFirst-copyMode-badgeForeground);
+	background: var(--vscode-terminalFirst-copyMode-badgeBackground);
+	border-radius: var(--vscode-cornerRadius-circle);
+	padding: var(--vscode-spacing-size20) var(--vscode-spacing-size80);
+	font-size: var(--vscode-fontSize-label2);
+	font-weight: var(--vscode-fontWeight-semiBold);
+	font-family: var(--monaco-monospace-font);
+	pointer-events: none;
+}
+.terminal-first-copy-cursor { outline: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-copyMode-cursorBorder); }
+
+.monaco-workbench:not(.fullscreen) .terminal-first-titlebar .titlebar-left { padding-left: 78px; }
+.monaco-workbench.fullscreen .terminal-first-titlebar .titlebar-left { padding-left: 0; }
+
+/* Keep session and tile controls above the title bar's native drag region. */
+.monaco-workbench .titlebar-sessions { position: relative; z-index: 2500; }
