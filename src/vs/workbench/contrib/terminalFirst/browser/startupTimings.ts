@@ -53,6 +53,7 @@ function nativeArgs(environmentService: IWorkbenchEnvironmentService): NativePar
 export class TerminalFirstStartupTimings extends Disposable {
 	private readonly tracking = this._register(new DisposableStore());
 	private tracked = false;
+	private reconnected = false;
 	private readonly inputRequested: boolean;
 	private readonly markersFile: string | undefined;
 
@@ -68,28 +69,30 @@ export class TerminalFirstStartupTimings extends Disposable {
 		this.markersFile = args?.['prof-duration-markers-file'];
 	}
 
-	/** Publishes the fork's marks so far; safe to call repeatedly. */
+	/** Publishes the fork's marks so far and refreshes the dump; safe to call repeatedly. */
 	publish(): void {
 		this.timerService.setPerformanceMarks(STARTUP_MARKS_SOURCE, getMarks().filter(entry => entry.name.startsWith(MARK_PREFIX)));
+		void this.report().catch(error => this.logService.error('[terminalFirst-perf] Writing the startup marks failed', error));
 	}
 
 	/** Watches the startup session's terminal for its first output and the optional echo round trip. */
 	track(terminal: ITerminalInstance): void {
 		if (this.tracked) { return; }
 		this.tracked = true;
-		if (terminal.shellLaunchConfig.attachPersistentProcess) {
+		this.reconnected = !!terminal.shellLaunchConfig.attachPersistentProcess;
+		if (this.reconnected) {
 			// A revived terminal replayed its buffer before the fork adopted it; its prompt is already drawn.
 			mark(PROMPT_MARK);
-			void this.afterPrompt(terminal, true);
+			void this.afterPrompt(terminal);
 			return;
 		}
 		this.tracking.add(Event.once(terminal.onData)(() => {
 			mark(PROMPT_MARK);
-			void this.afterPrompt(terminal, false);
+			void this.afterPrompt(terminal);
 		}));
 	}
 
-	private async afterPrompt(terminal: ITerminalInstance, reconnected: boolean): Promise<void> {
+	private async afterPrompt(terminal: ITerminalInstance): Promise<void> {
 		try {
 			if (this.inputRequested) {
 				await terminal.processReady;
@@ -99,15 +102,14 @@ export class TerminalFirstStartupTimings extends Disposable {
 				mark(INPUT_MARK);
 			}
 			this.publish();
-			await this.report(reconnected);
 		} catch (error) {
 			this.logService.error('[terminalFirst-perf] Startup timing failed', error);
 		}
 	}
 
-	private async report(reconnected: boolean): Promise<void> {
+	private async report(): Promise<void> {
 		const marks = Object.fromEntries(collectMarks(this.timerService.getPerformanceMarks(), getMarks()).map(entry => [entry.name, entry.startTime]));
-		const payload = { reconnected, inputRequested: this.inputRequested, marks };
+		const payload = { reconnected: this.reconnected, inputRequested: this.inputRequested, marks };
 		this.logService.info(`[terminalFirst-perf] ${JSON.stringify(payload)}`);
 		if (this.markersFile) {
 			await this.fileService.writeFile(URI.file(`${this.markersFile}.terminalFirst.json`), VSBuffer.fromString(JSON.stringify(payload, null, '\t')));
