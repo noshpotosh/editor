@@ -19,6 +19,7 @@
 		".github/workflows/upstream-drift.yml",
 		"TERMINAL_FIRST.md",
 		"IMP_PLAN.md",
+		"CHANGELOG.md",
 		"README.md"
 	],
 	"forkOwnedInUpstreamDirs": [

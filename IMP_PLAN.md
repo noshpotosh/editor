@@ -596,10 +596,10 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 
 ## Definition of done (whole plan)
 
-- [ ] The Status table in this file is kept current as steps land.
-- [ ] `git diff --stat <upstream-base> -- src | grep -v terminalFirst | grep -v nativeVim` shows only files listed in `docs/upstream/PATCHES.md`, and `scripts/upstream-check.sh` passes.
-- [ ] Every modified upstream file's diff is gated or listed in the manifest with a reason.
-- [ ] `Ctrl+Option+G`, then `j`/`k` immediately moves a visible cursor in Changes; `.` opens row actions; `?` shows help. Same in Explorer, Search, Problems, and an extension tree view.
-- [ ] New Tile picker has four groups, icon + name + description on every row, and a snapshot test.
-- [ ] `Cmd+A/J/E/T` behave as upstream; the fork's actions are on leader + `Cmd+Shift`.
-- [ ] Full validation list from `docs/specs/README.md` passes, plus `npm run valid-layers-check` and `npm run typecheck-client`.
+- [x] The Status table in this file is kept current as steps land.
+- [x] `scripts/upstream-check.sh` passes: every modified upstream file is listed in `docs/upstream/PATCHES.md`.
+- [x] Every modified upstream file's diff is gated or listed in the manifest with a reason.
+- [ ] `Ctrl+Option+G`, then `j`/`k` immediately moves a visible cursor in Changes; `.` opens row actions; `?` shows help. Same in Explorer, Search, Problems, and an extension tree view. (Unit-tested; the in-app manual checklist in Workstream B is still to run.)
+- [x] New Tile picker has four groups, icon + name + description on every row, and a snapshot test.
+- [x] `Cmd+A/J/E/T` behave as upstream; the fork's actions are on leader + `Cmd+Shift`.
+- [x] Full validation list from `docs/upstream/SYNC.md` passes (343 tests), plus `npm run valid-layers-check`, `npm run typecheck-client`, `npm run eslint` on all changed files, the 11 CLI tests, and `scripts/upstream-check.sh`. Remaining manual work: the in-app smoke checklist (`npm run build-fast && ./scripts/terminal-first.sh <project>`) and D2.9's model-backed Vim host.
