@@ -42,6 +42,7 @@ import { shouldUseEnvironmentVariableCollection } from '../../../../platform/ter
 import { DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { serializeEnvironmentVariableCollections } from '../../../../platform/terminal/common/environmentVariableShared.js';
 import { TerminalPolicy } from '../browser/terminalPolicy.js';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 export class LocalTerminalBackendContribution implements IWorkbenchContribution {
 
@@ -128,7 +129,7 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 
 		// The pty host should not get launched until at least the window restored phase
 		// if remote auth exists, don't await
-		if (!this._remoteAgentService.getConnection()?.remoteAuthority) {
+		if (!this._remoteAgentService.getConnection()?.remoteAuthority && !terminalFirstEnabled) {
 			await this._lifecycleService.when(LifecyclePhase.Restored);
 		}
 
