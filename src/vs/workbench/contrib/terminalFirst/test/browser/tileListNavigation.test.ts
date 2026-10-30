@@ -18,6 +18,15 @@ import { ViewContainer, ViewContainerLocation, IViewDescriptorService } from '..
 import { IPaneCompositePartService } from '../../../../services/panecomposite/browser/panecomposite.js';
 import { workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { focusFirstRowIfNone, ViewTileComposites } from '../../browser/tileEditor.js';
+import { TileContextMenuCapture, tileContextMenuCapture, TileContextMenuService } from '../../browser/tileContextMenu.js';
+import { flattenMenuActions, showTileListActions } from '../../browser/tileListActions.js';
+import { Action, Separator, SubmenuAction } from '../../../../../base/common/actions.js';
+import { IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
+import { IMenuService } from '../../../../../platform/actions/common/actions.js';
+import { IListService } from '../../../../../platform/list/browser/listService.js';
+import { IEditorGroupsService } from '../../../../services/editor/common/editorGroupsService.js';
+import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
+import { IContextMenuDelegate } from '../../../../../base/browser/contextmenu.js';
 
 suite('Terminal First - tile list navigation', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -90,5 +99,52 @@ suite('Terminal First - tile list navigation', () => {
 		vimEnabled = false;
 		vimChanged.fire();
 		deepStrictEqual({ withVim, withoutVim: read() }, { withVim: { tile: true, typeNavigation: 'trigger' }, withoutVim: { tile: true, typeNavigation: undefined } });
+	});
+
+	test('the tile context menu service passes menus through unless the picker has armed a capture', async () => {
+		const shown: IContextMenuDelegate[] = [];
+		const capture = new TileContextMenuCapture();
+		const real = upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: delegate => { shown.push(delegate as IContextMenuDelegate); } });
+		const instantiation = workbenchInstantiationService(undefined, store);
+		const service = new TileContextMenuService(real, upcastPartial<IMenuService>({}), store.add(instantiation.createInstance(ContextKeyService)));
+		const delegate: IContextMenuDelegate = { getAnchor: () => document.body, getActions: () => [] };
+		service.showContextMenu(delegate);
+		const passedThrough = shown.length;
+		const timedOut = await capture.arm(10);
+		const armed = capture.arm(1000);
+		const captured = capture.capture(delegate);
+		deepStrictEqual({ passedThrough, timedOut, captured, armedResolved: (await armed) === delegate, stillPassesThrough: (service.showContextMenu(delegate), shown.length) }, { passedThrough: 1, timedOut: undefined, captured: true, armedResolved: true, stillPassesThrough: 2 });
+	});
+
+	test('flattening keeps enabled actions in order and expands one level of submenus', () => {
+		const run = () => Promise.resolve();
+		const disabled = store.add(new Action('disabled', 'Disabled', undefined, false, run));
+		const first = store.add(new Action('first', 'First', undefined, true, run));
+		const child = store.add(new Action('child', 'Child', undefined, true, run));
+		const flattened = flattenMenuActions([first, new Separator(), disabled, new SubmenuAction('more', 'More', [child, new Separator()])]);
+		deepStrictEqual(flattened.map(action => [action.id, action.label]), [['first', 'First'], ['child', 'More › Child']]);
+	});
+
+	test('the actions picker borrows the focused list\'s own context menu and runs the choice with its context', async () => {
+		const instantiation = workbenchInstantiationService(undefined, store);
+		const tile = document.createElement('div');
+		document.body.appendChild(tile);
+		store.add(toDisposable(() => tile.remove()));
+		const list = createList(tile, ['row']);
+		list.setFocus([0]);
+		const ran: unknown[] = [];
+		const hidden: boolean[] = [];
+		const action = store.add(new Action('view.doIt', 'Do It', undefined, true, context => { ran.push(context); }));
+		// The list's view asks the tile's context menu service for its row menu, as every view does on Shift+F10.
+		store.add(list.onContextMenu(() => {
+			const delegate: IContextMenuDelegate = { getAnchor: () => tile, getActions: () => [action], getActionsContext: () => 'row-context', onHide: cancelled => hidden.push(cancelled) };
+			if (!tileContextMenuCapture.capture(delegate)) { throw new Error('not captured'); }
+		}));
+		instantiation.stub(IListService, upcastPartial<IListService>({ lastFocusedList: list as unknown as IListService['lastFocusedList'] }));
+		instantiation.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ activeGroup: upcastPartial<IEditorGroupsService['activeGroup']>({ activeEditorPane: undefined }) }));
+		let shownPicks: (IQuickPickItem | IQuickPickSeparator)[] = [];
+		instantiation.stub(IQuickInputService, 'pick', (async (items: (IQuickPickItem | IQuickPickSeparator)[]) => { shownPicks = items; return items.find(item => item.type !== 'separator'); }) as IQuickInputService['pick']);
+		await instantiation.invokeFunction(accessor => showTileListActions(accessor));
+		deepStrictEqual({ picks: shownPicks.map(item => item.type === 'separator' ? `-- ${item.label}` : item.label), ran, hidden }, { picks: ['-- Row', 'Do It'], ran: ['row-context'], hidden: [false] });
 	});
 });

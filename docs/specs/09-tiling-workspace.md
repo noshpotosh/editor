@@ -35,7 +35,7 @@ Code mode should behave like a keyboard-driven tiling window manager (Hyprland's
 - **S9.23** A background open (no focus requested) that finds no room fails silently. Only focused opens show the no-room message from S9.3.
 - **S9.24** Keyboard focus of a view tile lands on its list with a visible cursor, and the tile's scoped context carries `terminalFirstViewTile` so lists inside it get Vim keys (spec 6, S6.21 to S6.25).
 - **S9.25** The New Tile picker is built from `tileCatalog.ts`: groups Workspace, Tools, Web, Extensions in that order; built-in containers (no `extensionId`) under Tools in a fixed order (Explorer, Changes, Search, Problems, Output, Debug Console, Run and Debug, Extensions, then others), extension containers under Extensions ordered by their visible pane order; every row has an icon (theme icon, URI icon, or `layout`), a non-empty label, a description of what opens, and the chord of its command when one exists; containers with `hideIfEmpty` and no visible views are skipped. `terminalFirst.tile.openView` without an argument shows only Tools and Extensions.
-- **S9.26** A container label falls back from the model title to the descriptor title, the first active view's name, and the container ID. The tile's tab uses the same fallback and the same icon resolution.
+- **S9.26** A container label falls back from the model title to the descriptor title, the first active view's name, and the container ID. A container generated for a single moved view is named after that view (`singleViewPaneContainerTitle` or its name), not after the container it came from. The tile's tab uses the same fallback and the same icon resolution.
 
 ## Surface
 

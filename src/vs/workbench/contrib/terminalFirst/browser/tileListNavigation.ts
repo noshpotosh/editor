@@ -19,7 +19,7 @@ import { FilesExplorerFocusedContext } from '../../files/common/files.js';
 import { VIEW_PANE_ID as SCM_VIEW_PANE_ID } from '../../scm/common/scm.js';
 import { ITerminalFirstLeaderService } from './terminalFirstLeader.js';
 import { ViewTileEditor } from './tileEditor.js';
-import { runTileRowAction, showTileListActions } from './tileListActions.js';
+import { openContextMenu, runTileRowAction, showTileListActions } from './tileListActions.js';
 import { dockedNavigation } from './terminalFirstNavigation.js';
 
 /** A list inside a view tile has keyboard focus, native Vim is on, and no text input or find widget owns the keys. */
@@ -48,17 +48,6 @@ function add(id: string, label: string, keys: string, bindings: readonly (number
 	for (const binding of bindings) {
 		KeybindingsRegistry.registerKeybindingRule({ id: command, weight, when, ...(typeof binding === 'number' ? { primary: binding } : binding) });
 	}
-}
-
-/** Shift+F10 opens the row context menu through the list's own handler, so every view builds its own menu. */
-function openContextMenu(list: WorkbenchListWidget | undefined): void {
-	const element = list?.getHTMLElement();
-	if (!element) {
-		return;
-	}
-	const init: KeyboardEventInit = { key: 'F10', code: 'F10', keyCode: 121, shiftKey: true, bubbles: true, cancelable: true };
-	element.dispatchEvent(new KeyboardEvent('keydown', init));
-	element.dispatchEvent(new KeyboardEvent('keyup', init));
 }
 
 function hasCollapseApi(list: WorkbenchListWidget): list is WorkbenchListWidget & { isCollapsible(element: unknown): boolean; isCollapsed(element: unknown): boolean } {

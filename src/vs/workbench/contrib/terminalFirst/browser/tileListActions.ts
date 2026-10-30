@@ -3,75 +3,116 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IContextMenuDelegate } from '../../../../base/browser/contextmenu.js';
 import { isAncestorOfActiveElement } from '../../../../base/browser/dom.js';
-import { IAction, Separator } from '../../../../base/common/actions.js';
+import { IAction, Separator, SubmenuAction } from '../../../../base/common/actions.js';
 import { localize } from '../../../../nls.js';
-import { getFlatContextMenuActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
-import { IMenu, IMenuService, MenuId } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { IListService, WorkbenchListWidget } from '../../../../platform/list/browser/listService.js';
+import { IListService } from '../../../../platform/list/browser/listService.js';
 import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../platform/quickinput/common/quickInput.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { ExplorerItem } from '../../files/common/explorerModel.js';
-import { isSCMRepository, isSCMResource, isSCMResourceGroup, isSCMResourceNode } from '../../scm/browser/util.js';
-import { ISCMViewService } from '../../scm/common/scm.js';
+import { tileContextMenuCapture } from './tileContextMenu.js';
 import { ViewTileEditor } from './tileEditor.js';
+
+/** A list widget as far as the picker needs it: a DOM node to address and a focused element to act on. */
+interface IFocusedList {
+	getHTMLElement(): HTMLElement;
+	getFocus(): readonly unknown[];
+	domFocus(): void;
+}
 
 /** A group of actions shown together in the picker, each run with its own context. */
 interface IActionGroup {
 	readonly label: string;
 	readonly actions: readonly IAction[];
-	readonly context: unknown;
+	readonly run: (action: IAction) => unknown;
+	/** Called once the picker closes, so the view that produced a menu can clean up. */
+	readonly onHide?: (cancelled: boolean) => void;
 }
 
 interface IActionPick extends IQuickPickItem {
 	readonly action: IAction;
-	readonly context: unknown;
+	readonly group: IActionGroup;
 }
 
-function flatten(menu: IMenu, arg: unknown): IAction[] {
-	// Include the inline group too: those are the row buttons (stage, discard, open) users want by keyboard.
-	return getFlatContextMenuActions(menu.getActions({ arg, shouldForwardArgs: true }));
+/** Shift+F10 opens the row context menu through the list's own handler, so every view builds its own menu. */
+export function openContextMenu(list: IFocusedList | undefined): void {
+	const element = list?.getHTMLElement();
+	if (!element) {
+		return;
+	}
+	const init: KeyboardEventInit = { key: 'F10', code: 'F10', keyCode: 121, shiftKey: true, bubbles: true, cancelable: true };
+	element.dispatchEvent(new KeyboardEvent('keydown', init));
+	element.dispatchEvent(new KeyboardEvent('keyup', init));
 }
 
-/** The actions of the focused row, resolved the way the Changes and Explorer views build their menus. */
-function rowActions(accessor: ServicesAccessor, list: WorkbenchListWidget, element: unknown): IActionGroup | undefined {
-	if (isSCMResource(element)) {
-		const menus = accessor.get(ISCMViewService).menus.getRepositoryMenus(element.resourceGroup.provider);
-		return { label: localize('scmResource', "File"), actions: flatten(menus.getResourceMenu(element), element), context: element };
-	}
-	if (isSCMResourceGroup(element)) {
-		const menus = accessor.get(ISCMViewService).menus.getRepositoryMenus(element.provider);
-		return { label: element.label, actions: flatten(menus.getResourceGroupMenu(element), element), context: element };
-	}
-	if (isSCMResourceNode(element)) {
-		const menus = accessor.get(ISCMViewService).menus.getRepositoryMenus(element.context.provider);
-		return { label: element.name, actions: flatten(menus.getResourceFolderMenu(element.context), element), context: element };
-	}
-	if (isSCMRepository(element)) {
-		const menus = accessor.get(ISCMViewService).menus.getRepositoryMenus(element.provider);
-		return { label: element.provider.label, actions: flatten(menus.getRepositoryContextMenu(element), element.provider), context: element.provider };
-	}
-	if (element instanceof ExplorerItem) {
-		const menu = accessor.get(IMenuService).createMenu(MenuId.ExplorerContext, list.contextKeyService);
-		try {
-			return { label: element.name, actions: flatten(menu, element.resource), context: element.resource };
-		} finally {
-			menu.dispose();
+/** Enabled actions in display order, with one level of submenus flattened as "Submenu › Action". */
+export function flattenMenuActions(actions: readonly IAction[]): IAction[] {
+	const result: IAction[] = [];
+	for (const action of actions) {
+		if (action instanceof Separator || !action.enabled) {
+			continue;
 		}
+		if (action instanceof SubmenuAction) {
+			for (const child of action.actions) {
+				if (!(child instanceof Separator) && child.enabled) {
+					result.push(new LabelledAction(child, localize('submenuAction', "{0} › {1}", action.label, child.label)));
+				}
+			}
+			continue;
+		}
+		result.push(action);
 	}
-	return undefined;
+	return result;
 }
 
-function collectGroups(accessor: ServicesAccessor): { groups: IActionGroup[]; list: WorkbenchListWidget | undefined } {
-	const list = accessor.get(IListService).lastFocusedList;
+/** Runs another action under a different label. */
+class LabelledAction implements IAction {
+	readonly id: string;
+	readonly tooltip: string;
+	readonly class: string | undefined;
+	readonly enabled = true;
+	readonly checked: boolean | undefined;
+	constructor(private readonly action: IAction, readonly label: string) {
+		this.id = action.id;
+		this.tooltip = action.tooltip;
+		this.class = action.class;
+		this.checked = action.checked;
+	}
+	run(...args: unknown[]): unknown { return this.action.run(...args); }
+}
+
+/** Borrows the focused row's context menu from whichever view owns the list, without knowing the view. */
+async function rowActions(list: IFocusedList): Promise<IActionGroup | undefined> {
+	if (!list.getFocus().length) {
+		return undefined;
+	}
+	const captured = tileContextMenuCapture.arm();
+	openContextMenu(list);
+	const delegate: IContextMenuDelegate | undefined = await captured;
+	if (!delegate) {
+		return undefined;
+	}
+	const context = delegate.getActionsContext?.();
+	return {
+		label: localize('rowActions', "Row"),
+		actions: flattenMenuActions(delegate.getActions()),
+		run: action => delegate.actionRunner ? delegate.actionRunner.run(action, context) : action.run(context),
+		onHide: cancelled => delegate.onHide?.(cancelled),
+	};
+}
+
+function collectGroups(accessor: ServicesAccessor): Promise<{ groups: IActionGroup[]; list: IFocusedList | undefined }> {
+	const list: IFocusedList | undefined = accessor.get(IListService).lastFocusedList;
 	const pane = accessor.get(IEditorGroupsService).activeGroup.activeEditorPane;
-	const tile = pane instanceof ViewTileEditor ? pane : undefined;
+	return collectGroupsFor(list, pane instanceof ViewTileEditor ? pane : undefined);
+}
+
+async function collectGroupsFor(list: IFocusedList | undefined, tile: ViewTileEditor | undefined): Promise<{ groups: IActionGroup[]; list: IFocusedList | undefined }> {
 	const groups: IActionGroup[] = [];
-	const focused = list?.getFocus()[0];
-	if (list && focused !== undefined) {
-		const row = rowActions(accessor, list, focused);
+	if (list) {
+		const row = await rowActions(list);
 		if (row) {
 			groups.push(row);
 		}
@@ -80,50 +121,68 @@ function collectGroups(accessor: ServicesAccessor): { groups: IActionGroup[]; li
 	const panes = composite?.getViewPaneContainer()?.panes ?? [];
 	const viewPane = panes.find(pane => isAncestorOfActiveElement(pane.element)) ?? panes.find(pane => pane.isExpanded());
 	if (viewPane) {
-		groups.push({ label: viewPane.title, actions: [...viewPane.menuActions.getPrimaryActions(), ...viewPane.menuActions.getSecondaryActions()], context: viewPane.getActionsContext() });
+		const context = viewPane.getActionsContext();
+		groups.push({ label: viewPane.title, actions: flattenMenuActions([...viewPane.menuActions.getPrimaryActions(), ...viewPane.menuActions.getSecondaryActions()]), run: action => action.run(context) });
 	}
 	if (composite) {
-		groups.push({ label: composite.getTitle() ?? localize('tile', "Tile"), actions: [...composite.getActions(), ...composite.getSecondaryActions()], context: composite.getActionsContext() });
+		const context = composite.getActionsContext();
+		groups.push({ label: composite.getTitle() ?? localize('tile', "Tile"), actions: flattenMenuActions([...composite.getActions(), ...composite.getSecondaryActions()]), run: action => action.run(context) });
 	}
 	return { groups, list };
 }
 
 /** Shows every action of the focused row, the focused view header, and the tile toolbar in one picker. */
 export async function showTileListActions(accessor: ServicesAccessor): Promise<void> {
-	const { groups, list } = collectGroups(accessor);
 	const keybindings = accessor.get(IKeybindingService);
+	const quickInput = accessor.get(IQuickInputService);
+	const { groups, list } = await collectGroups(accessor);
 	const picks: (IActionPick | IQuickPickSeparator)[] = [];
 	for (const group of groups) {
-		const actions = group.actions.filter(action => action.enabled && !(action instanceof Separator));
-		if (!actions.length) {
+		if (!group.actions.length) {
 			continue;
 		}
 		picks.push({ type: 'separator', label: group.label });
-		for (const action of actions) {
-			picks.push({ label: action.label, description: keybindings.lookupKeybinding(action.id)?.getLabel() ?? undefined, action, context: group.context });
+		for (const action of group.actions) {
+			picks.push({ label: action.label, description: keybindings.lookupKeybinding(action.id)?.getLabel() ?? undefined, action, group });
 		}
 	}
-	if (!picks.length) {
-		return;
+	let picked: IActionPick | undefined;
+	try {
+		if (picks.length) {
+			picked = await quickInput.pick(picks, { placeHolder: localize('tileActionsPlaceholder', "Search actions for the focused row, view, and tile"), matchOnDescription: true });
+		}
+	} finally {
+		for (const group of groups) {
+			group.onHide?.(group !== picked?.group);
+		}
 	}
-	const picked = await accessor.get(IQuickInputService).pick(picks, { placeHolder: localize('tileActionsPlaceholder', "Search actions for the focused row, view, and tile"), matchOnDescription: true });
 	list?.domFocus();
 	if (picked) {
-		await picked.action.run(picked.context);
+		await picked.group.run(picked.action);
 	}
 }
 
 /** Runs the first of `ids` offered for the focused row; false when none applies. Used by the opt-in single-key actions. */
 export async function runTileRowAction(accessor: ServicesAccessor, ids: readonly string[]): Promise<boolean> {
-	const { groups } = collectGroups(accessor);
+	const { groups } = await collectGroups(accessor);
+	let chosen: { group: IActionGroup; action: IAction } | undefined;
 	for (const group of groups) {
 		for (const id of ids) {
-			const action = group.actions.find(action => action.id === id && action.enabled);
+			const action = group.actions.find(action => action.id === id);
 			if (action) {
-				await action.run(group.context);
-				return true;
+				chosen = { group, action };
+				break;
 			}
 		}
+		if (chosen) {
+			break;
+		}
 	}
-	return false;
+	for (const group of groups) {
+		group.onHide?.(group !== chosen?.group);
+	}
+	if (chosen) {
+		await chosen.group.run(chosen.action);
+	}
+	return !!chosen;
 }

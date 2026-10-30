@@ -297,9 +297,10 @@ suite('Terminal First Tiles', () => {
 					reused: again === whole,
 					wholeContainer: containerOf(whole),
 					singleMoved: singleContainer !== undefined && singleContainer !== container.id,
+					singleName: single?.activeEditor?.getName(),
 					terminal: await service.openView('terminal'),
 					tiles: shape().tiles.map(([label]) => label),
-				}, { reused: true, wholeContainer: container.id, singleMoved: true, terminal: undefined, tiles: ['a', 'container', 'single'] });
+				}, { reused: true, wholeContainer: container.id, singleMoved: true, singleName: 'Two', terminal: undefined, tiles: ['a', 'container', 'single'] });
 			} finally {
 				pane.dispose();
 				views.deregisterViews(views.getViews(container), container);

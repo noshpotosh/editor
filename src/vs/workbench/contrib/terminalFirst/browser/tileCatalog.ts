@@ -68,8 +68,18 @@ const toolDescriptions: Record<string, string> = {
 
 /** A readable name for a view container: its model title, its descriptor title, its first active view, then its ID. */
 export function viewContainerDisplayName(container: ViewContainer, model: IViewContainerModel | undefined): string {
+	// A container generated for a single moved view is named after that view, not after the container it came from.
+	const single = model?.activeViewDescriptors.length === 1 ? model.activeViewDescriptors[0] : undefined;
+	if (single && isGeneratedContainer(container)) {
+		return single.singleViewPaneContainerTitle || single.name.value;
+	}
 	const title = model?.title || (typeof container.title === 'string' ? container.title : container.title?.value);
-	return title || model?.activeViewDescriptors[0]?.name.value || container.id;
+	return title || single?.name.value || container.id;
+}
+
+/** Containers the view descriptor service creates when a view is moved out on its own. */
+function isGeneratedContainer(container: ViewContainer): boolean {
+	return container.id.startsWith('workbench.views.service');
 }
 
 /** The container's icon, falling back through the model, the descriptor, and a generic layout glyph. */

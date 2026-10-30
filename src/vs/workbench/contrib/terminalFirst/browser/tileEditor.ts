@@ -33,6 +33,8 @@ import { getSelectionKeyboardEvent, IListService } from '../../../../platform/li
 import { INativeVimService } from '../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { TerminalFirstViewTileContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { viewContainerDisplayName, viewContainerIcon } from './tileCatalog.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { TileContextMenuService } from './tileContextMenu.js';
 
 /** Container IDs of the built-in tool tiles; also maps tool tiles persisted before view tiles. */
 export const tileViewIds = { explorer: 'workbench.view.explorer', scm: 'workbench.view.scm' } as const;
@@ -111,7 +113,8 @@ export class ViewTileComposites extends Disposable {
 			const syncTypeNavigation = () => this.vim.enabled ? typeNavigation.set('trigger') : typeNavigation.reset();
 			store.add(this.vim.onDidChange(syncTypeNavigation));
 			syncTypeNavigation();
-			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, scopedContextKeys])));
+			// Views inside the tile get a context menu service the actions picker can borrow menus from.
+			const scoped = store.add(this.instantiation.createChild(new ServiceCollection([IContextKeyService, scopedContextKeys], [IContextMenuService, this.instantiation.createInstance(TileContextMenuService)])));
 			const composite = store.add(descriptor.instantiate(scoped));
 			composite.create(element);
 			entry = { composite, element, store, owner: undefined, references: 0 };
