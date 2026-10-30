@@ -86,9 +86,10 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 						const first = Math.min(from.lineNumber, position.lineNumber); const last = Math.max(from.lineNumber, position.lineNumber);
 						editor.setSelection(new Selection(first, 1, last, model.getLineMaxColumn(last)), 'nativeVim');
 					} else {
-						const text = model.getValue();
 						const inclusiveOffset = offset >= anchor ? offset : anchor;
-						const inclusive = model.getPositionAt(inclusiveOffset + ((text.codePointAt(inclusiveOffset) ?? 0) > 0xffff ? 2 : 1));
+						// Only the character under the cursor matters here; never copy the whole document for it.
+						const underCursor = model.getValueInRange(Range.fromPositions(model.getPositionAt(inclusiveOffset), model.getPositionAt(inclusiveOffset + 2)));
+						const inclusive = model.getPositionAt(inclusiveOffset + ((underCursor.codePointAt(0) ?? 0) > 0xffff ? 2 : 1));
 						editor.setSelection(offset >= anchor ? Selection.fromPositions(from, inclusive) : Selection.fromPositions(inclusive, position), 'nativeVim');
 					}
 				}

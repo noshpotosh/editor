@@ -592,7 +592,7 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | D2.6 file browser | done | (see git log) | Vim vocabulary everywhere; per-session state persisted |
 | D2.8 undo watchdog | done | (see git log) | `safeKey` + test |
 | D2.10 registers persistence | done | (see git log) | `terminalFirst.vim.persistRegisters` |
-| D2.9 native Vim performance | todo | | model-backed host; benchmark test |
+| D2.9 native Vim performance | partial | (see git log) | removed a whole-document copy from visual selection; 50k-line regression test added; model-backed `VimHost` still open |
 
 ## Definition of done (whole plan)
 

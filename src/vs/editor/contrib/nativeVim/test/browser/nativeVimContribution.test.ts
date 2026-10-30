@@ -104,6 +104,20 @@ suite('Native Vim editor integration', () => {
 		assert.strictEqual(model.getValue(), 'bone two');
 	});
 
+	test('motions on a large document stay within budget', () => {
+		const lines = Array.from({ length: 50000 }, (_, index) => `line ${index} with some words in it`);
+		const { editor, keys } = setup(lines.join('\n'));
+		const started = Date.now();
+		keys(['G']);
+		for (let i = 0; i < 200; i++) { keys(['k']); }
+		keys(['g', 'g']);
+		for (let i = 0; i < 50; i++) { keys(['w']); }
+		keys(['v', 'j', 'j', 'l']);
+		const elapsed = Date.now() - started;
+		assert.ok(elapsed < 2000, `Vim motions took ${elapsed} ms on a 50k-line document`);
+		assert.deepStrictEqual({ line: editor.getPosition()?.lineNumber, selected: editor.getSelection()?.isEmpty() === false }, { line: 1 + Math.floor(50 / 7) + 2, selected: true });
+	});
+
 	test('nested undo transactions restore ordinary boundaries afterward', async () => {
 		const { model, editor } = setup('a');
 		const first = model.beginUndoRedoTransaction(); const second = model.beginUndoRedoTransaction();

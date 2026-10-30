@@ -11,3 +11,9 @@ Changes of the fork on top of upstream VS Code. Upstream release notes are at ht
 - Leader `w b` and `w c` open the Jira board and Bitbucket tiles.
 - Debugging no longer opens Run and Debug or the Debug Console tiles on its own (`debug.openDebug` and `debug.internalConsoleOptions` default to `neverOpen`).
 - Report Issue files against `noshpotosh/editor`.
+- Shell CLI: `e <dir>` opens the editor in a directory, `e -g file:line:col` opens at a position, and help and errors use the invoked name.
+- Blocked workbench commands are logged once and the first one in the shell shows a hint to open the editor.
+- Jump list: slots (`j 1` to `j 9`, digits in the list), `J`/`K` reordering, undo history kept across reopening.
+- Sessions can be renamed (`t r`, shell `Ctrl+Space R`); the floating terminal header shows session, shell, and directory with a close control.
+- File browser uses the Vim vocabulary in every engine and remembers each session's folder across restarts.
+- Native Vim persists registers, marks, macros, and the last search per profile (`terminalFirst.vim.persistRegisters`), closes an undo transaction when a key fails, and avoids a whole-document copy on visual selection.

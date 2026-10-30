@@ -91,7 +91,7 @@ Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer E
 
 ## Known gaps and risks
 
-- **Performance.** The engine works on the full document string (`model.getValue()`, cached per version id), and IME composition compares full-text snapshots. Each edit then copies the whole buffer. Large files will lag. A model-backed `VimHost` is needed before the engine becomes the default.
+- **Performance.** The engine still works on the full document string (`model.getValue()`, cached per version id), so each edit copies the buffer once; visual-selection extension no longer copies it, and `nativeVimContribution.test.ts` guards motions on a 50k-line document against regressions. A model-backed `VimHost` (line-range reads) remains the path to large-file comfort.
 - **Undo transaction safety.** A key that throws mid-edit closes the open transaction and resets the engine (`safeKey`), so the model keeps creating undo stops; model changes and undo/redo also clear it. Tested in `nativeVimContribution.test.ts`.
 - The `off` engine also disables VSCodeVim. Confirm this is intended.
 - The help picker, the browser's `(Native Vim)` labels, and the jump-list hints each describe keys separately. A single source of truth would keep them in sync.
