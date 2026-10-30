@@ -32,10 +32,13 @@ import { INativeVimService } from '../../../../../editor/contrib/nativeVim/commo
 import { IContext, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { ITerminalFirstLeaderService, TerminalFirstLeaderService } from '../../browser/terminalFirstLeader.js';
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { terminalFirstStartup } from '../../../../services/terminalFirst/common/terminalFirstStartup.js';
 import { NativeVimService } from '../../browser/nativeVim.js';
 
 suite('Native Vim workbench navigation', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
+	teardown(() => terminalFirstStartup.reset());
+
 	function fixture(leader = ' ', instantiation = workbenchInstantiationService(undefined, store), leaderBindings: { keys: string; label: string; command: string }[] = []) {
 		const previousMode = terminalFirstPolicy.mode;
 		terminalFirstPolicy.mode = 'editor';
@@ -55,6 +58,9 @@ suite('Native Vim workbench navigation', () => {
 			onShow: Event.None, onHide: Event.None,
 			pick: async picks => { const items = (await picks).filter(item => item.type !== 'separator'); help = items; return items.find(item => item.description === chooseHelp); },
 		}));
+		// The mock context key service answers null for getContext; the pickers read keys through it as soon as Vim is enabled.
+		const contextKeys = instantiation.get(IContextKeyService);
+		instantiation.stub(IContextKeyService, 'getContext', () => upcastPartial<IContext>({ getValue: key => contextKeys.getContextKeyValue(key) }));
 		instantiation.stub(ITerminalFirstLeaderService, store.add(instantiation.createInstance(TerminalFirstLeaderService)));
 		const vim = store.add(instantiation.createInstance(NativeVimService));
 		const keys = (sequence: string[], mode: 'normal' | 'insert' = 'normal') => sequence.map(key => vim.key(key, mode));
@@ -206,5 +212,11 @@ suite('Native Vim workbench navigation', () => {
 			await f.settle();
 		}
 		deepStrictEqual(f.commands, ['Left', 'Down', 'Up', 'Right'].flatMap(direction => Array(3).fill(`terminalFirst.tile.move${direction}`)));
+	});
+
+	test('native Vim is enabled before the installed extensions are known', () => {
+		terminalFirstStartup.begin();
+		const state = fixture();
+		strictEqual(state.vim.enabled, true);
 	});
 });

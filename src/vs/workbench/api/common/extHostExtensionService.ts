@@ -46,6 +46,7 @@ import { StopWatch } from '../../../base/common/stopwatch.js';
 import { isCI, setTimeout0 } from '../../../base/common/platform.js';
 import { IExtHostManagedSockets } from './extHostManagedSockets.js';
 import { Dto } from '../../services/extensions/common/proxyIdentifier.js';
+import { isTerminalFirstProduct } from '../../../platform/terminalFirst/common/terminalFirstProduct.js';
 
 interface ITestRunner {
 	/** Old test runner API, as exported from `vscode/lib/testrunner` */
@@ -266,8 +267,8 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
 
 		const extensionsDeactivated = this._deactivateAll();
 
-		// Give extensions at most 5 seconds to wrap up any async deactivate, then exit
-		Promise.race([timeout(5000), extensionsDeactivated]).finally(() => {
+		// Give extensions at most 5 seconds to wrap up any async deactivate, then exit (1 second in VS NOSH, where quitting is routine)
+		Promise.race([timeout(isTerminalFirstProduct(this._initData.environment.appUriScheme) ? 1000 : 5000), extensionsDeactivated]).finally(() => {
 			if (this._hostUtils.pid) {
 				this._logService.info(`Extension host with pid ${this._hostUtils.pid} exiting with code ${code}`);
 			} else {

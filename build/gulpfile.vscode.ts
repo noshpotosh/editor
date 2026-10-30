@@ -570,6 +570,9 @@ function prepareCopilotRipgrepShimTask(platform: string, arch: string, destinati
 	};
 }
 
+// VS NOSH ships without the Copilot extension; its launcher sets VSCODE_SKIP_COPILOT=1.
+const skipCopilotExtension = process.env['VSCODE_SKIP_COPILOT'] === '1';
+
 function generateNodeCompileCacheTask(platform: string, destinationFolderName: string) {
 	const outputDirectory = path.join(path.dirname(root), destinationFolderName);
 
@@ -606,7 +609,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 			compileNativeExtensionsBuildTask,
 			util.rimraf(path.join(buildRoot, destinationFolderName)),
 			packageTask(platform, arch, sourceFolderName, destinationFolderName, opts),
-			prepareCopilotRipgrepShimTask(platform, arch, destinationFolderName)
+			...(skipCopilotExtension ? [] : [prepareCopilotRipgrepShimTask(platform, arch, destinationFolderName)])
 		];
 
 		if (platform === 'win32') {
@@ -633,7 +636,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 			copyCodiconsTask,
 			cleanExtensionsBuildTask,
 			compileNonNativeExtensionsBuildTask,
-			compileCopilotExtensionBuildTask,
+			...(skipCopilotExtension ? [] : [compileCopilotExtensionBuildTask]),
 			compileExtensionMediaBuildTask,
 			writeISODate('out-build'),
 			esbuildBundleTask,

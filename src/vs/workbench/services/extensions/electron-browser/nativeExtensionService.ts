@@ -59,6 +59,7 @@ import { ILifecycleService, LifecyclePhase } from '../../lifecycle/common/lifecy
 import { IRemoteAgentService } from '../../remote/common/remoteAgentService.js';
 import { IRemoteExplorerService } from '../../remote/common/remoteExplorerService.js';
 import { AsyncIterableEmitter, AsyncIterableProducer } from '../../../../base/common/async.js';
+import { terminalFirstStartup } from '../../terminalFirst/common/terminalFirstStartup.js';
 
 export class NativeExtensionService extends AbstractExtensionService implements IExtensionService {
 
@@ -135,7 +136,7 @@ export class NativeExtensionService extends AbstractExtensionService implements 
 		// some editors require the extension host to restore
 		// and this would result in a deadlock
 		// see https://github.com/microsoft/vscode/issues/41322
-		lifecycleService.when(LifecyclePhase.Ready).then(() => {
+		lifecycleService.when(LifecyclePhase.Ready).then(() => terminalFirstStartup.whenExtensionHostMayStart(lifecycleService.when(LifecyclePhase.Restored))).then(() => {
 			// reschedule to ensure this runs after restoring viewlets, panels, and editors
 			runWhenWindowIdle(mainWindow, () => {
 				this._initializeIfNeeded();

@@ -36,6 +36,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { URI } from '../../../../base/common/uri.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { terminalFirstStartup } from '../../../services/terminalFirst/common/terminalFirstStartup.js';
 
 /** App-owned navigation layer. It never dispatches keys to a terminal or unrelated input. */
 export class NativeVimService extends Disposable implements INativeVimService {
@@ -91,7 +92,10 @@ export class NativeVimService extends Disposable implements INativeVimService {
 		this.updateRemaps();
 		this.initialEngine = configuration.getValue<string>('terminalFirst.vim.engine');
 		if (terminalFirstEnabled) {
-			void extensions.getInstalled().then(async installed => {
+			// Native Vim is usable at once; the VSCodeVim hand-over check asks the shared process only after the shell is on screen.
+			this.ready = this.initialEngine === 'native'; this.vimEnabledContext.set(this.ready);
+			void terminalFirstStartup.whenPresented().then(() => extensions.getInstalled()).then(async installed => {
+				if (this._store.isDisposed) { return; }
 				const vim = installed.filter(extension => extension.identifier.id.toLowerCase() === 'vscodevim.vim');
 				const disabledKey = 'terminalFirst.vim.disabledExtension';
 				if (this.initialEngine === 'extension') {

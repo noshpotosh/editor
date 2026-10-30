@@ -1,10 +1,89 @@
 #!/bin/sh
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
+#
+# Opens files or a directory in the VS NOSH window that owns this shell. Plain file and directory
+# arguments (optionally after --wait) are sent with curl over the window's socket so that no Node
+# process starts; every other form, and any name that needs URL encoding, goes through cli.cjs.
 
 if [ -z "$TERMINAL_FIRST_NODE" ]; then
 	printf '%s\n' 'e: open a Terminal First shell before using this command.' >&2
 	exit 1
 fi
 
-TERMINAL_FIRST_CLI_NAME="e" ELECTRON_RUN_AS_NODE=1 exec "$TERMINAL_FIRST_NODE" "$(dirname "$0")/../cli.cjs" "$@"
+node_path() {
+	TERMINAL_FIRST_CLI_NAME="e" ELECTRON_RUN_AS_NODE=1 exec "$TERMINAL_FIRST_NODE" "$(dirname "$0")/../cli.cjs" "$@"
+}
+
+if [ -z "$TERMINAL_FIRST_CLI_POINTER" ] || [ -z "$TERMINAL_FIRST_SESSION" ] || [ -n "$TERMINAL_FIRST_CLI_FORCE_NODE" ] || ! command -v curl >/dev/null 2>&1; then
+	node_path "$@"
+fi
+case "$PWD" in
+	*[!A-Za-z0-9/._~@+-]*) node_path "$@" ;;
+esac
+
+wait=false
+if [ "$1" = "--wait" ]; then
+	wait=true
+	shift
+fi
+
+# Hands the original arguments to cli.cjs.
+fallback() {
+	if [ "$wait" = true ]; then
+		node_path --wait "$@"
+	fi
+	node_path "$@"
+}
+
+files=""
+directory=""
+for argument in "$@"; do
+	case "$argument" in
+		-*|''|.|..|./*|../*|*/./*|*/../*|*/|*[!A-Za-z0-9/._~@+-]*) fallback "$@" ;;
+	esac
+	case "$argument" in
+		/*) absolute="$argument" ;;
+		*) absolute="$PWD/$argument" ;;
+	esac
+	if [ -d "$absolute" ]; then
+		if [ -n "$directory" ]; then
+			fallback "$@"
+		fi
+		directory="$absolute"
+	else
+		files="$files${files:+,}\"file://$absolute\""
+	fi
+done
+if [ "$wait" = true ] && [ -n "$directory" ]; then
+	fallback "$@"
+fi
+
+deadline=$(( $(date +%s) + 10 ))
+hinted=0
+while [ ! -f "$TERMINAL_FIRST_CLI_POINTER" ]; do
+	if [ "$(date +%s)" -ge "$deadline" ]; then
+		printf '%s\n' 'e: this window has not finished starting its extension host. Retry in a moment.' >&2
+		exit 1
+	fi
+	if [ $hinted -eq 0 ] && [ "$(date +%s)" -ge $(( deadline - 8 )) ]; then
+		printf '%s\n' 'e: waiting for the editor...' >&2
+		hinted=1
+	fi
+	sleep 0.05
+done
+socket=$(sed -n 's/.*"socketPath":"\([^"]*\)".*/\1/p' "$TERMINAL_FIRST_CLI_POINTER")
+case "$socket" in
+	/*) ;;
+	*) printf '%s\n' 'e: the window CLI pointer is invalid. Reload the window to retry.' >&2; exit 1 ;;
+esac
+body="{\"type\":\"terminalFirstOpen\",\"fileURIs\":[$files],\"terminalSession\":\"$TERMINAL_FIRST_SESSION\",\"wait\":$wait,\"cwd\":\"file://${directory:-$PWD}\"}"
+response=$(printf '%s' "$body" | curl --unix-socket "$socket" -sS -H 'content-type: application/json' --data-binary @- -w '\n%{http_code}' http://localhost/ 2>&1) || {
+	printf '%s\n' "e: cannot reach this window. Reload it and retry. $response" >&2
+	exit 1
+}
+status=$(printf '%s' "$response" | tail -n 1)
+if [ "$status" != 200 ]; then
+	printf '%s\n' "e: could not open files: $(printf '%s' "$response" | sed '$d')" >&2
+	exit 1
+fi

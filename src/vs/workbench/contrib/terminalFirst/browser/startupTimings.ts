@@ -113,7 +113,8 @@ export class TerminalFirstStartupTimings extends Disposable {
 
 	private async report(): Promise<void> {
 		const marks = Object.fromEntries(collectMarks(this.timerService.getPerformanceMarks(), getMarks()).map(entry => [entry.name, entry.startTime]));
-		const payload = { reconnected: this.reconnected, inputRequested: this.inputRequested, marks };
+		const contributions = slowestContributions(Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench).timings).map(entry => [LifecyclePhaseToString(entry.phase), entry.id, Math.round(entry.time * 10) / 10]);
+		const payload = { reconnected: this.reconnected, inputRequested: this.inputRequested, marks, contributions };
 		this.logService.info(`[terminalFirst-perf] ${JSON.stringify(payload)}`);
 		if (this.markersFile) {
 			await this.fileService.writeFile(URI.file(`${this.markersFile}.terminalFirst.json`), VSBuffer.fromString(JSON.stringify(payload, null, '\t')));
@@ -132,6 +133,11 @@ function collectMarks(published: readonly (readonly [string, readonly Performanc
 		.map(([name, startTime]) => ({ name, startTime })).sort((a, b) => a.startTime - b.startTime);
 }
 
+/** The 20 workbench contributions whose constructors took longest, slowest first. */
+function slowestContributions(timings: ReadonlyMap<LifecyclePhase, readonly (readonly [string, number])[]>): { phase: LifecyclePhase; id: string; time: number }[] {
+	return [...timings].flatMap(([phase, entries]) => entries.map(([id, time]) => ({ phase, id, time }))).sort((a, b) => b.time - a.time).slice(0, 20);
+}
+
 /** The Markdown shown by the Terminal First Startup Marks command. */
 export function renderStartupMarks(published: readonly (readonly [string, readonly PerformanceMark[]])[], live: readonly PerformanceMark[], timings: ReadonlyMap<LifecyclePhase, readonly (readonly [string, number])[]>): string {
 	const marks = collectMarks(published, live);
@@ -141,9 +147,8 @@ export function renderStartupMarks(published: readonly (readonly [string, readon
 	for (const entry of marks) {
 		lines.push(`| ${entry.name} | ${entry.startTime - origin} | ${entry.startTime} |`);
 	}
-	const slowest = [...timings].flatMap(([phase, entries]) => entries.map(([id, time]) => ({ phase, id, time }))).sort((a, b) => b.time - a.time).slice(0, 20);
 	lines.push('', '## Slowest contribution constructors', '', '| Phase | Contribution | ms |', '| --- | --- | ---: |');
-	for (const entry of slowest) {
+	for (const entry of slowestContributions(timings)) {
 		lines.push(`| ${LifecyclePhaseToString(entry.phase)} | ${entry.id} | ${entry.time} |`);
 	}
 	return lines.join('\n') + '\n';

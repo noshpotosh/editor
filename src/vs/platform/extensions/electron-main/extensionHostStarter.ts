@@ -14,6 +14,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { WindowUtilityProcess } from '../../utilityProcess/electron-main/utilityProcess.js';
 import { IWindowsMainService } from '../../windows/electron-main/windows.js';
 import { IConfigurationService } from '../../configuration/common/configuration.js';
+import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirst.js';
 
 export class ExtensionHostStarter extends Disposable implements IDisposable, IExtensionHostStarter {
 
@@ -36,7 +37,7 @@ export class ExtensionHostStarter extends Disposable implements IDisposable, IEx
 		// On shutdown: gracefully await extension host shutdowns
 		this._register(this._lifecycleMainService.onWillShutdown(e => {
 			this._shutdown = true;
-			e.join('extHostStarter', this._waitForAllExit(6000));
+			e.join('extHostStarter', this._waitForAllExit(terminalFirstEnabled ? 1500 : 6000));
 		}));
 	}
 

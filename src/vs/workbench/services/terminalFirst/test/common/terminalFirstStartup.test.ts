@@ -6,6 +6,8 @@
 import { deepStrictEqual } from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { terminalFirstStartup } from '../../common/terminalFirstStartup.js';
+import { DeferredPromise } from '../../../../../base/common/async.js';
+import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
 
 suite('Terminal First startup ordering', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
@@ -21,4 +23,28 @@ suite('Terminal First startup ordering', () => {
 		await pending;
 		deepStrictEqual([idle, waiting, terminalFirstStartup.waiting], [false, true, false]);
 	});
+
+	test('the extension host waits for presentation only when asked, and at most two seconds past restore', () => runWithFakedTimers({ useFakeTimers: true }, async () => {
+		const restored = new DeferredPromise<void>();
+		let started = 0;
+		const start = () => { started++; };
+		await terminalFirstStartup.whenExtensionHostMayStart(restored.p).then(start);
+		const idle = started;
+		terminalFirstStartup.begin({ deferExtensionHost: false });
+		await terminalFirstStartup.whenExtensionHostMayStart(restored.p).then(start);
+		const notDeferred = started;
+		terminalFirstStartup.reset();
+		terminalFirstStartup.begin({ deferExtensionHost: true });
+		const deferred = terminalFirstStartup.whenExtensionHostMayStart(restored.p).then(start);
+		await restored.complete();
+		const afterRestore = started;
+		await deferred;
+		const afterGrace = started;
+		terminalFirstStartup.reset();
+		terminalFirstStartup.begin({ deferExtensionHost: true });
+		const presentedFirst = terminalFirstStartup.whenExtensionHostMayStart(new DeferredPromise<void>().p).then(start);
+		terminalFirstStartup.presented();
+		await presentedFirst;
+		deepStrictEqual([idle, notDeferred, afterRestore, afterGrace, started], [1, 2, 2, 3, 4]);
+	}));
 });

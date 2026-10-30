@@ -34,8 +34,20 @@ export class SessionTabsWidget extends Disposable {
 		super();
 		this.stripElement = parent;
 		this.render();
-		this._register(service.onDidChangeSessions(() => this.render()));
-		this._register((notifications as NotificationService).model.onDidChangeNotification(() => this.render()));
+		this._register(service.onDidChangeSessions(() => this.scheduleRender()));
+		this._register((notifications as NotificationService).model.onDidChangeNotification(() => this.scheduleRender()));
+	}
+
+	private renderQueued = false;
+
+	/** Session events arrive in bursts (title changes, reconnects, layout recovery); the strip rebuilds once per tick. */
+	private scheduleRender(): void {
+		if (this.renderQueued) { return; }
+		this.renderQueued = true;
+		queueMicrotask(() => {
+			this.renderQueued = false;
+			if (!this._store.isDisposed) { this.render(); }
+		});
 	}
 
 

@@ -13,6 +13,7 @@ import { IEnvironmentService } from '../../platform/environment/common/environme
 import { getOrSet } from '../../base/common/map.js';
 import { Disposable, DisposableStore, isDisposable } from '../../base/common/lifecycle.js';
 import { IEditorPaneService } from '../services/editor/common/editorPaneService.js';
+import { deferStartupContribution } from '../../platform/terminalFirst/common/startupPhaseOverrides.js';
 
 /**
  * A workbench contribution that will be loaded when the workbench starts and disposed when the workbench shuts down.
@@ -170,6 +171,7 @@ export class WorkbenchContributionsRegistry extends Disposable implements IWorkb
 	registerWorkbenchContribution2(id: string, ctor: IConstructorSignature<IWorkbenchContribution>, onEditor: IOnEditorWorkbenchContributionInstantiation): void;
 	registerWorkbenchContribution2(id: string | undefined, ctor: IConstructorSignature<IWorkbenchContribution>, instantiation: WorkbenchContributionInstantiation): void {
 		const contribution: IWorkbenchContributionRegistration = { id, ctor };
+		if (typeof instantiation === 'number') { instantiation = deferStartupContribution(id, instantiation); }
 
 		// Instantiate directly if we already have a matching instantiation condition
 		if (

@@ -237,7 +237,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	initialize(): Promise<void> {
-		terminalFirstStartup.begin();
+		terminalFirstStartup.begin({ deferExtensionHost: this.configurationService.getValue<boolean>('terminalFirst.startup.deferExtensionHost') !== false });
 		return this.transitions.queue(async () => {
 			try {
 				await this.initializeSessions();

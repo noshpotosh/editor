@@ -22,6 +22,7 @@
 		".github/workflows/upstream-drift.yml",
 		"TERMINAL_FIRST.md",
 		"IMP_PLAN.md",
+		"HAND_OFF_SHELL_OVERHAUL.md",
 		"CHANGELOG.md",
 		"README.md"
 	],
@@ -36,10 +37,10 @@
 		"resources/darwin/vs-nosh.png"
 	],
 	"patches": [
-		{ "path": "product.json", "kind": "branding", "gated": false, "seam": "none", "why": "VS NOSH identity: names, data folders, bundle id, the terminal-first URL protocol that gates the fork, and quality stable so packaged builds ship a Node compile cache", "validate": ["launch"] },
+		{ "path": "product.json", "kind": "branding", "gated": false, "seam": "none", "why": "VS NOSH identity: names, data folders, bundle id, the terminal-first URL protocol that gates the fork, quality stable so packaged builds ship a Node compile cache, and no default chat agent", "validate": ["launch"] },
 		{ "path": "build/lib/electron.ts", "kind": "branding", "gated": false, "seam": "none", "why": "Packaged app icon", "validate": ["scripts/terminal-first-app.sh --build"] },
 		{ "path": "build/darwin/create-dmg.ts", "kind": "branding", "gated": false, "seam": "none", "why": "DMG icon", "validate": ["scripts/terminal-first-app.sh --build"] },
-		{ "path": "build/lib/extensions.ts", "kind": "build", "gated": false, "seam": "none", "why": "Re-adds @github/copilot/sdk files that .moduleignore strips so the packaged Copilot extension loads; upstreaming candidate", "validate": ["scripts/terminal-first-app.sh --build"] },
+		{ "path": "build/gulpfile.vscode.ts", "kind": "build", "gated": true, "seam": "VSCODE_SKIP_COPILOT environment variable", "why": "The VS NOSH launcher builds without the Copilot extension (395 MB, disabled by default)", "validate": ["scripts/terminal-first-app.sh --build-only"] },
 		{ "path": "build/lib/nodeCompileCache.ts", "kind": "generic-fix", "gated": false, "seam": "none", "why": "Accepts the user-id suffix Node adds to portable compile cache tag directories; upstreaming candidate", "validate": ["scripts/terminal-first-app.sh --build-only"] },
 		{ "path": "build/lib/i18n.resources.json", "kind": "build", "gated": false, "seam": "none", "why": "Registers the fork contribution folders for localization", "validate": ["npm run compile"] },
 		{ "path": "build/lib/stylelint/vscode-known-variables.json", "kind": "build", "gated": false, "seam": "none", "why": "Declares the terminalFirst.* CSS variables for stylelint", "validate": ["npm run eslint"] },
@@ -53,6 +54,10 @@
 		{ "path": "src/vs/workbench/api/browser/statusBarExtensionPoint.ts", "kind": "additive-api", "gated": true, "seam": "platform/terminalFirst terminalFirstEnabled", "why": "Optional updated event consumed by the VSCodeVim status widget", "validate": ["launch with terminalFirst.vim.engine=extension"] },
 		{ "path": "src/vs/workbench/api/node/extHostCLIServer.ts", "kind": "additive-api", "gated": false, "seam": "none", "why": "terminalFirstOpen pipe command used by the e/code shell helpers", "validate": ["node --test extensions/terminal-first/test/cli.test.cjs"] },
 		{ "path": "src/vs/workbench/api/node/extHostExtensionService.ts", "kind": "gate", "gated": true, "seam": "platform/terminalFirst isTerminalFirstProduct", "why": "Starts the CLI server in the local extension host", "validate": ["launch; run e file"] },
+		{ "path": "src/vs/workbench/common/contributions.ts", "kind": "hook-callout", "gated": true, "seam": "platform/terminalFirst startupPhaseOverrides.deferStartupContribution (identity outside VS NOSH)", "why": "Creates listed BlockRestore contributions after restore so the shell is not delayed by chat, notebook, and agent-host setup", "validate": ["vs/workbench/contrib/terminalFirst/test/browser/startupPhaseOverrides.test"] },
+		{ "path": "src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts", "kind": "hook-callout", "gated": true, "seam": "services/terminalFirst terminalFirstStartup.whenExtensionHostMayStart (resolved at once outside VS NOSH)", "why": "The extension host starts after the first shell is on screen, bounded by two seconds after Restored", "validate": ["vs/workbench/services/terminalFirst/test/common/terminalFirstStartup.test", "scripts/terminal-first-perf.sh"] },
+		{ "path": "src/vs/workbench/api/common/extHostExtensionService.ts", "kind": "gate", "gated": true, "seam": "platform/terminalFirst isTerminalFirstProduct", "why": "Quit waits at most one second for extension deactivation", "validate": ["scripts/terminal-first-perf.sh --quit"] },
+		{ "path": "src/vs/platform/extensions/electron-main/extensionHostStarter.ts", "kind": "gate", "gated": true, "seam": "platform/terminalFirst terminalFirstEnabled", "why": "Quit waits at most 1.5 seconds for extension host exit", "validate": ["scripts/terminal-first-perf.sh --quit"] },
 		{ "path": "src/vs/workbench/browser/editor.ts", "kind": "additive-api", "gated": false, "seam": "none", "why": "whenEditorClosed accepts a group filter so e --wait only waits for its session's editors", "validate": ["vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test"] },
 		{ "path": "src/vs/workbench/browser/layout.ts", "kind": "gate", "gated": true, "seam": "platform/terminalFirst terminalFirstEnabled", "why": "Sidebar, panel, and auxiliary bar visibility stay under session control; STATUSBAR_PART case in setPartHidden", "validate": ["vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test"] },
 		{ "path": "src/vs/workbench/browser/parts/editor/editor.ts", "kind": "additive-api", "gated": false, "seam": "EditorPartHooks", "why": "allGroups, setVisible, confirmCloseAllEditors on the group view interfaces", "validate": ["vs/workbench/contrib/terminalFirst/test/browser/editorPartSessions.test"] },

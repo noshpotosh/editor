@@ -47,6 +47,7 @@ if (terminalFirstEnabled) {
 	TerminalPolicy.set(createTerminalFirstTerminalPolicy());
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({ id: 'terminalFirst.terminal', title: localize('terminalSettings', "Terminal First"), type: 'object', properties: {
 		'terminalFirst.terminal.padding': { type: 'number', default: 12, minimum: 0, maximum: 100, description: localize('padding', "Terminal padding in pixels.") },
+		'terminalFirst.startup.deferExtensionHost': { type: 'boolean', default: true, description: localize('deferExtensionHost', "Start the extension host after the shell is on screen (at the latest two seconds after the workbench restored) so extensions do not compete with the first prompt.") },
 	} });
 	// The shell starts with the workbench; the controller itself waits for the pieces it needs.
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.BlockRestore);
@@ -67,6 +68,11 @@ if (terminalFirstEnabled) {
 			'terminal.integrated.minimumContrastRatio': 1,
 			// The shell is a login shell and rebuilds its environment itself; waiting for the login-shell probe would delay the first prompt.
 			'terminal.integrated.inheritEnv': false,
+			// Quit and relaunch are routine: sessions and layouts come back, scrollback does not. Reload still reattaches live shells.
+			'terminal.integrated.persistentSessionReviveProcess': 'never',
+			// The first shell is never respawned because git or debug-auto-launch published an environment collection after it started.
+			'terminal.integrated.environmentChangesRelaunch': false,
+			'terminal.integrated.shellIntegration.environmentReporting': false,
 			'security.workspace.trust.startupPrompt': 'never',
 			// The shell is the product; it starts in any folder. Entering the editor still asks for trust (present()).
 			'terminal.integrated.allowInUntrustedWorkspace': true,

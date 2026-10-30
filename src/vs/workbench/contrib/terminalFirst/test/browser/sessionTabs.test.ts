@@ -33,4 +33,20 @@ suite('Session title-bar tabs', () => {
 		await Promise.resolve();
 		deepStrictEqual({ tabs: [...parent.querySelectorAll('[role=tab]')].map(tab => [tab.getAttribute('aria-label'), tab.parentElement!.classList.contains('dirty'), tab.getAttribute('aria-selected'), tab.getAttribute('tabindex')]), focus: document.activeElement?.getAttribute('data-session-control') }, { tabs: [['One (Shell)', false, 'false', '-1'], ['Two (Editor)', true, 'true', '0']], focus: 'two' });
 	});
+
+	test('a burst of session changes renders the strip once', async () => {
+		const instantiation = workbenchInstantiationService(undefined, store);
+		const parent = document.createElement('div');
+		const changed = store.add(new Emitter<void>());
+		let reads = 0;
+		const sessions: ITerminalFirstSession[] = [{ id: 'one', title: 'One', mode: 'shell', active: true, spaces: [] }];
+		const service = upcastPartial<ITerminalFirstService>({ get sessions() { reads++; return sessions; }, onDidChangeSessions: changed.event });
+		const notifications = store.add(instantiation.createInstance(NotificationService));
+		store.add(new SessionTabsWidget(parent, service, notifications, instantiation.get(ICommandService), instantiation.get(IHoverService)));
+		const readsPerRender = reads;
+		for (let i = 0; i < 10; i++) { changed.fire(); }
+		const readsBeforeTick = reads;
+		await Promise.resolve();
+		deepStrictEqual({ readsBeforeTick, renders: (reads - readsPerRender) / readsPerRender }, { readsBeforeTick: readsPerRender, renders: 1 });
+	});
 });
