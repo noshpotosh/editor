@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled, terminalFirstPolicy } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 import { Disposable, DisposableMap, DisposableStore, IDisposable, toDisposable } from '../../base/common/lifecycle.js';
 import { Event, Emitter } from '../../base/common/event.js';
 import { alert } from '../../base/browser/ui/aria/aria.js';
@@ -52,6 +51,7 @@ import { ITelemetryService } from '../../platform/telemetry/common/telemetry.js'
 import { IAuxiliaryWindowService } from '../services/auxiliaryWindow/browser/auxiliaryWindowService.js';
 import { CodeWindow, mainWindow } from '../../base/browser/window.js';
 import { localize } from '../../nls.js';
+import { terminalFirstEnabled, terminalFirstPolicy } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 
 //#region Layout Implementation
 

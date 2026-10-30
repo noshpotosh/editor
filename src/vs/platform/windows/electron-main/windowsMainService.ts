@@ -60,6 +60,7 @@ import { ICSSDevelopmentService } from '../../cssDev/node/cssDevService.js';
 import { ResourceSet } from '../../../base/common/map.js';
 import { VSBuffer } from '../../../base/common/buffer.js';
 import { resolveAgentsWindowFolder, sendAgentsWindowOpenIntent } from './agentsWindow.js';
+import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirst.js';
 
 //#region Helper Interfaces
 
@@ -1510,7 +1511,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 	}
 
 	private async openInBrowserWindow(options: IOpenBrowserWindowOptions): Promise<ICodeWindow> {
-		if (isMacintosh && product.urlProtocol === 'terminal-first' && !options.remoteAuthority && options.workspace && isSingleFolderWorkspaceIdentifier(options.workspace) && options.workspace.uri.scheme === Schemas.file) {
+		if (terminalFirstEnabled && !options.remoteAuthority && options.workspace && isSingleFolderWorkspaceIdentifier(options.workspace) && options.workspace.uri.scheme === Schemas.file) {
 			const directory = URI.joinPath(this.environmentMainService.workspaceStorageHome, options.workspace.id);
 			const configPath = URI.joinPath(directory, 'vs-nosh.code-workspace');
 			if (!await this.fileService.exists(configPath)) {

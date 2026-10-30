@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { IViewsRegistry, Extensions as ViewExtensions } from '../../../common/views.js';
 import { OutlinePane } from './outlinePane.js';
@@ -19,6 +18,7 @@ import { IOutlinePane } from './outline.js';
 // --- actions
 
 import './outlineActions.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 // --- view
 

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as domStylesheets from '../../../../base/browser/domStylesheets.js';
 import * as cssValue from '../../../../base/browser/cssValue.js';
 import { DeferredPromise, timeout, type MaybePromise } from '../../../../base/common/async.js';
@@ -58,6 +57,7 @@ import { isAuxiliaryWindow, mainWindow } from '../../../../base/browser/window.j
 import { GroupIdentifier } from '../../../common/editor.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { hasKey, isString } from '../../../../base/common/types.js';
+import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 interface IBackgroundTerminal {
 	instance: ITerminalInstance;

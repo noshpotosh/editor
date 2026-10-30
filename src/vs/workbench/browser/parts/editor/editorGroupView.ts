@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { EDITOR_TILE_INSET, EDITOR_TILE_MIN_WIDTH, EDITOR_TILE_MIN_HEIGHT } from '../../../services/editor/common/editorTileLayout.js';
 import { isGroupDedicatedForEditor } from '../../../services/editor/common/editorGroupFinder.js';
 import './media/editorgroupview.css';
@@ -68,6 +67,7 @@ import { IEditorResolverService } from '../../../services/editor/common/editorRe
 import { IHostService } from '../../../services/host/browser/host.js';
 import { DiffEditorInput } from '../../../common/editor/diffEditorInput.js';
 import { FileSystemProviderCapabilities, IFileService } from '../../../../platform/files/common/files.js';
+import { terminalFirstEnabled, terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class EditorGroupView extends Themable implements IEditorGroupView {
 

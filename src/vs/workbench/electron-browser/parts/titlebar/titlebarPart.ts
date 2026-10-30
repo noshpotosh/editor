@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { Event } from '../../../../base/common/event.js';
 import { getZoomFactor } from '../../../../base/browser/browser.js';
 import { $, addDisposableListener, append, EventType, getWindow, getWindowId, hide, show } from '../../../../base/browser/dom.js';
@@ -30,13 +29,14 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { CodeWindow, mainWindow } from '../../../../base/browser/window.js';
 import { IsWindowAlwaysOnTopContext } from '../../../common/contextkeys.js';
+import { terminalFirstEnabled, TERMINAL_FIRST_TITLEBAR_HEIGHT } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 export class NativeTitlebarPart extends BrowserTitlebarPart {
 
 	//#region IView
 
 	override get minimumHeight(): number {
-		if (terminalFirstEnabled && !this.isAuxiliary) { return 36 / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1); }
+		if (terminalFirstEnabled && !this.isAuxiliary) { return TERMINAL_FIRST_TITLEBAR_HEIGHT / (this.preventZoom ? getZoomFactor(getWindow(this.element)) : 1); }
 		if (!isMacintosh) {
 			return super.minimumHeight;
 		}

@@ -3,11 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { isMacintosh, isNative } from '../../../../base/common/platform.js';
-import product from '../../../../platform/product/common/product.js';
 import { RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
-export const terminalFirstEnabled = isNative && isMacintosh && product.urlProtocol === 'terminal-first';
+export { terminalFirstEnabled };
 export const TerminalFirstFloatingEnabledContext = new RawContextKey<boolean>('terminalFirstFloatingEnabled', false);
 export const TerminalFirstFloatingVisibleContext = new RawContextKey<boolean>('terminalFirstFloatingVisible', false);
 export const TerminalFirstFloatingFocusedContext = new RawContextKey<boolean>('terminalFirstFloatingFocused', false);

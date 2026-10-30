@@ -81,7 +81,9 @@ import { getPartsSplashColors, getPartsSplashLayoutMetrics } from './partsSplash
 			}
 		}
 
-		if (safeProcess.platform === 'darwin' && configuration.product.urlProtocol === 'terminal-first' && !configuration.colorScheme.highContrast) {
+		// VS NOSH shows a shell first; mirrors isTerminalFirstProduct without importing runtime modules into the bootstrap.
+		const terminalFirst = safeProcess.platform === 'darwin' && configuration.product.urlProtocol === 'terminal-first';
+		if (terminalFirst && !configuration.colorScheme.highContrast) {
 			shellBackground = data?.colorInfo.background ?? (configuration.autoDetectColorScheme && !configuration.colorScheme.dark ? '#FFFFFF' : '#181818');
 		}
 
@@ -95,10 +97,7 @@ import { getPartsSplashColors, getPartsSplashLayoutMetrics } from './partsSplash
 			preloadGlobals.webFrame.setZoomLevel(data.zoomLevel);
 		}
 
-		// Terminal-first startup must not replay the saved editor layout before its shell is ready.
-		const terminalFirst = safeProcess.platform === 'darwin' && configuration.product.urlProtocol === 'terminal-first';
-
-		// restore parts if possible (we might not always store layout info)
+		// restore parts if possible (we might not always store layout info); VS NOSH must not replay the editor layout before its shell is ready
 		if (data?.layoutInfo && !terminalFirst) {
 			const { layoutInfo, colorInfo } = data;
 			const modernUI = layoutInfo.modernUI === true;

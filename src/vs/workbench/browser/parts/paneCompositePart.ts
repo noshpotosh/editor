@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { viewContainerHosts } from '../../services/views/browser/viewContainerHost.js';
-import { terminalFirstPolicy, terminalFirstEnabled } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/paneCompositePart.css';
 import { Event } from '../../../base/common/event.js';
 import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
@@ -42,6 +41,7 @@ import { IHoverService } from '../../../platform/hover/browser/hover.js';
 import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { HiddenItemStrategy, MenuWorkbenchToolBar } from '../../../platform/actions/browser/toolbar.js';
 import { DeferredPromise } from '../../../base/common/async.js';
+import { terminalFirstPolicy, terminalFirstEnabled } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export enum CompositeBarPosition {
 	TOP,

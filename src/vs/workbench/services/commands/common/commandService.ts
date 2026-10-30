@@ -10,8 +10,8 @@ import { CommandsRegistry, ICommandEvent, ICommandService } from '../../../../pl
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { isTerminalFirstCommandAllowed } from '../../terminalFirst/common/terminalFirstPolicy.js';
 import { IExtensionService } from '../../extensions/common/extensions.js';
+import { isTerminalFirstCommandAllowed } from '../../terminalFirst/common/terminalFirstPolicy.js';
 
 export class CommandService extends Disposable implements ICommandService {
 

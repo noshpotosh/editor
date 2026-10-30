@@ -156,6 +156,7 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 import { IProtocolMainService } from '../../platform/protocol/electron-main/protocol.js';
 import { createRemoteResourceRequestHandler } from '../../platform/protocol/electron-main/remoteResourceProtocol.js';
 import { logNodeCompileCacheStatus, markNodeCompileCacheReady, waitForNodeCompileCacheReady } from '../../base/node/nodeCompileCache.js';
+import { terminalFirstEnabled } from '../../platform/terminalFirst/common/terminalFirst.js';
 
 type OSProxyConfigEvent = {
 	readonly success: boolean;
@@ -1306,7 +1307,7 @@ export class CodeApplication extends Disposable {
 		);
 		services.set(ILocalPtyService, ptyHostService);
 		// VS NOSH opens straight into a shell, so boot the pty host alongside the first window.
-		if (this.productService.urlProtocol === 'terminal-first') {
+		if (terminalFirstEnabled) {
 			ptyHostService.warmUp();
 		}
 

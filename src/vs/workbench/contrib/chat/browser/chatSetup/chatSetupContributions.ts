@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as dom from '../../../../../base/browser/dom.js';
 import { BaseActionViewItem, IBaseActionViewItemOptions } from '../../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { IAction, WorkbenchActionExecutedClassification, WorkbenchActionExecutedEvent } from '../../../../../base/common/actions.js';
@@ -64,6 +63,7 @@ import { ChatSetupController } from './chatSetupController.js';
 import { GrowthSessionController, registerGrowthSession } from './chatSetupGrowthSession.js';
 import { AICodeActionsHelper, AINewSymbolNamesProvider, ChatCodeActionsProvider, SetupAgent } from './chatSetupProviders.js';
 import { ChatSetup } from './chatSetupRunner.js';
+import { terminalFirstEnabled } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 const defaultChat = {
 	chatExtensionId: product.defaultChatAgent?.chatExtensionId ?? '',

@@ -23,6 +23,7 @@ import { ExtensionIdentifier } from '../../../platform/extensions/common/extensi
 import { asStatusBarItemIdentifier } from '../common/extHostTypes.js';
 import { STATUS_BAR_ERROR_ITEM_BACKGROUND, STATUS_BAR_WARNING_ITEM_BACKGROUND } from '../../common/theme.js';
 import { IManagedHoverTooltipMarkdownString } from '../../../base/browser/ui/hover/hover.js';
+import { terminalFirstEnabled } from '../../../platform/terminalFirst/common/terminalFirst.js';
 
 
 // --- service
@@ -153,7 +154,9 @@ class ExtensionStatusBarItemService implements IExtensionStatusBarItemService {
 			// Otherwise update
 			existingEntry.accessor.update(entry);
 			existingEntry.entry = entry;
-			this._onDidChange.fire({ updated: [entryId, { entry, alignment, priority }] });
+			if (terminalFirstEnabled) {
+				this._onDidChange.fire({ updated: [entryId, { entry, alignment, priority }] });
+			}
 			return StatusBarUpdateKind.DidUpdate;
 		}
 	}

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { onDidChangeFullscreen, isFullscreen } from '../../../../base/browser/browser.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { Color } from '../../../../base/common/color.js';
@@ -24,6 +23,7 @@ import { mainWindow } from '../../../../base/browser/window.js';
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { TitleBarSetting } from '../../../../platform/window/common/window.js';
 import { IWorkbenchThemeService } from '../../../services/themes/common/workbenchThemeService.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class PartsSplash {
 

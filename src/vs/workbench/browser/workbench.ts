@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 import './style.js';
 import { runWhenWindowIdle } from '../../base/browser/dom.js';
 import { Event, Emitter, setGlobalLeakWarningThreshold } from '../../base/common/event.js';
@@ -50,6 +49,7 @@ import { AccessibleViewRegistry } from '../../platform/accessibility/browser/acc
 import { NotificationAccessibleView } from './parts/notifications/notificationAccessibleView.js';
 import { IMarkdownRendererService } from '../../platform/markdown/browser/markdownRenderer.js';
 import { EditorMarkdownCodeBlockRenderer } from '../../editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js';
+import { terminalFirstEnabled } from '../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export interface IWorkbenchOptions {
 

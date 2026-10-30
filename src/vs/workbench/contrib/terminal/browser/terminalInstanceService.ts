@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
-import { consumeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITerminalInstance, ITerminalInstanceService } from './terminal.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -19,6 +18,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { promiseWithResolvers } from '../../../../base/common/async.js';
 import { hasKey } from '../../../../base/common/types.js';
+import { consumeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class TerminalInstanceService extends Disposable implements ITerminalInstanceService {
 	declare _serviceBrand: undefined;

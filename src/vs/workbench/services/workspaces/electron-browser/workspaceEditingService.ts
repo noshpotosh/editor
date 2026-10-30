@@ -35,6 +35,7 @@ import { IUserDataProfilesService } from '../../../../platform/userDataProfile/c
 import { IUserDataProfileService } from '../../userDataProfile/common/userDataProfile.js';
 import { ConfigurationTarget } from '../../../../platform/configuration/common/configuration.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingService {
 
@@ -206,7 +207,10 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
 		// Restart the extension host: entering a workspace means a new location for
 		// storage and potentially a change in the workspace.rootPath property.
 		else {
-			await this.extensionService.startExtensionHosts();
+			const started = this.extensionService.startExtensionHosts();
+			if (terminalFirstEnabled) {
+				await started; // pending shell CLI requests need the new host before the folder change resolves
+			}
 		}
 	}
 }

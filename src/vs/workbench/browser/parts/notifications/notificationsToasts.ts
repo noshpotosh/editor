@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/notificationsToasts.css';
 import { localize } from '../../../../nls.js';
 import { INotificationsModel, NotificationChangeType, INotificationChangeEvent, INotificationViewItem, NotificationViewItemContentChangeKind, NotificationsSettings, NotificationsPosition, getNotificationsPosition } from '../../../common/notifications.js';
@@ -32,6 +31,7 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { DEFAULT_CUSTOM_TITLEBAR_HEIGHT } from '../../../../platform/window/common/window.js';
 import { PendingNotificationToasts } from './pendingNotificationToasts.js';
 import { onDidChangeNotificationRowHeight } from './notificationsViewer.js';
+import { terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 interface INotificationToast {
 	readonly item: INotificationViewItem;

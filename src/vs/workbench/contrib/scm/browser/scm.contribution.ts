@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContributionsRegistry, registerWorkbenchContribution2, Extensions as WorkbenchExtensions, WorkbenchPhase } from '../../../common/contributions.js';
@@ -44,6 +43,7 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { CHAT_SETUP_SUPPORT_ANONYMOUS_ACTION_ID } from '../../chat/browser/actions/chatActions.js';
 import { SCMInputContextKeys } from './scmInput.js';
 import product from '../../../../platform/product/common/product.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 ModesRegistry.registerLanguage({
 	id: 'scminput',

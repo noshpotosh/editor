@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled, isTerminalFirstCommandAllowed, isTerminalFirstInteraction, TerminalFirstFloatingVisibleContext, TerminalFirstShellContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { isKeyboardEvent, isMouseEvent, isPointerEvent, getActiveWindow } from '../../../../base/browser/dom.js';
 import { Action } from '../../../../base/common/actions.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -65,6 +64,7 @@ import { ITerminalQuickPickItem } from './terminalProfileQuickpick.js';
 import { TerminalTabList } from './terminalTabsList.js';
 import { ResourceContextKey } from '../../../common/contextkeys.js';
 import { SeparatorSelectOption } from '../../../../base/browser/ui/selectBox/selectBox.js';
+import { terminalFirstEnabled, isTerminalFirstCommandAllowed, isTerminalFirstInteraction, TerminalFirstFloatingVisibleContext, TerminalFirstShellContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export const switchTerminalShowTabsTitle = localize('showTerminalTabs', "Show Tabs");
 

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import './media/panelpart.css';
 import { localize } from '../../../../nls.js';
 import { IAction, Separator, SubmenuAction, toAction } from '../../../../base/common/actions.js';
@@ -33,6 +32,7 @@ import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Extensions } from '../../panecomposite.js';
+import { terminalFirstPolicy } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class PanelPart extends AbstractPaneCompositePart {
 

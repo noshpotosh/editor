@@ -25,6 +25,7 @@ import { generateUuid } from '../../../base/common/uuid.js';
 import { BidirectionalMap } from '../../../base/common/map.js';
 import { DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { markNodeCompileCacheReady } from '../../../base/node/nodeCompileCache.js';
+import { isTerminalFirstProduct } from '../../../platform/terminalFirst/common/terminalFirstProduct.js';
 const require = nodeModule.createRequire(import.meta.url);
 
 class NodeModuleRequireInterceptor extends RequireInterceptor {
@@ -159,7 +160,7 @@ export class ExtHostExtensionService extends AbstractExtHostExtensionService {
 		this._instaService.createInstance(ExtHostDownloadService);
 
 		// Register CLI Server for ipc
-		if ((this._initData.remote.isRemote && this._initData.remote.authority) || this._initData.environment.appUriScheme === 'terminal-first') {
+		if ((this._initData.remote.isRemote && this._initData.remote.authority) || isTerminalFirstProduct(this._initData.environment.appUriScheme)) {
 			const cliServer = this._store.add(this._instaService.createInstance(CLIServer));
 			process.env['VSCODE_IPC_HOOK_CLI'] = cliServer.ipcHandlePath;
 		}

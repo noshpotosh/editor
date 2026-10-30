@@ -19,6 +19,7 @@ import { ResultKind } from '../../../../platform/keybinding/common/keybindingRes
 import { NativeVim } from '../common/nativeVim.js';
 import { INativeVimService } from '../common/nativeVimService.js';
 import './nativeVim.css';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 export const NativeVimModeContext = new RawContextKey<string>('nativeVimMode', '');
 export const NativeVimActiveContext = new RawContextKey<boolean>('nativeVimActive', false);
@@ -191,7 +192,9 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 	getPosition() { return { preference: OverlayWidgetPositionPreference.BOTTOM_RIGHT_CORNER }; }
 }
 
-registerEditorContribution(NativeVimContribution.ID, NativeVimContribution, EditorContributionInstantiation.BeforeFirstInteraction);
+if (terminalFirstEnabled) {
+	registerEditorContribution(NativeVimContribution.ID, NativeVimContribution, EditorContributionInstantiation.BeforeFirstInteraction);
+}
 
 // Preserve the default command chain for every editor that does not opt into native Vim.
 for (const id of ['type', 'paste', 'compositionStart', 'compositionType', 'replacePreviousChar', 'compositionEnd']) {

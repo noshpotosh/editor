@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize } from '../../../../nls.js';
 import Severity from '../../../../base/common/severity.js';
 import { dispose, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -24,6 +23,7 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { ConfirmResult, IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { Emitter } from '../../../../base/common/event.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class TerminalEditorInput extends EditorInput implements IEditorCloseHandler {
 

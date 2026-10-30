@@ -127,11 +127,6 @@ export interface IViewContainerDescriptor {
 	readonly hideIfEmpty?: boolean;
 
 	/**
-	 * Whether a new view container is pinned. Defaults to true.
-	 */
-	readonly defaultPinned?: boolean;
-
-	/**
 	 * Id of the extension that contributed the view container
 	 */
 	readonly extensionId?: ExtensionIdentifier;

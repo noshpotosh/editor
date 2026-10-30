@@ -506,12 +506,6 @@ export const enum TerminalCommandId {
 }
 
 export const DEFAULT_COMMANDS_TO_SKIP_SHELL: string[] = [
-	'terminalFirst.leader',
-	'terminalFirst.copyMode.enter',
-	'terminalFirst.toggleFloatingTerminal',
-	// Tile chords must reach the workbench from terminal tiles.
-	...['new', 'explorer', 'scm', 'terminal', 'close', 'maximize', 'toggleSplit', 'balance'].map(id => `terminalFirst.tile.${id}`),
-	...['Left', 'Down', 'Up', 'Right'].flatMap(direction => ['focus', 'move', 'swap', 'resize'].map(action => `terminalFirst.tile.${action}${direction}`)),
 	TerminalCommandId.ClearSelection,
 	TerminalCommandId.Clear,
 	TerminalCommandId.CopyAndClearSelection,

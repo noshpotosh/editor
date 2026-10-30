@@ -5,7 +5,6 @@
 
 import './media/titlebarpart.css';
 import { SessionTabsWidget } from '../terminalFirst/sessionStripPart.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MultiWindowParts, Part } from '../../part.js';
 import { ITitleService } from '../../../services/title/browser/titleService.js';
@@ -60,6 +59,7 @@ import { safeIntl } from '../../../../base/common/date.js';
 import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { WORKBENCH_MENU_MOTION_CLASS, workbenchMenuCloseAnimation } from '../../actions/menuMotion.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export interface ITitleVariable {
 	readonly name: string;

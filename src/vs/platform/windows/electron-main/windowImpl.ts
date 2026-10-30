@@ -26,7 +26,6 @@ import { isLaunchedFromCli } from '../../environment/node/argvHelper.js';
 import { IFileService } from '../../files/common/files.js';
 import { ILifecycleMainService } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
-import product from '../../product/common/product.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IIPCObjectUrl, IProtocolMainService } from '../../protocol/electron-main/protocol.js';
 import { resolveMarketplaceHeaders } from '../../externalServices/common/marketplace.js';
@@ -49,6 +48,7 @@ import { VSBuffer } from '../../../base/common/buffer.js';
 import { errorHandler } from '../../../base/common/errors.js';
 import { FocusMode, IApplicationBadge } from '../../native/common/native.js';
 import { Color } from '../../../base/common/color.js';
+import { terminalFirstEnabled, TERMINAL_FIRST_TITLEBAR_HEIGHT } from '../../terminalFirst/common/terminalFirst.js';
 
 export interface IWindowCreationOptions {
 	readonly state: IWindowState;
@@ -226,7 +226,7 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
 		// Sheet Offsets
 		const useCustomTitleStyle = !hasNativeTitlebar(this.configurationService, options?.titleBarStyle === 'hidden' ? TitlebarStyle.CUSTOM : undefined /* unknown */);
 		if (isMacintosh && useCustomTitleStyle) {
-			win.setSheetOffset(product.urlProtocol === 'terminal-first' ? 36 : isTahoeOrNewer(release()) ? 32 : 28); // offset dialogs by the height of the custom title bar if we have any
+			win.setSheetOffset(terminalFirstEnabled ? TERMINAL_FIRST_TITLEBAR_HEIGHT : isTahoeOrNewer(release()) ? 32 : 28); // offset dialogs by the height of the custom title bar if we have any
 		}
 
 		// Update the window controls immediately based on cached or default values

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import * as nls from '../../../../nls.js';
 import * as dom from '../../../../base/browser/dom.js';
 import * as domStylesheetsJs from '../../../../base/browser/domStylesheets.js';
@@ -54,6 +53,7 @@ import { MicrotaskDelay } from '../../../../base/common/symbols.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
 import { hasNativeContextMenu } from '../../../../platform/window/common/window.js';
 import { hasKey } from '../../../../base/common/types.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class TerminalViewPane extends ViewPane {
 	private _parentDomElement: HTMLElement | undefined;

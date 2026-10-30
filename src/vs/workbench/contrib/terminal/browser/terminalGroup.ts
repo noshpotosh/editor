@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TERMINAL_VIEW_ID } from '../common/terminal.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { IDisposable, Disposable, DisposableStore, dispose, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -19,6 +18,7 @@ import { getWindow } from '../../../../base/browser/dom.js';
 import { asArray } from '../../../../base/common/arrays.js';
 import { hasKey, isNumber, type SingleOrMany } from '../../../../base/common/types.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 const enum Constants {
 	/**

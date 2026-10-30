@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { Part } from '../../part.js';
 import { Dimension, $, EventHelper, addDisposableGenericMouseDownListener, getWindow, isAncestorOfActiveElement, getActiveElement, isHTMLElement, computeScreenAwareSize } from '../../../../base/browser/dom.js';
@@ -37,6 +36,7 @@ import { IContextKeyService } from '../../../../platform/contextkey/common/conte
 import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
 import { EditorAreaFocusContext, EditorPartMaximizedEditorGroupContext, EditorPartMultipleEditorGroupsContext, EditorTabsVisibleContext, IsTopRightEditorGroupContext } from '../../../common/contextkeys.js';
 import { mainWindow } from '../../../../base/browser/window.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 /**
  * The width (in pixels) of each visible editor card border when the

@@ -463,12 +463,16 @@ export class EditorService extends Disposable implements EditorServiceImpl {
 		switch (order) {
 
 			// MRU
-			case EditorsOrder.MOST_RECENTLY_ACTIVE:
+			case EditorsOrder.MOST_RECENTLY_ACTIVE: {
+				// Groups retained by inactive sessions are hidden from `groups`; skip their editors unless asked for.
+				const visibleGroups = !options?.includeInactive && this.editorGroupsContainer.allGroups && this.editorGroupsContainer.allGroups.length !== this.editorGroupsContainer.groups.length ? new Set(this.editorGroupsContainer.groups.map(group => group.id)) : undefined;
+				const editors = visibleGroups ? this.editorsObserver.editors.filter(({ groupId }) => visibleGroups.has(groupId)) : this.editorsObserver.editors;
 				if (options?.excludeSticky) {
-					return this.editorsObserver.editors.filter(({ groupId, editor }) => (options?.includeInactive || this.editorGroupsContainer.groups.some(group => group.id === groupId)) && !this.editorGroupsContainer.getGroup(groupId)?.isSticky(editor));
+					return editors.filter(({ groupId, editor }) => !this.editorGroupsContainer.getGroup(groupId)?.isSticky(editor));
 				}
 
-				return this.editorsObserver.editors.filter(({ groupId }) => (options?.includeInactive || this.editorGroupsContainer.groups.some(group => group.id === groupId)));
+				return editors;
+			}
 
 			// Sequential
 			case EditorsOrder.SEQUENTIAL: {

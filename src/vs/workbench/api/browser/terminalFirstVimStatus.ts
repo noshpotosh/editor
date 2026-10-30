@@ -5,13 +5,13 @@
 
 import { $ } from '../../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../../base/common/lifecycle.js';
-import { isMacintosh } from '../../../base/common/platform.js';
 import { ICodeEditor, IOverlayWidget, IOverlayWidgetPosition, OverlayWidgetPositionPreference } from '../../../editor/browser/editorBrowser.js';
 import { EditorContributionInstantiation, registerEditorContribution } from '../../../editor/browser/editorExtensions.js';
 import { IEditorContribution } from '../../../editor/common/editorCommon.js';
 import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
 import { IExtensionStatusBarItemService } from './statusBarExtensionPoint.js';
 import './media/terminalFirst.css';
+import { terminalFirstEnabled } from '../../../platform/terminalFirst/common/terminalFirst.js';
 
 /** Keeps Vim's mode, pending keys and command line visible when the workbench status bar is hidden. */
 class TerminalFirstVimStatus extends Disposable implements IEditorContribution, IOverlayWidget {
@@ -47,6 +47,6 @@ class TerminalFirstVimStatus extends Disposable implements IEditorContribution, 
 	}
 }
 
-if (isMacintosh) {
+if (terminalFirstEnabled) {
 	registerEditorContribution(TerminalFirstVimStatus.ID, TerminalFirstVimStatus, EditorContributionInstantiation.AfterFirstRender);
 }

@@ -568,8 +568,8 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 
 | Step | Status | Commit | Notes |
 | --- | --- | --- | --- |
-| A0 baseline | todo | | |
-| A1 gating | todo | | |
+| A0 baseline | done | 16731bb1f9c | tag `fork/pre-seams`, `upstream` remote added and fetched |
+| A1 gating | done | (see git log) | `TERMINAL_FIRST_SESSION` env gating deferred to A3 (needs the policy seam so the test can register it); `whenEditorClosed(acceptClose)` kept as a 2-line additive hook instead of duplicating 60 lines; `viewsService.ts` helper shrink skipped (call sites differ) |
 | A4 view pruning | todo | | |
 | A3 terminal policy seam | todo | | |
 | A2.1 routing + layout hooks | todo | | |

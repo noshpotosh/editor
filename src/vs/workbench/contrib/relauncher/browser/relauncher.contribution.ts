@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { Disposable, dispose, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { isLinux, isMacintosh, isNative } from '../../../../base/common/platform.js';
@@ -23,6 +22,7 @@ import { IExtensionService } from '../../../services/extensions/common/extension
 import { IHostService } from '../../../services/host/browser/host.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { IUserDataSyncWorkbenchService } from '../../../services/userDataSync/common/userDataSync.js';
+import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 interface IConfiguration extends IWindowsConfiguration {
 	debug?: { console?: { wordWrap?: boolean } };

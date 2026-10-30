@@ -80,6 +80,12 @@ if (terminalFirstEnabled) {
 			'chat.titleBar.openInAgentsWindow.enabled': false,
 			'editor.minimap.enabled': false,
 			'breadcrumbs.enabled': false,
+			// Leader, copy mode, and tile chords must reach the workbench from the shell and from terminal tiles.
+			'terminal.integrated.commandsToSkipShell': [
+				'terminalFirst.leader', 'terminalFirst.copyMode.enter', 'terminalFirst.toggleFloatingTerminal',
+				...['new', 'explorer', 'scm', 'terminal', 'close', 'maximize', 'toggleSplit', 'balance'].map(id => `terminalFirst.tile.${id}`),
+				...['Left', 'Down', 'Up', 'Right'].flatMap(direction => ['focus', 'move', 'swap', 'resize'].map(action => `terminalFirst.tile.${action}${direction}`)),
+			],
 			'terminal.integrated.tabs.enabled': false,
 			'terminal.integrated.tabs.showActiveTerminal': 'never',
 			'terminal.integrated.shellIntegration.decorationsEnabled': 'never',

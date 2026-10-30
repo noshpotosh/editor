@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { localize } from '../../../../nls.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { Disposable, dispose, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -21,6 +20,7 @@ import { TerminalContextKeys } from '../common/terminalContextKey.js';
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorService, ACTIVE_GROUP, SIDE_GROUP } from '../../../services/editor/common/editorService.js';
 import { ILifecycleService } from '../../../services/lifecycle/common/lifecycle.js';
+import { authorizeTerminalFirstLaunch, terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 export class TerminalEditorService extends Disposable implements ITerminalEditorService {
 	declare _serviceBrand: undefined;
