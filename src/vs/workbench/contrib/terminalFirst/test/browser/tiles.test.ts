@@ -44,6 +44,7 @@ import { Event } from '../../../../../base/common/event.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
+import { IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
 suite('Terminal First Tiles', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
@@ -88,6 +89,7 @@ suite('Terminal First Tiles', () => {
 			}),
 		}));
 		instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
+		instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
 		const composites = store.add(instantiation.createInstance(ViewTileComposites));
 		instantiation.stub(IViewTileComposites, composites);
 		return { instantiation, composites, created };
@@ -188,6 +190,7 @@ suite('Terminal First Tiles', () => {
 			instantiation.stub(IViewDescriptorService, store.add(store.add(instantiation.createChild(new ServiceCollection([IContextKeyService, viewContexts]))).createInstance(ViewDescriptorService)));
 			instantiation.stub(IViewsService, new TestViewsService());
 			instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
+			instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
 			instantiation.stub(IViewTileComposites, store.add(instantiation.createInstance(ViewTileComposites)));
 			const service = store.add(instantiation.createInstance(TileService));
 			const names = new Map<number, string>([[parts.mainPart.activeGroup.id, 'a']]);

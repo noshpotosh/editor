@@ -76,6 +76,7 @@ suite('Terminal First - tile list navigation', () => {
 		let vimEnabled = true;
 		const vimChanged = store.add(new Emitter<void>());
 		instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ get enabled() { return vimEnabled; }, onDidChange: vimChanged.event }));
+		instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
 		instantiation.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({
 			onDidChangeViewContainers: Event.None,
 			getViewContainerById: id => upcastPartial<ViewContainer>({ id }),
