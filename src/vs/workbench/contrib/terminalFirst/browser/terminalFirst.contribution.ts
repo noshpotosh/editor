@@ -65,6 +65,8 @@ if (terminalFirstEnabled) {
 			'terminal.integrated.scrollback': 10000,
 			'terminal.integrated.gpuAcceleration': 'on',
 			'terminal.integrated.minimumContrastRatio': 1,
+			// The shell is a login shell and rebuilds its environment itself; waiting for the login-shell probe would delay the first prompt.
+			'terminal.integrated.inheritEnv': false,
 			'security.workspace.trust.startupPrompt': 'never',
 			// The shell is the product; it starts in any folder. Entering the editor still asks for trust (present()).
 			'terminal.integrated.allowInUntrustedWorkspace': true,

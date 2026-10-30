@@ -22,6 +22,7 @@ import { detectAvailableProfiles } from './terminalProfiles.js';
 import * as performance from '../../../base/common/performance.js';
 import { getSystemShell } from '../../../base/node/shell.js';
 import { StopWatch } from '../../../base/common/stopwatch.js';
+import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirst.js';
 
 enum Constants {
 	MaxRestarts = 5
@@ -313,7 +314,8 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 		return this._optionalProxy?.getDefaultSystemShell(osOverride) ?? getSystemShell(osOverride ?? OS, process.env);
 	}
 	async getProfiles(workspaceId: string, profiles: unknown, defaultProfile: unknown, includeDetectedProfiles: boolean = false): Promise<ITerminalProfile[]> {
-		const shellEnv = await this._resolveShellEnv();
+		// VS NOSH shells are login shells; profile detection must not wait for the login-shell probe.
+		const shellEnv = terminalFirstEnabled ? { ...process.env } : await this._resolveShellEnv();
 		return detectAvailableProfiles(profiles, defaultProfile, includeDetectedProfiles, this._configurationService, shellEnv, undefined, this._logService, this._resolveVariables.bind(this, workspaceId));
 	}
 	async getEnvironment(): Promise<IProcessEnvironment> {

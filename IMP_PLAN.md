@@ -643,8 +643,8 @@ Manual: fresh folder launch shows the title bar at once and a prompt soon after;
 | F0 perf harness | done | 1874092efb7 + 58afc904a81, c163428a476, f702d86cacc | marks `prompt`/`input`, marks command, `scripts/terminal-first-perf.sh`, launcher stamp, `quality: stable` (compile-cache validator accepts the uid suffix); baseline in spec 07: stock warm launch→input 1494 ms, quit 221 ms |
 | F0.5 shell in untrusted folders | done | b4c3828969a | `terminal.integrated.allowInUntrustedWorkspace: true`; a fresh profile never got a prompt because the first shell waited behind the trust dialog |
 | F3.1 pty connect at Ready | done | 65e3cc46110 | gated `Restored` wait removal in `_connectToDirectProxy` |
-| F1 shell-first scheduling | done | (see git log) | BlockRestore, `editorGroupsService.whenReady`, `Connected` not replay (1.5 s budget, late reconnects adopted by nonce), title bar first, hidden layouts restore after `terminalFirstStartup.whenPresented()` |
-| F2 login shell off the critical path | todo | | three gates + `inheritEnv: false` |
+| F1 shell-first scheduling | done | ef7f9dcb5e0 | BlockRestore, `editorGroupsService.whenReady`, `Connected` not replay (1.5 s budget, late reconnects adopted by nonce), title bar first, hidden layouts restore after `terminalFirstStartup.whenPresented()`; stock launch→input 1494 → 1323 ms, owner 1615 → 1374 ms |
+| F2 login shell off the critical path | done | (see git log) | three gates + `inheritEnv: false`; S7.31 |
 | F3.2 xterm pre-import | todo | | keep only if measured |
 | F7 main-process pre-spawn | todo | | only if median `prompt − presented` ≥ 150 ms |
 | F4 defer non-terminal work | todo | | phase seam, ext-host deferral, nativeVim, strip |

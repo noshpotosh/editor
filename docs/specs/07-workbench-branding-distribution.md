@@ -114,13 +114,16 @@ Workstream F in `IMP_PLAN.md`. Requirements:
 - **S7.28** The controller waits for the terminal service to reach `Connected` (every persisted terminal has an instance again, replay may still be running), bounded by 1.5 s; after that it starts the active session's shell. A persisted terminal that reconnects later is bound to its session by nonce, and an unclaimed reconnected panel shell becomes a session of its own.
 - **S7.29** The pty host connection does not wait for the `Restored` lifecycle phase in VS NOSH, because the main process warms the pty host with the first window.
 - **S7.30** Hidden session and space layouts materialize only after the first surface is presented (`terminalFirstStartup.whenPresented()`), so their editor restore never competes with the first prompt. Retained spaces are still listed, saved, and included in shutdown.
+- **S7.31** The macOS login-shell environment probe (`$SHELL -i -l -c`, up to 10 s) never gates a VS NOSH shell: profile detection in the main process uses the process environment, process creation passes an empty executable environment, the variable resolver does not merge the probed environment, and `terminal.integrated.inheritEnv` defaults to false. The probe still runs for the extension host, tasks, and debugging. Consequences: the shell inherits the launcher's environment and rebuilds its own as the login shell it is; `${env:NAME}` in `terminal.integrated.env.osx` and in profile arguments resolves against the app's environment; a user profile whose `path` is a bare command name must become an absolute path.
 
-Results (medians, p90 in parentheses; one row per landed step):
+Results (medians, p90 in parentheses; one row per landed step). Upstream `ellapsed` (main start to `code/didStartWorkbench`) grows from F1 on because the hidden session layouts, whose restore completes the workbench's own restore, now wait for the shell to be presented; it is reported for comparison with upstream, not as a target.
 
 | Build | Profile | Mode | launch→presented | launch→prompt | launch→input | prompt−presented | `ellapsed` | quit |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F0 baseline `f702d86cacc` | stock | warm | 1317 (1342) | 1488 (1512) | 1494 (1517) | 171 (177) | 748 (755) | 221 (237) |
 | F0 baseline `f702d86cacc` | owner | warm | 1421 (1442) | 1607 (1623) | 1615 (1627) | 184 (186) | 752 (755) | |
+| F3.1 + F1 `ef7f9dcb5e0` | stock | warm | 1112 (1129) | 1317 (1386) | 1323 (1403) | 207 (284) | 966 (985) | 234 (244) |
+| F3.1 + F1 `ef7f9dcb5e0` | owner | warm | 1152 (1212) | 1365 (1404) | 1374 (1409) | 192 (219) | 996 (1038) | |
 
 ### Verification result
 

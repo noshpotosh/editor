@@ -216,7 +216,7 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 		shouldPersist: boolean
 	): Promise<ITerminalChildProcess> {
 		await this._connectToDirectProxy();
-		const executableEnv = await this._shellEnvironmentService.getShellEnv();
+		const executableEnv = terminalFirstEnabled ? {} : await this._shellEnvironmentService.getShellEnv();
 		const id = await this._proxy.createProcess(shellLaunchConfig, cwd, cols, rows, unicodeVersion, env, executableEnv, options, shouldPersist, this._getWorkspaceId(), this._getWorkspaceName());
 		const pty = new LocalPty(id, shouldPersist, this._proxy);
 		this._ptys.set(id, pty);

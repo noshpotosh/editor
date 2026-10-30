@@ -49,6 +49,7 @@ import type { MaybePromise } from '../../../../base/common/async.js';
 import { isString } from '../../../../base/common/types.js';
 import { IHostService } from '../../../services/host/browser/host.js';
 import { TerminalPolicy } from './terminalPolicy.js';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 const enum ProcessConstants {
 	/**
@@ -273,7 +274,7 @@ export class TerminalProcessManager extends Disposable implements ITerminalProce
 			// available, then overlay the shell environment on top so that launch configuration
 			// variables and shell-profile modifications take precedence.
 			const envForResolver = { ...await this._terminalProfileResolverService.getEnvironment(this.remoteAuthority) };
-			terminalEnvironment.mergeEnvironments(envForResolver, await backend.getShellEnvironment());
+			if (!terminalFirstEnabled) { terminalEnvironment.mergeEnvironments(envForResolver, await backend.getShellEnvironment()); }
 			const variableResolver = terminalEnvironment.createVariableResolver(this._cwdWorkspaceFolder, envForResolver, this._configurationResolverService);
 
 			// resolvedUserHome is needed here as remote resolvers can launch local terminals before
