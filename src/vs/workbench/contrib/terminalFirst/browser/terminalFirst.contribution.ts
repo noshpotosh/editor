@@ -72,6 +72,9 @@ if (terminalFirstEnabled) {
 			'workbench.startupEditor': 'none',
 			'workbench.welcomePage.experimentalOnboarding': false,
 			'terminal.integrated.initialHint': false,
+			// Background reveals must not add tiles; the debug views open from the New Tile picker.
+			'debug.openDebug': 'neverOpen',
+			'debug.internalConsoleOptions': 'neverOpen',
 			'workbench.editor.showTabs': 'multiple',
 			'workbench.editor.enablePreview': false,
 			'workbench.editor.focusRecentEditorAfterClose': true,

@@ -15,7 +15,7 @@ The editor surface should feel like a focused editor, not an IDE: one tab row, n
   | Area | Settings |
   | --- | --- |
   | Startup | `workbench.startupEditor: none`, `workbench.welcomePage.experimentalOnboarding: false` |
-  | Editor tabs | `workbench.editor.showTabs: single`, `enablePreview: false`, `focusRecentEditorAfterClose: true`, `editorActionsLocation: hidden` |
+  | Editor tabs | `workbench.editor.showTabs: multiple`, `enablePreview: false`, `focusRecentEditorAfterClose: true`, `editorActionsLocation: hidden` |
   | Chrome | `workbench.statusBar.visible: false`, `workbench.activityBar.location: hidden`, `workbench.secondarySideBar.defaultVisibility: hidden`, `window.commandCenter: false`, `workbench.layoutControl.enabled: false`, `chat.titleBar.openInAgentsWindow.enabled: false` |
   | Editor | `editor.minimap.enabled: false`, `breadcrumbs.enabled: false` |
   | Terminal | `terminal.integrated.initialHint: false`, `tabs.enabled: false`, `tabs.showActiveTerminal: never`, `shellIntegration.decorationsEnabled: never`, `allowChords: false` |
@@ -65,7 +65,7 @@ The fork modifies about 60 upstream files. Every one of them is listed, with its
 - **Keybinding displacement** (table above) is limited to two `Cmd+Shift` chords; `Cmd+A`, `Cmd+J`, `Cmd+E`, and `Cmd+T` keep their upstream meaning.
 - **Hard removals are not reversible by users** (S7.2–S7.5). A user who wants the SCM commit box or Outline view cannot turn it back on. Consider settings or `when` clauses instead of conditional registration.
 - The status bar default (hidden) conflicts with `present()` showing it in editor mode (spec 1).
-- `reportIssueUrl` still points at `microsoft/vscode`, so Report Issue would file VS NOSH bugs upstream. `product.json` configures no extension gallery, so extensions can only be installed from VSIX files. Review both before any public release.
+- `product.json` configures no extension gallery, so extensions can only be installed from VSIX files. Review both before any public release.
 - License and trademark: the Microsoft copyright headers are kept as the repository requires. Confirm the "VS NOSH" name and icon are cleared for distribution.
 
 ## Open questions

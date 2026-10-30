@@ -65,8 +65,8 @@ Each outer session can have multiple editor and terminal tiles, and one tile per
 | Ctrl+Option+F | `w m` | Toggle maximization |
 | Ctrl+Option+Return | `w a` | New Tile picker |
 | Ctrl+Option+E / G / T | `f e` / `w g` / `w t` | Explorer / Git Changes / terminal tile |
-| Ctrl+Option+B | — | Jira board tile (asks for the board URL the first time; see `terminalFirst.jira.boardUrl`) |
-| Ctrl+Option+C | — | Bitbucket tile (asks for the page URL the first time; see `terminalFirst.bitbucket.url`) |
+| Ctrl+Option+B | `w b` | Jira board tile (asks for the board URL the first time; see `terminalFirst.jira.boardUrl`) |
+| Ctrl+Option+C | `w c` | Bitbucket tile (asks for the page URL the first time; see `terminalFirst.bitbucket.url`) |
 | Ctrl+Option+Q | `w q` | Close the tile |
 
 ## View tiles

@@ -95,7 +95,7 @@ All commands are `terminalFirst.tile.*`, in category **VS NOSH**. Chords use Ctr
 
 - Should Ctrl+Option+Shift+H/J/K/L swap (Hyprland `movewindow` in dwindle) rather than re-dock?
 - Should the 120 ms hover delay be configurable?
-- Should background reveals create view tiles at all, or only focus an existing one? Should `debug.openDebug` and `debug.internalConsoleOptions` default to `neverOpen`?
+- Resolved: `debug.openDebug` and `debug.internalConsoleOptions` default to `neverOpen`, so debugging never adds tiles on its own. Other background reveals still open a tile when there is room (S9.23).
 
 ## Release acceptance
 

@@ -37,6 +37,8 @@ const editorActions: readonly ModalAction[] = [
 	{ keys: 'wm', label: localize('maximizeTile', "Toggle Maximized Tile"), command: 'terminalFirst.tile.maximize' },
 	{ keys: 'wg', label: localize('gitTile', "Open Git Changes Tile"), command: 'terminalFirst.tile.scm' },
 	{ keys: 'wt', label: localize('terminalTile', "Open Terminal Tile"), command: 'terminalFirst.tile.terminal' },
+	{ keys: 'wb', label: localize('jiraTile', "Open Jira Board"), command: 'terminalFirst.tile.jira' },
+	{ keys: 'wc', label: localize('bitbucketTile', "Open Bitbucket"), command: 'terminalFirst.tile.bitbucket' },
 	...(['Left', 'Down', 'Up', 'Right'] as const).map((direction, index) => ({ keys: `wr${['h', 'j', 'k', 'l'][index]}`, label: [localize('edgeLeft', "Move Tile Edge Left"), localize('edgeDown', "Move Tile Edge Down"), localize('edgeUp', "Move Tile Edge Up"), localize('edgeRight', "Move Tile Edge Right")][index], command: `terminalFirst.tile.resize${direction}`, repeat: true })),
 	{ keys: 'wr=', label: localize('balance', "Balance Tile Sizes"), command: 'terminalFirst.tile.balance', repeat: true },
 	...(['Left', 'Down', 'Up', 'Right'] as const).map((direction, index) => ({ keys: `wx${['h', 'j', 'k', 'l'][index]}`, label: [localize('swapLeft', "Swap with Left Tile"), localize('swapDown', "Swap with Tile Below"), localize('swapUp', "Swap with Tile Above"), localize('swapRight', "Swap with Right Tile")][index], command: `terminalFirst.tile.swap${direction}` })),
