@@ -7,7 +7,7 @@ import './tiles.css';
 import { $, addDisposableListener, append, Dimension, EventHelper, EventType, getActiveElement, isActiveElement, isAncestor, isAncestorOfActiveElement } from '../../../../base/browser/dom.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { combinedDisposable, Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
-import { disposableTimeout } from '../../../../base/common/async.js';
+import { disposableTimeout, IntervalTimer } from '../../../../base/common/async.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
@@ -349,15 +349,20 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 			panes[0].setExpanded(true);
 		}
 		this.composite.focus();
-		if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element)) {
+		if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element) === 'focused') {
 			return;
 		}
-		const listener = addDisposableListener(this.element, EventType.FOCUS_IN, () => {
-			if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element)) {
+		// Some views focus their list asynchronously, and extension trees fill their rows asynchronously;
+		// retry on focus changes and on a short poll until a row has the cursor or the window closes.
+		const retry = () => {
+			if (focusFirstRowIfNone(this.listService.lastFocusedList, this.element) === 'focused') {
 				this.pendingRowFocus.clear();
 			}
-		});
-		this.pendingRowFocus.value = combinedDisposable(listener, disposableTimeout(() => this.pendingRowFocus.clear(), 1000));
+		};
+		const listener = addDisposableListener(this.element, EventType.FOCUS_IN, retry);
+		const poll = new IntervalTimer();
+		poll.cancelAndSet(retry, 100, getWindow(this.element));
+		this.pendingRowFocus.value = combinedDisposable(listener, poll, disposableTimeout(() => this.pendingRowFocus.clear(), 1500));
 	}
 
 	/** Moves focus between the list, the focused view's header toolbar, and the tile toolbar. */
@@ -398,22 +403,27 @@ export interface IFocusableList {
 }
 
 /**
- * Gives a list that has DOM focus but no focused row a visible cursor on its first row. Returns
- * false when no list inside `within` has focus (views without lists keep their own focus).
+ * Gives a list that has DOM focus but no focused row a visible cursor on its first row.
+ * `none`: no list inside `within` has focus (views without lists keep their own focus);
+ * `empty`: the focused list has no rows yet; `focused`: a row has the cursor.
  */
-export function focusFirstRowIfNone(list: IFocusableList | undefined, within: HTMLElement): boolean {
+export function focusFirstRowIfNone(list: IFocusableList | undefined, within: HTMLElement): 'none' | 'empty' | 'focused' {
 	if (!list || !isAncestor(list.getHTMLElement(), within) || !isAncestorOfActiveElement(list.getHTMLElement())) {
-		return false;
+		return 'none';
+	}
+	if (list.getFocus().length) {
+		return 'focused';
 	}
 	// eslint-disable-next-line no-restricted-syntax
-	if (list.getFocus().length === 0 && list.getHTMLElement().querySelector('.monaco-list-row')) {
-		list.focusFirst(getSelectionKeyboardEvent('keydown', true));
-		const focus = list.getFocus();
-		if (focus.length) {
-			list.reveal(focus[0] as never);
-		}
+	if (!list.getHTMLElement().querySelector('.monaco-list-row')) {
+		return 'empty';
 	}
-	return true;
+	list.focusFirst(getSelectionKeyboardEvent('keydown', true));
+	const focus = list.getFocus();
+	if (focus.length) {
+		list.reveal(focus[0] as never);
+	}
+	return focus.length ? 'focused' : 'empty';
 }
 
 /** Whether the active element sits in an action bar inside `container`. */

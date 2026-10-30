@@ -35,6 +35,7 @@ import { terminalFirstEnabled, TerminalFirstVimEnabledContext } from '../../../s
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
+import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 
 /** App-owned navigation layer. It never dispatches keys to a terminal or unrelated input. */
 export class NativeVimService extends Disposable implements INativeVimService {
@@ -212,6 +213,15 @@ export class NativeVimService extends Disposable implements INativeVimService {
 }
 
 registerSingleton(INativeVimService, NativeVimService, InstantiationType.Delayed);
+
+/** The service decides whether native Vim is on; instantiating it at startup sets `terminalFirstVimEnabled` before any editor or tile is opened. */
+class NativeVimStartup {
+	static readonly ID = 'workbench.contrib.terminalFirstNativeVimStartup';
+	constructor(@INativeVimService _vim: INativeVimService) { }
+}
+if (terminalFirstEnabled) {
+	registerWorkbenchContribution2(NativeVimStartup.ID, NativeVimStartup, WorkbenchPhase.BlockRestore);
+}
 Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({
 	id: 'terminalFirst.vim', title: localize('settings', "Native Vim"), type: 'object', properties: {
 		'terminalFirst.vim.engine': { type: 'string', enum: ['native', 'extension', 'off'], default: 'native', description: localize('engineSetting', "Vim engine. Reload required. Native is experimental until acceptance validation is complete.") },

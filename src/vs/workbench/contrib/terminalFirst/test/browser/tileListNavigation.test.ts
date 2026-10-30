@@ -60,7 +60,7 @@ suite('Terminal First - tile list navigation', () => {
 		empty.domFocus();
 		const handledEmpty = focusFirstRowIfNone(empty, tile);
 		deepStrictEqual({ focusedInside, cursor: inside.getFocus(), keptExisting, ignoredOutside, elsewhereCursor: elsewhere.getFocus(), handledEmpty, emptyCursor: empty.getFocus(), undefinedList: focusFirstRowIfNone(undefined, tile) },
-			{ focusedInside: true, cursor: [1], keptExisting: true, ignoredOutside: false, elsewhereCursor: [], handledEmpty: true, emptyCursor: [], undefinedList: false });
+			{ focusedInside: 'focused', cursor: [1], keptExisting: 'focused', ignoredOutside: 'none', elsewhereCursor: [], handledEmpty: 'empty', emptyCursor: [], undefinedList: 'none' });
 	});
 
 	test('the tile focus tracker follows keyboard focus into and out of view tiles', () => {
