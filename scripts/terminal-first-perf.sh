@@ -41,7 +41,8 @@ if [[ "$PROFILE" != stock && "$PROFILE" != owner ]]; then printf 'profile must b
 if [[ $BUILD -eq 1 ]]; then "$ROOT/scripts/terminal-first-app.sh" --build-only; fi
 if [[ ! -x "$APP" ]]; then printf 'Packaged app missing; run scripts/terminal-first-app.sh --build-only first.\n' >&2; exit 1; fi
 STAMP="$(cat "$ROOT/.build/terminal-first/packaged-build-complete" 2>/dev/null || printf unknown)"
-HEAD_STAMP="$(git -C "$ROOT" rev-parse HEAD)$([[ -n "$(git -C "$ROOT" status --porcelain)" ]] && printf -- -dirty)"
+HEAD_STAMP="$(git -C "$ROOT" rev-parse HEAD)"
+if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then HEAD_STAMP="$HEAD_STAMP-dirty"; fi
 if [[ "$STAMP" != "$HEAD_STAMP" ]]; then printf 'Warning: app built from %s, sources at %s (pass --build to rebuild).\n' "$STAMP" "$HEAD_STAMP" >&2; fi
 if [[ "$MODE" == cold ]] && ! sudo -n true 2>/dev/null; then printf 'Cold runs need passwordless sudo for purge; run "sudo -v" first.\n' >&2; exit 1; fi
 
@@ -59,9 +60,11 @@ if [[ "$PROFILE" == owner ]]; then
 	fi
 fi
 
-RUN_DIR="$PERF_ROOT/$(date +%Y%m%dT%H%M%S)-$PROFILE-$MODE$([[ $QUIT -eq 1 ]] && printf -- -quit)"
+KIND="$MODE"
+if [[ $QUIT -eq 1 ]]; then KIND="$MODE-quit"; fi
+RUN_DIR="$PERF_ROOT/$(date +%Y%m%dT%H%M%S)-$PROFILE-$KIND"
 mkdir -p "$RUN_DIR"
-LABEL="${LABEL:-${HEAD_STAMP:0:11} $PROFILE $MODE$([[ $QUIT -eq 1 ]] && printf ' quit')}"
+LABEL="${LABEL:-${HEAD_STAMP:0:11} $PROFILE $KIND}"
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time*1000'; }
 launch() {
 	# $1 = markers file; extra args follow. Runs in the foreground until the app exits.
@@ -103,7 +106,7 @@ for ((i = 1; i <= RUNS; i++)); do
 	fi
 done
 
-EXPECT=launch->presented,launch->prompt
+EXPECT='launch->presented,launch->prompt'
 if [[ $QUIT -eq 1 ]]; then EXPECT=quit; fi
 node "$ROOT/scripts/terminal-first-perf.mjs" aggregate "$RUN_DIR" --label "$LABEL" --history "$PERF_ROOT/history.tsv" --expect "$EXPECT" ${BASELINE:+--baseline "$BASELINE"} | tee "$RUN_DIR/summary.md"
 printf 'Results: %s\n' "$RUN_DIR" >&2
