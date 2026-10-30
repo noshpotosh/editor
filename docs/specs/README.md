@@ -25,13 +25,13 @@ VS NOSH is a macOS fork of VS Code that opens as a full-window terminal and brin
 
 ## Global gating
 
-All fork behavior is gated by `terminalFirstEnabled` (`src/vs/workbench/services/terminalFirst/common/terminalFirstPolicy.ts`):
+All fork behavior is gated by `terminalFirstEnabled` from `src/vs/platform/terminalFirst/common/terminalFirst.ts`, re-exported by `src/vs/workbench/services/terminalFirst/common/terminalFirstPolicy.ts` for workbench code:
 
 ```ts
 isNative && isMacintosh && product.urlProtocol === 'terminal-first'
 ```
 
-When that check is false, the fork should behave like upstream VS Code. One exception exists today: the `defaultPinned` view-container property and the `beginUndoRedoTransaction` text-model API are unconditional core changes (see spec 7 and spec 6).
+When that check is false, the fork behaves like upstream VS Code. Upstream files that must change call into fork-owned seams (`EditorPartHooks`, `EditorGroupRouting`, `TerminalPolicy`, `viewContainerHosts`) or branch once on the gate. The additive core APIs that stay active in every product (`beginUndoRedoTransaction`, the `RequiresDedicatedGroup` capability, `allGroups`, `includeInactive`, the browser view `chromeless` flag) are inert unless fork code uses them. The complete, checked list of modified upstream files is generated in [`docs/upstream/PATCHES.md`](../upstream/PATCHES.md); the merge procedure is in [`docs/upstream/SYNC.md`](../upstream/SYNC.md).
 
 ## Cross-cutting release blockers
 
@@ -43,7 +43,7 @@ These items affect several features. Each one is also covered in the relevant sp
 4. **Documentation drift.** User-facing workflow shortcuts have been reconciled with the new leader controls.
 5. **Native Vim acceptance.** The engine reads the full document text on every key and has not been accepted for IME, large files, or shared models (spec 6).
 6. **Distribution.** There is no packaged installer, signing, notarization, update channel, or CI pipeline for the fork. A packaged-app launcher is provided; signing, notarization, and distribution acceptance remain outstanding (spec 7).
-7. **Upstream maintenance cost.** The fork edits about 40 upstream files (terminal service, editor part, command service, layout, text model, SCM, and others). Each upstream merge needs a re-validation pass. The list is in spec 7.
+7. **Upstream maintenance cost.** The fork edits about 60 upstream files, most of them one-line call-outs into fork seams. `scripts/upstream-check.sh` verifies the manifest and `scripts/upstream-sync.sh` runs a merge dry run; each merge follows [`docs/upstream/SYNC.md`](../upstream/SYNC.md).
 
 ## Documentation alignment
 

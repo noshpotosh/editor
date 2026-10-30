@@ -1,0 +1,40 @@
+name: Upstream drift
+
+on:
+  pull_request:
+    branches: [terminal-first]
+  push:
+    branches: [terminal-first]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  manifest:
+    name: Patch manifest is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: scripts/upstream-check.sh
+
+  conflicts:
+    name: Dry-run merge of upstream/main
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: scripts/upstream-sync.sh | tee upstream-sync.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-report
+          path: upstream-sync.txt

@@ -2,7 +2,7 @@
 
 A macOS development fork of VS Code that starts in a shell and opens the GUI editor on demand.
 
-Repository: [noshpotosh/editor](https://github.com/noshpotosh/editor). Upstream: `microsoft/vscode`, release `1.144.0`, commit `2c33b50b16c472efe58357d1d2a8a5414bc23fbf`. The `origin` remote tracks this fork and `upstream` tracks Microsoft's repository.
+Repository: [noshpotosh/editor](https://github.com/noshpotosh/editor). Upstream: `microsoft/vscode`, release `1.144.0`, commit `2c33b50b16c472efe58357d1d2a8a5414bc23fbf` (recorded in `build/fork/upstream-base`). `scripts/upstream-sync.sh` adds the `upstream` remote and merges upstream changes following [docs/upstream/SYNC.md](docs/upstream/SYNC.md); [docs/upstream/PATCHES.md](docs/upstream/PATCHES.md) lists every upstream file the fork modifies.
 
 ## Build and run
 

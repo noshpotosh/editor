@@ -8,12 +8,12 @@ import { Dimension, getWindow } from '../../../base/browser/dom.js';
 import { Event } from '../../../base/common/event.js';
 import { DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
-import { terminalFirstEnabled, terminalFirstPolicy } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { NotificationPriority, Severity } from '../../../platform/notification/common/notification.js';
 import { NotificationsToasts } from '../../browser/parts/notifications/notificationsToasts.js';
 import { NotificationsModel } from '../../common/notifications.js';
 import { workbenchInstantiationService } from './workbenchTestServices.js';
 import { DEFAULT_NOTIFICATION_ROW_HEIGHT, setNotificationRowHeight } from '../../browser/parts/notifications/notificationsViewer.js';
+import { terminalFirstEnabled, terminalFirstPolicy } from '../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 suite('NotificationsToasts', () => {
 
