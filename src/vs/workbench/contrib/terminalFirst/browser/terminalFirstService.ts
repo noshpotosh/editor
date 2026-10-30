@@ -7,11 +7,11 @@ import { status } from '../../../../base/browser/ui/aria/aria.js';
 import { EditorResourceAccessor, EditorsOrder, SideBySideEditor } from '../../../common/editor.js';
 import { FloatingJumpList } from './floatingJumpList.js';
 import { JumpListModel } from './jumpListModel.js';
-import { Sequencer } from '../../../../base/common/async.js';
+import { raceTimeout, Sequencer } from '../../../../base/common/async.js';
 import { createTextBufferFactory } from '../../../../editor/common/model/textModel.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { Emitter } from '../../../../base/common/event.js';
-import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { mark } from '../../../../base/common/performance.js';
 import { IUserDataProfileService } from '../../../services/userDataProfile/common/userDataProfile.js';
@@ -43,7 +43,7 @@ import { ITerminalFirstService, ITerminalFirstSession } from '../../../services/
 import { TerminalFirstJumpListVisibleContext, TerminalFirstBrowserVisibleContext, TerminalFirstFloatingEnabledContext, TerminalFirstFloatingVisibleContext, TerminalFirstFloatingFocusedContext, TerminalFirstEnabledContext, TerminalFirstShellContext, terminalFirstPolicy, onDidBlockTerminalFirstCommand } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { IWorkspaceEditingService } from '../../../services/workspaces/common/workspaceEditing.js';
-import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../terminal/browser/terminal.js';
+import { ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService, TerminalConnectionState } from '../../terminal/browser/terminal.js';
 import { FloatingFileBrowser } from './floatingFileBrowser.js';
 import { FloatingTerminal } from './floatingTerminal.js';
 import { TerminalFirstLaunch } from './terminalPolicy.js';
@@ -60,6 +60,7 @@ import { untildify } from '../../../../base/common/labels.js';
 import { isAbsolute, join } from '../../../../base/common/path.js';
 import { viewContainerDisplayName } from './tileCatalog.js';
 import { TerminalFirstStartupTimings } from './startupTimings.js';
+import { terminalFirstStartup } from '../../../services/terminalFirst/common/terminalFirstStartup.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -102,6 +103,8 @@ function defaultSpaces(): Space[] {
 export class TerminalFirstService extends Disposable implements ITerminalFirstService {
 	declare readonly _serviceBrand: undefined;
 	private static readonly STORAGE_KEY = 'terminalFirst.sessions';
+	/** How long the first shell waits for persisted terminals to reconnect before starting anyway. */
+	private static readonly RECONNECT_BUDGET = 1500;
 	private readonly transitions = new Sequencer();
 	private readonly startupTimings: TerminalFirstStartupTimings;
 	private readonly sessionList: Session[] = [];
@@ -205,6 +208,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this._register(storageService.onWillSaveState(() => this.saveSessions()));
 		this._register(terminalService.onAnyInstanceTitleChange(() => this.changed.fire()));
 		this._register(editorService.onDidEditorsChange(() => this.changed.fire()));
+		this._register(terminalService.onDidCreateInstance(terminal => this.adoptReconnected(terminal)));
 
 		this._register(terminalService.onDidDisposeInstance(terminal => {
 			const owner = this.sessionList.find(session => session.floatingTerminal === terminal);
@@ -233,50 +237,97 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	initialize(): Promise<void> {
+		terminalFirstStartup.begin();
 		return this.transitions.queue(async () => {
 			try {
 				await this.initializeSessions();
 			} finally {
 				// Reveal only the settled layout, but keep startup failures recoverable.
 				this.layoutService.mainContainer.classList.remove('terminal-first-starting');
+				terminalFirstStartup.presented();
 			}
 		});
 	}
 
 	private async initializeSessions(): Promise<void> {
 		mark('code/terminalFirst/start');
-		await this.layoutService.whenRestored;
-		mark('code/terminalFirst/restored');
 		const stored = this.storageService.getObject<StoredSessions>(TerminalFirstService.STORAGE_KEY, StorageScope.WORKSPACE);
 		this.managedWorkspace = stored?.managedWorkspace ? URI.parse(stored.managedWorkspace) : undefined;
+		// Stored sessions show on the title bar at once; their shells attach as they reconnect.
+		for (const session of stored?.sessions ?? []) {
+			// Sessions saved before spaces existed hold one space whose layout key is the session id.
+			const spaces = session.spaces?.length ? session.spaces : defaultSpaces();
+			this.sessionList.push({ ...session, spaces, activeSpace: spaces.some(space => space.id === session.activeSpace) ? session.activeSpace! : spaces[0].id });
+		}
+		this.changed.fire();
+		// The editor part becomes ready while the workbench renders; by the time this continues, the
+		// grid exists and the parts have restored their visibility, so layout calls below stick.
+		await this.editorGroupsService.whenReady;
+		mark('code/terminalFirst/restored');
 		// Enter the stable workspace before starting shells or accepting CLI requests.
 		// Entering a workspace restarts the extension host that owns the CLI socket.
 		await this.ensureManagedWorkspace(this.workspaceContextService.getWorkspace().folders[0]?.uri);
 		mark('code/terminalFirst/workspace');
-		await this.terminalService.whenConnected;
+		await this.whenTerminalsReconnected();
 		mark('code/terminalFirst/connected');
-		if (stored) {
-			for (const session of stored.sessions) {
-				// Sessions saved before spaces existed hold one space whose layout key is the session id.
-				const spaces = session.spaces?.length ? session.spaces : defaultSpaces();
-				this.sessionList.push({
-					...session,
-					spaces,
-					activeSpace: spaces.some(space => space.id === session.activeSpace) ? session.activeSpace! : spaces[0].id,
-					terminal: this.terminalGroupService.instances.find(instance => instance.shellIntegrationNonce === session.nonce),
-					floatingTerminal: this.terminalService.instances.find(instance => TerminalFirstLaunch.isDetached(instance) && instance.shellIntegrationNonce === session.floatingNonce),
-				});
-			}
-		}
+		for (const terminal of this.terminalService.instances) { this.adoptReconnected(terminal); }
 		for (const terminal of this.terminalGroupService.instances) {
 			if (!this.sessionList.some(session => session.terminal === terminal)) { this.addSession(terminal); }
 		}
 		if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 		this.active = this.sessionList.find(session => session.id === stored?.active) ?? this.sessionList.find(session => session.terminal === this.terminalGroupService.activeInstance) ?? this.sessionList[0];
 		this.editorSessions?.activate(this.activeLayoutKey(this.active));
-		// Restore inactive editors too, so backups and shutdown include every session and space.
+		this.initialized = true;
+		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
+		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+		if (!explicitFiles) {
+			// The panel exists before the shell is created, so the new instance attaches to its container at once.
+			await this.terminalGroupService.showPanel(false);
+		}
+		this.startupTimings.track(await this.ensureTerminal(this.active));
+		mark('code/terminalFirst/created');
+		await this.present(this.active, explicitFiles ? 'editor' : 'shell');
+		mark('code/terminalFirst/presented');
+		this.startupTimings.publish();
+		this.recoverRetainedLayouts();
+		void this.initializeCLI();
+	}
+
+	/** Resolves when every persisted terminal has an instance again (replay may still be running), or when the budget runs out. */
+	private async whenTerminalsReconnected(): Promise<void> {
+		if (this.terminalService.connectionState === TerminalConnectionState.Connected) { return; }
+		const listeners = new DisposableStore();
+		const connected = new Promise<boolean>(resolve => listeners.add(this.terminalService.onDidChangeConnectionState(() => {
+			if (this.terminalService.connectionState === TerminalConnectionState.Connected) { resolve(true); }
+		})));
+		try {
+			if (!await raceTimeout(connected, TerminalFirstService.RECONNECT_BUDGET)) {
+				this.logService.trace('[terminalFirst] Starting the shell before the persisted terminals reconnected.');
+			}
+		} finally { listeners.dispose(); }
+	}
+
+	/** Binds a reconnected terminal to the stored session that owns its nonce; after startup, unclaimed reconnected shells become sessions. */
+	private adoptReconnected(terminal: ITerminalInstance): void {
+		const nonce = terminal.shellIntegrationNonce;
+		if (TerminalFirstLaunch.isDetached(terminal)) {
+			const owner = this.sessionList.find(session => session.floatingNonce === nonce && !session.floatingTerminal);
+			if (owner) { owner.floatingTerminal = terminal; }
+			return;
+		}
+		const owner = this.sessionList.find(session => session.nonce === nonce && !session.terminal);
+		if (owner) {
+			owner.terminal = terminal;
+			this.changed.fire();
+		} else if (this.initialized && terminal.shellLaunchConfig.attachPersistentProcess && terminal.target === TerminalLocation.Panel && !this.sessionList.some(session => session.terminal === terminal || session.tileNonces?.includes(nonce))) {
+			this.addSession(terminal);
+			this.changed.fire();
+		}
+	}
+
+	/** Lists every retained space so closing, saving, and shutdown include it; the hidden layouts themselves materialize after presentation. */
+	private recoverRetainedLayouts(): void {
 		for (const key of this.editorSessions?.ids() ?? []) {
-			this.editorSessions?.activate(key);
 			const { sessionId, spaceId } = parseSpaceLayoutKey(key);
 			let session = this.sessionList.find(session => session.id === sessionId);
 			if (!session) {
@@ -287,16 +338,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 				session.spaces.push({ id: spaceId, name: localize('recoveredSpace', "Recovered Space") });
 			}
 		}
-		this.editorSessions?.activate(this.activeLayoutKey(this.active));
-		this.initialized = true;
-		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
-		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
-		this.startupTimings.track(await this.ensureTerminal(this.active));
-		mark('code/terminalFirst/created');
-		await this.present(this.active, explicitFiles ? 'editor' : 'shell');
-		mark('code/terminalFirst/presented');
-		this.startupTimings.publish();
-		void this.initializeCLI();
+		this.saveSessions();
+		this.changed.fire();
 	}
 
 	private async initializeCLI(): Promise<void> {

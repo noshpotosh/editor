@@ -11,8 +11,6 @@ import { URI } from '../../../../base/common/uri.js';
 import { localize2 } from '../../../../nls.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { INativeEnvironmentService } from '../../../../platform/environment/common/environment.js';
-import { NativeParsedArgs } from '../../../../platform/environment/common/argv.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
@@ -40,9 +38,15 @@ const REPORTED_UPSTREAM_MARKS = new Set([
 	'code/willLoadExtensions', 'code/didLoadExtensions', 'code/didRemovePartsSplash',
 ]);
 
-/** Command-line arguments exist in native windows only; the browser-layer service sees them when the environment is native. */
-function nativeArgs(environmentService: IWorkbenchEnvironmentService): NativeParsedArgs | undefined {
-	return (environmentService as Partial<INativeEnvironmentService>).args;
+/** The upstream profiling arguments a perf run passes; only native windows carry them. */
+export interface IStartupPerfArgs {
+	readonly 'prof-duration-markers'?: readonly string[];
+	readonly 'prof-duration-markers-file'?: string;
+}
+
+/** Command-line arguments exist in native windows only; the browser-layer service reads them when present. */
+function perfArgs(environmentService: IWorkbenchEnvironmentService): IStartupPerfArgs | undefined {
+	return (environmentService as { readonly args?: IStartupPerfArgs }).args;
 }
 
 /**
@@ -64,7 +68,7 @@ export class TerminalFirstStartupTimings extends Disposable {
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
-		const args = nativeArgs(environmentService);
+		const args = perfArgs(environmentService);
 		this.inputRequested = args?.['prof-duration-markers']?.some(pair => pair.endsWith(`-${INPUT_MARK}`)) === true;
 		this.markersFile = args?.['prof-duration-markers-file'];
 	}

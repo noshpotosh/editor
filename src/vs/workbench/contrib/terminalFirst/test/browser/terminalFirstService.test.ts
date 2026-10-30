@@ -23,7 +23,7 @@ import { IEditorGroupsService, IEditorPart, IEditorGroup } from '../../../../ser
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { TestEditorInput, TestEditorService, TestFileEditorInput, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
-import { ICreateTerminalOptions, ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
+import { ICreateTerminalOptions, ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService, TerminalConnectionState } from '../../../terminal/browser/terminal.js';
 import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService, IWorkspace } from '../../../../../platform/workspace/common/workspace.js';
@@ -34,22 +34,24 @@ import { TestConfigurationService } from '../../../../../platform/configuration/
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 import { createTerminalFirstTerminalPolicy, TerminalFirstLaunch } from '../../browser/terminalPolicy.js';
-import { IShellLaunchConfig } from '../../../../../platform/terminal/common/terminal.js';
+import { IShellLaunchConfig, TerminalLocation } from '../../../../../platform/terminal/common/terminal.js';
+import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
+import { terminalFirstStartup } from '../../../../services/terminalFirst/common/terminalFirstStartup.js';
 import { EditorPartSessions } from '../../browser/editorPartSessions.js';
 import { ITimerService } from '../../../../services/timer/browser/timerService.js';
-import { NativeParsedArgs } from '../../../../../platform/environment/common/argv.js';
+import { IStartupPerfArgs } from '../../browser/startupTimings.js';
 import { clearMarks, getMarks, PerformanceMark } from '../../../../../base/common/performance.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
-	teardown(() => { terminalFirstPolicy.mode = 'starting'; });
+	teardown(() => { terminalFirstPolicy.mode = 'starting'; terminalFirstStartup.reset(); });
 	// Marks are global to the test window; keep the startup marks of one test out of the next.
 	setup(() => { for (const name of ['prompt', 'input']) { clearMarks(`code/terminalFirst/${name}`); } });
 	const countMarks = (name: string) => getMarks().filter(entry => entry.name === `code/terminalFirst/${name}`).length;
 
 	/** Creates real controller behavior with terminal and layout boundaries replaced by small fakes. */
-	function fixture(filesToOpenOrCreate?: IPath[], args?: NativeParsedArgs) {
+	function fixture(filesToOpenOrCreate?: IPath[], args?: IStartupPerfArgs, options?: { connected?: boolean; editorPartReady?: Promise<void> }) {
 		const instantiationService = workbenchInstantiationService(undefined, store);
 		const activeChanged = store.add(new Emitter<void>());
 		const closed = store.add(new Emitter<IEditorCloseEvent>());
@@ -85,6 +87,9 @@ suite('Terminal First', () => {
 		const didSend = store.add(new Emitter<void>());
 		const didWrite = store.add(new Emitter<void>());
 		const dataEmitters = new Map<ITerminalInstance, Emitter<string>>();
+		let connectionState = options?.connected === false ? TerminalConnectionState.Connecting : TerminalConnectionState.Connected;
+		const connectionChanged = store.add(new Emitter<void>());
+		const instanceCreated = store.add(new Emitter<ITerminalInstance>());
 
 		class Editors extends TestEditorService {
 			override readonly onDidActiveEditorChange = activeChanged.event;
@@ -105,9 +110,9 @@ suite('Terminal First', () => {
 		}
 		const editors = store.add(new Editors());
 		const policy = createTerminalFirstTerminalPolicy();
-		const addTerminal = (options?: ICreateTerminalOptions) => {
+		const addTerminal = (options?: ICreateTerminalOptions, reconnected?: { nonce: string }) => {
 			const id = allTerminals.length + 1;
-			const shellLaunchConfig: IShellLaunchConfig = {};
+			const shellLaunchConfig: IShellLaunchConfig = reconnected ? { attachPersistentProcess: upcastPartial<NonNullable<IShellLaunchConfig['attachPersistentProcess']>>({ id, shellIntegrationNonce: reconnected.nonce }) } : {};
 			policy.prepareLaunchConfig(shellLaunchConfig, options);
 			const floating = shellLaunchConfig.hideFromUser === true;
 			const data = store.add(new Emitter<string>());
@@ -130,7 +135,8 @@ suite('Terminal First', () => {
 				},
 				title: `Shell ${id}`,
 				capabilities: upcastPartial<ITerminalInstance['capabilities']>({ get: () => undefined, onDidAddCapability: Event.None }),
-				shellIntegrationNonce: `session-${id}`,
+				shellIntegrationNonce: reconnected?.nonce ?? `session-${id}`,
+				target: TerminalLocation.Panel,
 				focusWhenReady: async () => { focused.fire(terminal); },
 			});
 			allTerminals.push(terminal);
@@ -143,6 +149,9 @@ suite('Terminal First', () => {
 		instantiationService.stub(ITerminalEditorService, upcastPartial<ITerminalEditorService>({ openEditor: async () => { } }));
 		instantiationService.stub(ITerminalService, upcastPartial<ITerminalService>({
 			whenConnected: Promise.resolve(),
+			get connectionState() { return connectionState; },
+			onDidChangeConnectionState: connectionChanged.event,
+			onDidCreateInstance: instanceCreated.event,
 			instances: allTerminals,
 			onDidDisposeInstance: disposed.event,
 			onAnyInstanceTitleChange: Event.None,
@@ -175,7 +184,7 @@ suite('Terminal First', () => {
 		instantiationService.stub(IQuickInputService, 'pick', (async (items: { label: string }[]) => { presetPicks.push(items.map(item => item.label)); return items.find(item => item.label === presetPick); }) as IQuickInputService['pick']);
 		instantiationService.stub(IFileService, 'stat', async (resource: URI) => ({ isDirectory: !resource.path.endsWith('.txt') }));
 		instantiationService.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({ getViewContainerById: () => null, getViewDescriptorById: () => null }));
-		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart, activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
+		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart, whenReady: options?.editorPartReady ?? Promise.resolve(), activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		const environment = { filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed'), args };
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>(environment));
@@ -191,7 +200,7 @@ suite('Terminal First', () => {
 		instantiationService.stub(IDialogService, dialog);
 		instantiationService.stub(IConfigurationService, config);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; }, published, sent, written, didPublish: didPublish.event, didSend: didSend.event, didWrite: didWrite.event, emitData: (terminal: ITerminalInstance, text: string) => dataEmitters.get(terminal)!.fire(text) };
+		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; }, published, sent, written, didPublish: didPublish.event, didSend: didSend.event, didWrite: didWrite.event, emitData: (terminal: ITerminalInstance, text: string) => dataEmitters.get(terminal)!.fire(text), reconnect: (nonce: string) => { const terminal = addTerminal({ location: TerminalLocation.Panel }, { nonce }); instanceCreated.fire(terminal); return terminal; }, setConnected: () => { connectionState = TerminalConnectionState.Connected; connectionChanged.fire(); } };
 	}
 
 	test('presents the shell before extension registration completes', async () => {
@@ -761,7 +770,7 @@ suite('Terminal First', () => {
 	});
 
 	test('a perf run echoes one newline after the prompt and writes the marks beside the markers file', async () => {
-		const state = fixture(undefined, { _: [], 'prof-duration-markers': ['code/didStartMain-code/terminalFirst/input'], 'prof-duration-markers-file': '/perf/run-1.tsv' });
+		const state = fixture(undefined, { 'prof-duration-markers': ['code/didStartMain-code/terminalFirst/input'], 'prof-duration-markers-file': '/perf/run-1.tsv' });
 		await state.service.initialize();
 		const newlineSent = Event.toPromise(state.didSend);
 		state.emitData(state.active!, 'prompt> ');
@@ -770,6 +779,46 @@ suite('Terminal First', () => {
 		const reportWritten = Event.toPromise(state.didWrite);
 		state.emitData(state.active!, '\r\nprompt> ');
 		await reportWritten;
-		deepStrictEqual({ sent: state.sent, beforeEcho, input: countMarks('input'), written: state.written }, { sent: ['\n'], beforeEcho: 0, input: 1, written: ['/perf/run-1.tsv.terminalFirst.json'] });
+		deepStrictEqual({ sent: state.sent, beforeEcho, input: countMarks('input'), written: [...new Set(state.written)] }, { sent: ['\n'], beforeEcho: 0, input: 1, written: ['/perf/run-1.tsv.terminalFirst.json'] });
+	});
+
+	test('stored sessions show on the strip before the editor part is ready', async () => {
+		const ready = new DeferredPromise<void>();
+		const state = fixture(undefined, undefined, { editorPartReady: ready.p });
+		state.storage.store('terminalFirst.sessions', { active: 'alpha', managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [{ id: 'alpha', nonce: 'alpha', title: 'Alpha', mode: 'shell' }, { id: 'beta', nonce: 'beta', title: 'Beta', mode: 'editor' }] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		const stripUpdated = Event.toPromise(state.service.onDidChangeSessions);
+		const pending = state.service.initialize();
+		await stripUpdated;
+		const beforeReady = state.service.sessions.map(session => [session.title, session.mode]);
+		await ready.complete();
+		await pending;
+		deepStrictEqual({ beforeReady, created: state.created.length, active: state.service.sessions.find(session => session.active)?.title }, { beforeReady: [['Alpha', 'shell'], ['Beta', 'editor']], created: 1, active: 'Shell 1' });
+	});
+
+	test('a stored session adopts its terminal when it reconnects, without waiting for replay', async () => {
+		const state = fixture(undefined, undefined, { connected: false });
+		state.storage.store('terminalFirst.sessions', { active: 'alpha', managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [{ id: 'alpha', nonce: 'alpha', title: 'Alpha', mode: 'shell' }] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		const pending = state.service.initialize();
+		state.reconnect('alpha');
+		state.setConnected();
+		await pending;
+		// A reconnected shell that no stored session claims becomes a session of its own.
+		state.reconnect('stray');
+		deepStrictEqual({ created: state.created.length, sessions: state.service.sessions.map(session => session.title) }, { created: 0, sessions: ['Shell 1', 'Shell 2'] });
+	});
+
+	test('the shell starts when persisted terminals do not reconnect within the budget', () => runWithFakedTimers({ useFakeTimers: true }, async () => {
+		const state = fixture(undefined, undefined, { connected: false });
+		await state.service.initialize();
+		deepStrictEqual({ created: state.created.length, shell: state.mainContainer.classList.contains('terminal-first-shell') }, { created: 1, shell: true });
+	}));
+
+	test('hidden session layouts wait for presentation', async () => {
+		const state = fixture();
+		const waitingBeforeInitialize = terminalFirstStartup.waiting;
+		const pending = state.service.initialize();
+		const waitingWhileStarting = terminalFirstStartup.waiting;
+		await pending;
+		deepStrictEqual([waitingBeforeInitialize, waitingWhileStarting, terminalFirstStartup.waiting], [false, true, false]);
 	});
 });

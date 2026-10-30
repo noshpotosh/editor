@@ -48,7 +48,8 @@ if (terminalFirstEnabled) {
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerConfiguration({ id: 'terminalFirst.terminal', title: localize('terminalSettings', "Terminal First"), type: 'object', properties: {
 		'terminalFirst.terminal.padding': { type: 'number', default: 12, minimum: 0, maximum: 100, description: localize('padding', "Terminal padding in pixels.") },
 	} });
-	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
+	// The shell starts with the workbench; the controller itself waits for the pieces it needs.
+	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.BlockRestore);
 	registerWorkbenchContribution2(SessionStripContribution.ID, SessionStripContribution, WorkbenchPhase.BlockRestore);
 	registerWorkbenchContribution2(SpaceStatusContribution.ID, SpaceStatusContribution, WorkbenchPhase.AfterRestored);
 	registerWorkbenchContribution2(TileListFocusTracker.ID, TileListFocusTracker, WorkbenchPhase.BlockRestore);

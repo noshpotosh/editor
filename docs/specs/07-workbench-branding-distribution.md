@@ -90,7 +90,7 @@ The custom title bar contains session tabs and uses the terminal background in s
 
 Shell toasts are suppressed except URGENT notifications; retained notifications are accessible through the title-bar count. Startup trust prompting defaults to never, and editor entry requests trust when needed. The shell itself starts in untrusted folders (`terminal.integrated.allowInUntrustedWorkspace` defaults to true), because a terminal that will not open a prompt until a dialog is answered is not a terminal; shells that execute code from the current directory on startup (direnv-style hooks) remain the user's choice. Recommendations, release notes, updates, tips, experiments, and parent-folder Git discovery are disabled by default; Git discovery is limited to subfolders. User settings still override defaults.
 
-`scripts/terminal-first-app.sh [--build] [args]` builds `vscode-darwin-arm64-min` when needed and starts the packaged Electron binary without VSCODE_DEV. All launchers share `.build/terminal-first` isolation. Dev prelaunch is skipped only when `.build/electron` and `out` exist; this does not rebuild stale output.
+`scripts/terminal-first-app.sh [--build|--build-only] [--no-build-check] [args]` builds `vscode-darwin-arm64-min` when needed and starts the packaged Electron binary without VSCODE_DEV. The build stamp (`.build/terminal-first/packaged-build-complete`) records the commit the app was built from, with `-dirty` when the tree had changes; a launch whose sources differ rebuilds unless `--no-build-check` is passed. All launchers share `.build/terminal-first` isolation. Dev prelaunch is skipped only when `.build/electron` and `out` exist; this does not rebuild stale output.
 
 ### Measurement record
 
@@ -99,13 +99,36 @@ The first instrumented development-window load measured 4,470 ms from renderer n
 The target remains shell input within 500 ms on warm packaged launches. Do not treat CDP readiness or the session-controller interval as whole-app startup. Packaged acceptance and before/after measurements must include process startup and an actual input round trip. Extension trimming remains measurement-driven; no arbitrary disable list is shipped.
 
 
+### Startup performance (2026-10-30)
+
+Workstream F in `IMP_PLAN.md`. Requirements:
+
+- **S7.20** The fork marks `code/terminalFirst/prompt` when the startup session's terminal emits its first data (for a revived terminal, when the fork adopts it) and, only when `--prof-duration-markers` names a pair ending in `code/terminalFirst/input`, sends one newline after the prompt and marks `code/terminalFirst/input` on the echo. Marks are published to the timer service under the source `terminalFirst` after `presented`, `prompt`, and `input`, so upstream `--prof-duration-markers` resolves them even though the renderer snapshot is taken earlier.
+- **S7.21** When `--prof-duration-markers-file` is set, the fork writes `<file>.terminalFirst.json` with `{ reconnected, inputRequested, marks }` where `marks` are epoch milliseconds for the fork's marks and the upstream terminal, window, and contribution marks; the same payload is logged once as `[terminalFirst-perf]`.
+- **S7.22** **Developer: Terminal First Startup Marks** opens a Markdown table of those marks relative to `code/didStartMain` and the 20 slowest workbench contribution constructors.
+- **S7.23** `scripts/terminal-first-perf.sh` runs the packaged app N times (warm by default, `--cold` purges the file cache) against a `stock` profile (fork defaults only) or an `owner` profile (a copy of the isolated profile's settings and extensions), records the launch epoch per run, and `scripts/terminal-first-perf.mjs` aggregates medians and p90s for main→presented/prompt/input, launch→presented/prompt/input, prompt−presented, upstream `ellapsed`, and quit (`--quit`), printing a Markdown table and appending `.build/terminal-first/perf/history.tsv`. It fails when an expected mark never fired in two or more runs.
+- **S7.24** `product.json` sets `quality: "stable"` so packaged builds generate the Node compile cache; shells see `VSCODE_STABLE=1` and `terminal.integrated.shellIntegration.environmentReporting` defaults off.
+- **S7.25** Target: median launch→input under 500 ms on a warm packaged launch of the stock profile.
+- **S7.26** The session controller starts at `BlockRestore` and waits only for the editor part to be ready (`IEditorGroupsService.whenReady`), not for the full layout restore. The `code/terminalFirst/restored` mark therefore means "layout ready".
+- **S7.27** Stored sessions appear on the title bar before any shell exists, with their stored titles and modes. The title bar is never hidden by the starting state; only the other parts are.
+- **S7.28** The controller waits for the terminal service to reach `Connected` (every persisted terminal has an instance again, replay may still be running), bounded by 1.5 s; after that it starts the active session's shell. A persisted terminal that reconnects later is bound to its session by nonce, and an unclaimed reconnected panel shell becomes a session of its own.
+- **S7.29** The pty host connection does not wait for the `Restored` lifecycle phase in VS NOSH, because the main process warms the pty host with the first window.
+- **S7.30** Hidden session and space layouts materialize only after the first surface is presented (`terminalFirstStartup.whenPresented()`), so their editor restore never competes with the first prompt. Retained spaces are still listed, saved, and included in shutdown.
+
+Results (medians, p90 in parentheses; one row per landed step):
+
+| Build | Profile | Mode | launch→presented | launch→prompt | launch→input | prompt−presented | `ellapsed` | quit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| F0 baseline `f702d86cacc` | stock | warm | 1317 (1342) | 1488 (1512) | 1494 (1517) | 171 (177) | 748 (755) | 221 (237) |
+| F0 baseline `f702d86cacc` | owner | warm | 1421 (1442) | 1607 (1623) | 1615 (1627) | 184 (186) | 752 (755) | |
+
 ### Verification result
 
 The focused Electron run passed 52 tests covering session lifecycle, native/global leader routing, read-only copy motions/search/yank, title-bar tab rendering/arrow focus, and quiet-shell notification retention/urgent exceptions. All 9 CLI tests passed, including delayed pointer creation. Client typechecking and targeted lint passed. An isolated development window verified the title-bar layout, global leader, and copy selection/yank.
 
 The packaged build reached app packaging but failed in the existing Copilot preparation task: `prepareBuiltInCopilotRipgrepShim` could not find `extensions/copilot/node_modules/@github/copilot/sdk` inside the packaged app. Packaged startup timing and the 500 ms target remain unverified. The launcher records a successful build marker only after gulp succeeds, so an incomplete app is not treated as ready. Fullscreen drag/zoom, VSCodeVim integration, and the full light/high-contrast acceptance matrix remain manual release checks.
 
-A subsequent fresh folder launch eliminated the renderer workspace transition (under 1 ms) and presented the shell about 103 ms after session initialization, at 4,733 ms after renderer navigation. A later reconnect/reload run waited 3,247 ms for the pty connection, then presented in 104 ms; explicit background CLI activation completed 85 ms later. These observations expose remaining startup costs rather than establishing the packaged target. Live `e` routing to the owning editor was verified.
+A subsequent fresh folder launch eliminated the renderer workspace transition (under 1 ms) and presented the shell about 103 ms after session initialization, at 4,733 ms after renderer navigation. A later reconnect/reload run waited 3,247 ms for the pty connection, then presented in 104 ms; explicit background CLI activation completed 85 ms later. These observations expose remaining startup costs rather than establishing the packaged target. The packaged baseline measured by `scripts/terminal-first-perf.sh` on 2026-10-30 is in the Startup performance table below; `code/didStartMain` itself comes about 140 ms after the process is launched. Live `e` routing to the owning editor was verified.
 
 Theme follow-up: the default remains upstream Dark Modern, with VS NOSH Dark/Light opt-in. The local isolated profile was reset from One Dark Pro Flat and its color overrides (a backup was retained). Dark Modern and VS NOSH Light were visually checked; the title-bar and saved splash fallback now use the terminal’s panel background when a theme does not specify terminal.background.
 

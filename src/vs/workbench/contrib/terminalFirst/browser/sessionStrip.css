@@ -59,8 +59,8 @@
 	visibility: hidden;
 }
 
-/* Restore and measure the workbench without flashing its intermediate editor layout. */
-.monaco-workbench.terminal-first-starting > .monaco-grid-view {
+/* Restore and measure the workbench without flashing its intermediate editor layout; the title bar and its session tabs show at once. */
+.monaco-workbench.terminal-first-starting > .monaco-grid-view .part:not(.titlebar) {
 	visibility: hidden;
 }
 

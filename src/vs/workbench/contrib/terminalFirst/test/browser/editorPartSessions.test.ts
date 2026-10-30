@@ -20,6 +20,7 @@ import { GroupDirection, GroupsOrder, IEditorGroupsService } from '../../../../s
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { createEditorPart, ITestInstantiationService, registerTestEditor, registerTestResourceEditor, registerTestSideBySideEditor, TestEditorPart, TestFileEditorInput, TestServiceAccessor, workbenchInstantiationService, workbenchTeardown } from '../../../../test/browser/workbenchTestServices.js';
 import { EditorPartSessions, IEditorPartSessions } from '../../browser/editorPartSessions.js';
+import { terminalFirstStartup } from '../../../../services/terminalFirst/common/terminalFirstStartup.js';
 
 suite('Terminal First - editor part sessions', () => {
 
@@ -36,6 +37,7 @@ suite('Terminal First - editor part sessions', () => {
 	});
 
 	teardown(async () => {
+		terminalFirstStartup.reset();
 		if (testLocalInstantiationService) {
 			await workbenchTeardown(testLocalInstantiationService);
 			testLocalInstantiationService = undefined;
@@ -64,6 +66,29 @@ suite('Terminal First - editor part sessions', () => {
 	function createTestFileEditorInput(resource: URI, typeId: string): TestFileEditorInput {
 		return disposables.add(new TestFileEditorInput(resource, typeId));
 	}
+
+	test('retained sessions restore only after the shell is presented', async () => {
+		const [part, sessions, instantiationService] = await createPart();
+		await part.whenRestored;
+		await part.activeGroup.openEditor(createTestFileEditorInput(URI.file('/one/file.txt'), TEST_EDITOR_INPUT_ID), { pinned: true });
+		const state = part.createState();
+		await sessions.close('one');
+		part.clearState();
+		// The next part restores these sessions from the shared memento.
+		const memento = new Memento<{ 'editorpart.sessions': { active: string; states: Record<string, IEditorPartUIState> } }>(part.getId(), instantiationService.invokeFunction(accessor => accessor.get(IStorageService)));
+		memento.getMemento(StorageScope.WORKSPACE, StorageTarget.USER)['editorpart.sessions'] = { active: 'one', states: { one: state, two: structuredClone(state) } };
+		terminalFirstStartup.begin();
+		const restoredPart = await createEditorPart(instantiationService, disposables);
+		const restoredSessions = EditorPartSessions.for(restoredPart)!;
+		const restoredEarly = await Promise.race([restoredPart.whenRestored.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 50))]);
+		const idsBefore = [...restoredSessions.ids()];
+		terminalFirstStartup.presented();
+		await restoredPart.whenRestored;
+		assert.deepStrictEqual({ restoredEarly, idsBefore, idsAfter: [...restoredSessions.ids()].sort() }, { restoredEarly: false, idsBefore: [], idsAfter: ['one', 'two'] });
+		await restoredSessions.close('one');
+		await restoredSessions.close('two');
+		restoredPart.clearState();
+	});
 
 	test('recover colliding persisted group IDs without losing live groups', async () => {
 		const [part, sessions, instantiationService] = await createPart();

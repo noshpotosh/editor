@@ -18,6 +18,10 @@ Decisions already made by the owner (do not re-ask):
 | New Tile picker shape | One flat list, grouped: Workspace, Tools, Web, Extensions; every row has icon + name + description |
 | Vim keys in lists | Every list/tree focused inside a view tile when native Vim is on; focus first row on tile entry |
 | Keybinding collisions | Move all four (`Cmd+A`, `Cmd+J`, `Cmd+E`, `Cmd+T`) to leader sequences plus `Cmd+Shift` alternates; restore upstream Cmd shortcuts |
+| Shells after Cmd+Q (2026-10-30) | Fresh shells; sessions and layouts restore, scrollback does not (`terminal.integrated.persistentSessionReviveProcess: never`) |
+| Copilot in the packaged app (2026-10-30) | Dropped from the build |
+| Login-shell env probe (2026-10-30) | Keeps running for the extension host, never gates the shell |
+| Extension host at launch (2026-10-30) | Starts after the shell is presented, bounded at about 2 s after `Restored` |
 
 ## How to work in this repo
 
@@ -45,6 +49,8 @@ Run in this order. A first, because B, C, and D must land on the new seams rathe
 | B | Keyboard model for view tiles | Highest user-visible pain |
 | C | New Tile picker redesign | Self-contained, small |
 | D | Keybinding collisions + hardening backlog | Many small items, each independently shippable |
+| E | Spaces | Self-contained, builds on `EditorPartSessions` |
+| F | Startup and quit performance | Measurement-driven; every step is judged by `scripts/terminal-first-perf.sh` |
 
 ---
 
@@ -568,6 +574,42 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 
 Approved 2026-10-30 after A to D. A session can hold several named tile layouts ("spaces") over the same directory and shell, switched from a status bar switcher (`spaceStatus.ts`, one `IStatusbarService` entry, hidden for a single space), `Ctrl+Option` chords, and the leader, and started from presets (`common/spacePresets.ts`, setting `terminalFirst.spaces.presets`, `TileService.applyPreset`). The design reuses `EditorPartSessions` unchanged by retaining each space's grid under the key `sessionId` (first space) or `sessionId#spaceId` (`contrib/terminalFirst/common/spaces.ts`) and scopes `ViewTileInput` to that key. No upstream file changes. Requirements: `docs/specs/11-spaces.md`. Tests: `spaces.test`, `spaceStatus.test`, `terminalFirstService.test`, `tiles.test`.
 
+---
+
+## Workstream F: startup and quit performance
+
+Approved 2026-10-30. The owner uses VS NOSH as the everyday terminal too: launch, run a quick command, quit. Target (spec 07): shell input within 500 ms on a warm packaged launch, measured from process start through an input round trip. Full design: the approved plan is summarized here; `docs/specs/07-workbench-branding-distribution.md` "Startup performance" holds requirements and the results table.
+
+### Why the shell was slow
+
+`TerminalFirstContribution` was `AfterRestored` (idle-scheduled behind about 200 contributions), then awaited the uncapped `layoutService.whenRestored` (which the fork's `EditorPartSessions.onDidRestore` extends to every saved session and space), then `terminalService.whenConnected` (every revived terminal's replay), then a first spawn gated three times on the macOS login-shell probe (`$SHELL -i -l -c`, 10 s cap) through `profilesReady`, `LocalTerminalBackend.createProcess`, and `TerminalProcessManager`. No pty could connect before `Restored` (`localTerminalBackend.ts` `_connectToDirectProxy`). The whole grid, title bar included, stayed hidden until `presented`. No mark covered the first prompt. `product.json` had no `quality`, so packaged builds shipped no Node compile cache. Quit persisted every buffer (2 s race) and waited up to 5 s + 6 s for the extension host.
+
+### Steps
+
+| Step | What | Files | Upstream touch |
+| --- | --- | --- | --- |
+| F0 | Marks `code/terminalFirst/prompt` (first pty output) and `input` (newline echo, only when `--prof-duration-markers` names the pair); marks published to `ITimerService` under source `terminalFirst`; JSON dump beside `--prof-duration-markers-file`; command **Developer: Terminal First Startup Marks**; `scripts/terminal-first-perf.sh` + `.mjs` (runs, warm/cold, stock/owner profile, `--quit`, medians/p90, history); launcher stamp = commit (+`-dirty`), `--build-only`, `--no-build-check`; `quality: "stable"` | `contrib/terminalFirst/browser/startupTimings.ts`, `terminalFirstService.ts`, `scripts/terminal-first-perf.*`, `scripts/terminal-first-app.sh`, `product.json` | `product.json` only |
+| F3.1 | Pty connects at `Ready`: skip the `Restored` wait in `_connectToDirectProxy` under the gate (pty host is already warmed in main) | `contrib/terminal/electron-browser/localTerminalBackend.ts` | 1 line, gated |
+| F1 | Shell at `BlockRestore`; await `editorGroupsService.whenReady` instead of `whenRestored`; wait for `connectionState === Connected` (nonces final) rather than every replay, bounded at 1.5 s, with an `onDidCreateInstance` net for late reconnects; `showPanel` before `ensureTerminal`; activate non-active spaces after `presented`; title bar visible from first paint (`sessionStrip.css` hides `.part:not(.titlebar)`); `onDidRestore` no longer awaits every group | fork only | none |
+| F2 | Login shell off the terminal path: `getProfiles` uses `process.env`, `createProcess` passes `executableEnv = {}`, the variable resolver skips the shell-env merge; default `terminal.integrated.inheritEnv: false` | `ptyHostService.ts:316`, `localTerminalBackend.ts:218`, `terminalProcessManager.ts:276` | 3 one-liners, gated |
+| F3.2 | Pre-import xterm at `BlockRestore`; measure double profile resolution and ZDOTDIR copies before touching them | fork only | none |
+| F7 | Pre-spawn the session shell from the main process on `onWillLoadWindow` into the warmed pty host (persistent, detached, layout set), adopted by the renderer through upstream's reconnect path. **Only if** median `prompt − presented` is 150 ms or more after F0–F3 | `platform/terminalFirst/electron-main/terminalFirstShellPrespawn.ts`, `platform/terminalFirst/common/terminalFirstEnvironment.ts` | `app.ts` +1 line in the gated block; optional `terminalService.ts:1003` |
+| F4 | `deferStartupContribution(id, phase)` seam consulted by `registerWorkbenchContribution2`, list filled from the marks command's slowest constructors; extension host starts at `min(presented, Restored + 2 s)` via `services/terminalFirst/common/terminalFirstStartup.ts` (setting `terminalFirst.startup.deferExtensionHost`); `NativeVimStartup` calls `getInstalled()` only for the extension engine; session strip coalesces renders | `platform/terminalFirst/common/startupPhaseOverrides.ts`, fork files | `contributions.ts:171`, `nativeExtensionService.ts:138`, 1 line each |
+| F5 | Defaults: `persistentSessionReviveProcess: never`, `environmentChangesRelaunch: false`, `shellIntegration.environmentReporting: false`; Copilot out of the packaged build (`VSCODE_SKIP_COPILOT=1`, `defaultChatAgent` removed) | fork defaults, `build/gulpfile.vscode.ts`, `product.json` | build only |
+| F6 | Quit: ext-host deactivate 1 s and main exit wait 1.5 s under the gate; `e` uses `curl --unix-socket` when available, pointer wait 10 s, pointer cleanup | `extHostExtensionService.ts:267`, `extensionHostStarter.ts:39`, `extensions/terminal-first/bin/e` | 2 one-liners, gated |
+
+Order: F0 → F3.1 → F1 → F2 → measure → F3.2 → F7 (decision rule) → F4 → F5 → F6. Nothing lands without a before/after row from the harness.
+
+### Verification
+
+```sh
+./scripts/test.sh --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test --run vs/workbench/contrib/terminalFirst/test/browser/startupTimings.test --run vs/workbench/contrib/terminalFirst/test/browser/editorPartSessions.test --run vs/workbench/contrib/terminalFirst/test/browser/sessionTabs.test
+node --test scripts/terminal-first-perf.test.mjs extensions/terminal-first/test/cli.test.cjs
+scripts/terminal-first-app.sh --build-only && scripts/terminal-first-perf.sh --runs 5 --profile stock && scripts/terminal-first-perf.sh --runs 5 --profile owner && scripts/terminal-first-perf.sh --runs 5 --quit
+```
+
+Manual: fresh folder launch shows the title bar at once and a prompt soon after; typing works before extensions finish (`input` precedes `extensions` in the marks command); quit with two sessions and relaunch restores the tabs with fresh shells; Reload Window reattaches; `echo $PATH` and `which git` in the first shell match Terminal.app; `e README.md` from the first prompt opens the editor; Cmd+Q with `sleep 100` running quits without a dialog.
+
 ## Status table (update as steps land)
 
 | Step | Status | Commit | Notes |
@@ -598,6 +640,16 @@ Approved 2026-10-30 after A to D. A session can hold several named tile layouts 
 | D2.10 registers persistence | done | (see git log) | `terminalFirst.vim.persistRegisters` |
 | D2.9 native Vim performance | partial | (see git log) | removed a whole-document copy from visual selection; 50k-line regression test added; model-backed `VimHost` still open |
 | E spaces | done | (see git log) | status bar switcher, `terminalFirst.space.*` commands, leader digits and `Tab` group, presets for New Space and New Session from Preset; moving a tile between spaces deferred |
+| F0 perf harness | done | 1874092efb7 + 58afc904a81, c163428a476, f702d86cacc | marks `prompt`/`input`, marks command, `scripts/terminal-first-perf.sh`, launcher stamp, `quality: stable` (compile-cache validator accepts the uid suffix); baseline in spec 07: stock warm launch→input 1494 ms, quit 221 ms |
+| F0.5 shell in untrusted folders | done | b4c3828969a | `terminal.integrated.allowInUntrustedWorkspace: true`; a fresh profile never got a prompt because the first shell waited behind the trust dialog |
+| F3.1 pty connect at Ready | done | 65e3cc46110 | gated `Restored` wait removal in `_connectToDirectProxy` |
+| F1 shell-first scheduling | done | (see git log) | BlockRestore, `editorGroupsService.whenReady`, `Connected` not replay (1.5 s budget, late reconnects adopted by nonce), title bar first, hidden layouts restore after `terminalFirstStartup.whenPresented()` |
+| F2 login shell off the critical path | todo | | three gates + `inheritEnv: false` |
+| F3.2 xterm pre-import | todo | | keep only if measured |
+| F7 main-process pre-spawn | todo | | only if median `prompt − presented` ≥ 150 ms |
+| F4 defer non-terminal work | todo | | phase seam, ext-host deferral, nativeVim, strip |
+| F5 defaults and Copilot | todo | | revive never, relaunch off, Copilot out of the build |
+| F6 fast quit and `e` | todo | | timeouts, curl fast path, pointer cleanup |
 
 ## Definition of done (whole plan)
 

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ISerializedNode } from '../../../../base/browser/ui/grid/grid.js';
-import { Promises } from '../../../../base/common/async.js';
 import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IEditorGroupView } from '../../../browser/parts/editor/editor.js';
 import type { IEditorPartUIState } from '../../../browser/parts/editor/editorPart.js';
@@ -13,6 +12,7 @@ import { GroupIdentifier } from '../../../common/editor.js';
 import { isSerializedEditorGroupModel } from '../../../common/editor/editorGroupModel.js';
 import { GroupsOrder, IEditorGroup, IEditorPart } from '../../../services/editor/common/editorGroupsService.js';
 import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { terminalFirstStartup } from '../../../services/terminalFirst/common/terminalFirstStartup.js';
 
 const STORAGE_KEY = 'editorpart.sessions';
 
@@ -89,17 +89,18 @@ export class EditorPartSessions extends Disposable implements IEditorPartExtensi
 	}
 
 	async onDidRestore(): Promise<void> {
-		// Register retained inputs before backup recovery looks for missing editors.
+		// Register retained inputs before backup recovery looks for missing editors, but only once
+		// the shell is on screen: hidden session layouts must not compete with the first prompt.
 		const sessions = this.context.willRestoreState() ? this.context.memento[STORAGE_KEY] as ISessionsMemento | undefined : undefined;
 		if (!sessions) {
 			return;
 		}
-		this.activate(sessions.active);
+		await terminalFirstStartup.whenPresented();
+		const active = this.activeSession ?? sessions.active;
 		for (const id of Object.keys(sessions.states)) {
 			this.activate(id);
 		}
-		this.activate(sessions.active);
-		await Promises.settled(Array.from(this.context.groupViews.values()).map(group => group.whenRestored));
+		this.activate(active);
 	}
 
 	ids(): readonly string[] {
