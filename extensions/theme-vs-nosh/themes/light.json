@@ -52,6 +52,7 @@
 		"terminalFirst.marker.foreground": "#2867a5",
 		"terminalFirst.tile.border": "#dcd8cf",
 		"terminalFirst.tile.activeBorder": "#2867a5",
+		"terminalFirst.tile.hoverBorder": "#2867a566",
 		"terminalFirst.tile.gutterBackground": "#f5f3ee",
 		"terminalFirst.copyMode.badgeBackground": "#2867a5",
 		"terminalFirst.copyMode.badgeForeground": "#ffffff",

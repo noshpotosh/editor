@@ -51,10 +51,25 @@
 	border-radius: var(--vscode-cornerRadius-large);
 	overflow: hidden;
 	background: var(--vscode-editor-background);
+	/* Focus and hover changes ease in so the active card reads as moving, not flashing. */
+	transition: border-color 120ms ease-out, box-shadow 160ms ease-out;
+}
+
+/* A resting pointer previews the tile it would focus. */
+.monaco-workbench:not(.terminal-first-single-tile) .part.editor > .content .editor-group-container.terminal-first-tile:not(.active):hover {
+	border-color: var(--vscode-terminalFirst-tile-hoverBorder, var(--vscode-terminalFirst-tile-border, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.monaco-workbench .part.editor > .content .editor-group-container.terminal-first-tile {
+		transition: none;
+	}
 }
 
 .monaco-workbench:not(.terminal-first-single-tile) .part.editor > .content .editor-group-container.terminal-first-tile.active {
 	border-color: var(--vscode-terminalFirst-tile-activeBorder, var(--vscode-terminalFirst-tile-border, transparent));
+	/* A faint halo at the stroke tier separates the active card from its neighbors without a second border. */
+	box-shadow: 0 0 0 var(--vscode-strokeThickness) var(--vscode-terminalFirst-tile-hoverBorder, transparent);
 }
 
 .monaco-workbench.terminal-first-tiles .monaco-grid-view .part.editor:not(.modal-editor-part) {

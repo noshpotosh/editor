@@ -912,6 +912,7 @@
 		"--vscode-terminalFirst-tile-activeBorder",
 		"--vscode-terminalFirst-tile-border",
 		"--vscode-terminalFirst-tile-gutterBackground",
+		"--vscode-terminalFirst-tile-hoverBorder",
 		"--vscode-terminalOverviewRuler-border",
 		"--vscode-terminalOverviewRuler-cursorForeground",
 		"--vscode-terminalOverviewRuler-findMatchForeground",
