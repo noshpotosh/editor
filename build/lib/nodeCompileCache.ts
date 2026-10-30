@@ -9,7 +9,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 const nodeCompileCacheKinds = ['main', 'extension-host', 'shared-process', 'pty-host', 'agent-host'] as const;
-const nodeCompileCacheTagPattern = /^v\d+\.\d+\.\d+-(arm64|x64)-[0-9a-f]{8}$/;
+// Node appends the generating user's id to the tag when the cache is portable.
+const nodeCompileCacheTagPattern = /^v\d+\.\d+\.\d+-(arm64|x64)-[0-9a-f]{8}(?:-\d+)?$/;
 const nodeCompileCacheEntryPattern = /^[0-9a-f]{8}$/;
 
 export interface INodeCompileCacheProduct {
