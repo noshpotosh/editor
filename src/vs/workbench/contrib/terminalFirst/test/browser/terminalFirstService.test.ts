@@ -36,13 +36,20 @@ import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 import { createTerminalFirstTerminalPolicy, TerminalFirstLaunch } from '../../browser/terminalPolicy.js';
 import { IShellLaunchConfig } from '../../../../../platform/terminal/common/terminal.js';
 import { EditorPartSessions } from '../../browser/editorPartSessions.js';
+import { ITimerService } from '../../../../services/timer/browser/timerService.js';
+import { NativeParsedArgs } from '../../../../../platform/environment/common/argv.js';
+import { clearMarks, getMarks, PerformanceMark } from '../../../../../base/common/performance.js';
+import { VSBuffer } from '../../../../../base/common/buffer.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 	teardown(() => { terminalFirstPolicy.mode = 'starting'; });
+	// Marks are global to the test window; keep the startup marks of one test out of the next.
+	setup(() => { for (const name of ['prompt', 'input']) { clearMarks(`code/terminalFirst/${name}`); } });
+	const countMarks = (name: string) => getMarks().filter(entry => entry.name === `code/terminalFirst/${name}`).length;
 
 	/** Creates real controller behavior with terminal and layout boundaries replaced by small fakes. */
-	function fixture(filesToOpenOrCreate?: IPath[]) {
+	function fixture(filesToOpenOrCreate?: IPath[], args?: NativeParsedArgs) {
 		const instantiationService = workbenchInstantiationService(undefined, store);
 		const activeChanged = store.add(new Emitter<void>());
 		const closed = store.add(new Emitter<IEditorCloseEvent>());
@@ -70,6 +77,14 @@ suite('Terminal First', () => {
 		const mainContainer = document.createElement('div');
 		mainContainer.classList.add('terminal-first-starting');
 		const opened: ITextResourceEditorInput[][] = [];
+		/** Marks the controller published, text it sent to shells, and perf files it wrote. */
+		const published: PerformanceMark[][] = [];
+		const sent: string[] = [];
+		const written: string[] = [];
+		const didPublish = store.add(new Emitter<void>());
+		const didSend = store.add(new Emitter<void>());
+		const didWrite = store.add(new Emitter<void>());
+		const dataEmitters = new Map<ITerminalInstance, Emitter<string>>();
 
 		class Editors extends TestEditorService {
 			override readonly onDidActiveEditorChange = activeChanged.event;
@@ -95,10 +110,14 @@ suite('Terminal First', () => {
 			const shellLaunchConfig: IShellLaunchConfig = {};
 			policy.prepareLaunchConfig(shellLaunchConfig, options);
 			const floating = shellLaunchConfig.hideFromUser === true;
+			const data = store.add(new Emitter<string>());
 			const terminal = upcastPartial<ITerminalInstance>({
 				instanceId: id,
 				shellLaunchConfig,
 				onTitleChanged: Event.None,
+				onData: data.event,
+				processReady: Promise.resolve(),
+				sendText: async text => { sent.push(text); didSend.fire(); },
 				attachToElement: () => { },
 				detachFromElement: () => { },
 				setVisible: () => { },
@@ -115,6 +134,7 @@ suite('Terminal First', () => {
 				focusWhenReady: async () => { focused.fire(terminal); },
 			});
 			allTerminals.push(terminal);
+			dataEmitters.set(terminal, data);
 			if (!floating) { terminals.push(terminal); }
 			active = terminal;
 			return terminal;
@@ -157,7 +177,10 @@ suite('Terminal First', () => {
 		instantiationService.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({ getViewContainerById: () => null, getViewDescriptorById: () => null }));
 		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart, activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
-		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed') }));
+		const environment = { filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed'), args };
+		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>(environment));
+		instantiationService.stub(ITimerService, upcastPartial<ITimerService>({ setPerformanceMarks: (_source, marks) => { published.push(marks); didPublish.fire(); }, getPerformanceMarks: () => [] }));
+		instantiationService.stub(IFileService, 'writeFile', async (resource: URI, _contents: VSBuffer) => { written.push(resource.path); didWrite.fire(); return undefined; });
 		instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('new.ts'));
 		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({}));
 		const managed = URI.file('/managed/vs-nosh.code-workspace');
@@ -168,7 +191,7 @@ suite('Terminal First', () => {
 		instantiationService.stub(IDialogService, dialog);
 		instantiationService.stub(IConfigurationService, config);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
+		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; }, published, sent, written, didPublish: didPublish.event, didSend: didSend.event, didWrite: didWrite.event, emitData: (terminal: ITerminalInstance, text: string) => dataEmitters.get(terminal)!.fire(text) };
 	}
 
 	test('presents the shell before extension registration completes', async () => {
@@ -724,4 +747,29 @@ suite('Terminal First', () => {
 		strictEqual(completed, true);
 	});
 
+	test('startup marks the first prompt once, publishes the marks, and sends nothing to the shell', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const publishedAfterPrompt = Event.toPromise(state.didPublish);
+		state.emitData(state.active!, 'prompt> ');
+		state.emitData(state.active!, 'more');
+		await publishedAfterPrompt;
+		deepStrictEqual({
+			prompt: countMarks('prompt'), input: countMarks('input'), sent: state.sent, written: state.written,
+			published: [...new Set(state.published.at(-1)?.map(entry => entry.name))].filter(name => name.endsWith('/presented') || name.endsWith('/prompt')).sort(),
+		}, { prompt: 1, input: 0, sent: [], written: [], published: ['code/terminalFirst/presented', 'code/terminalFirst/prompt'] });
+	});
+
+	test('a perf run echoes one newline after the prompt and writes the marks beside the markers file', async () => {
+		const state = fixture(undefined, { _: [], 'prof-duration-markers': ['code/didStartMain-code/terminalFirst/input'], 'prof-duration-markers-file': '/perf/run-1.tsv' });
+		await state.service.initialize();
+		const newlineSent = Event.toPromise(state.didSend);
+		state.emitData(state.active!, 'prompt> ');
+		await newlineSent;
+		const beforeEcho = countMarks('input');
+		const reportWritten = Event.toPromise(state.didWrite);
+		state.emitData(state.active!, '\r\nprompt> ');
+		await reportWritten;
+		deepStrictEqual({ sent: state.sent, beforeEcho, input: countMarks('input'), written: state.written }, { sent: ['\n'], beforeEcho: 0, input: 1, written: ['/perf/run-1.tsv.terminalFirst.json'] });
+	});
 });

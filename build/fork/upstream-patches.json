@@ -13,6 +13,9 @@
 		"scripts/terminal-first.sh",
 		"scripts/terminal-first-app.sh",
 		"scripts/terminal-first-cli.sh",
+		"scripts/terminal-first-perf.sh",
+		"scripts/terminal-first-perf.mjs",
+		"scripts/terminal-first-perf.test.mjs",
 		"scripts/setup-terminal-first-vim.sh",
 		"scripts/upstream-check.sh",
 		"scripts/upstream-sync.sh",
@@ -33,7 +36,7 @@
 		"resources/darwin/vs-nosh.png"
 	],
 	"patches": [
-		{ "path": "product.json", "kind": "branding", "gated": false, "seam": "none", "why": "VS NOSH identity: names, data folders, bundle id, and the terminal-first URL protocol that gates the fork", "validate": ["launch"] },
+		{ "path": "product.json", "kind": "branding", "gated": false, "seam": "none", "why": "VS NOSH identity: names, data folders, bundle id, the terminal-first URL protocol that gates the fork, and quality stable so packaged builds ship a Node compile cache", "validate": ["launch"] },
 		{ "path": "build/lib/electron.ts", "kind": "branding", "gated": false, "seam": "none", "why": "Packaged app icon", "validate": ["scripts/terminal-first-app.sh --build"] },
 		{ "path": "build/darwin/create-dmg.ts", "kind": "branding", "gated": false, "seam": "none", "why": "DMG icon", "validate": ["scripts/terminal-first-app.sh --build"] },
 		{ "path": "build/lib/extensions.ts", "kind": "build", "gated": false, "seam": "none", "why": "Re-adds @github/copilot/sdk files that .moduleignore strips so the packaged Copilot extension loads; upstreaming candidate", "validate": ["scripts/terminal-first-app.sh --build"] },

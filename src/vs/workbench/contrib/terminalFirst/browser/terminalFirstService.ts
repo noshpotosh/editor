@@ -59,6 +59,7 @@ import { IPathService } from '../../../services/path/common/pathService.js';
 import { untildify } from '../../../../base/common/labels.js';
 import { isAbsolute, join } from '../../../../base/common/path.js';
 import { viewContainerDisplayName } from './tileCatalog.js';
+import { TerminalFirstStartupTimings } from './startupTimings.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -102,6 +103,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	declare readonly _serviceBrand: undefined;
 	private static readonly STORAGE_KEY = 'terminalFirst.sessions';
 	private readonly transitions = new Sequencer();
+	private readonly startupTimings: TerminalFirstStartupTimings;
 	private readonly sessionList: Session[] = [];
 	private active: Session | undefined;
 	private initialized = false;
@@ -179,6 +181,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		@IPathService private readonly pathService: IPathService,
 	) {
 		super();
+		this.startupTimings = this._register(instantiationService.createInstance(TerminalFirstStartupTimings));
 		const updatePadding = () => {
 			const padding = Math.max(0, Math.min(100, configurationService.getValue<number>('terminalFirst.terminal.padding') ?? 12));
 			layoutService.mainContainer.style.setProperty('--terminal-first-padding', `${padding}px`);
@@ -288,9 +291,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this.initialized = true;
 		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
 		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+		this.startupTimings.track(await this.ensureTerminal(this.active));
 		mark('code/terminalFirst/created');
 		await this.present(this.active, explicitFiles ? 'editor' : 'shell');
 		mark('code/terminalFirst/presented');
+		this.startupTimings.publish();
 		void this.initializeCLI();
 	}
 
