@@ -23,6 +23,7 @@ import { ILogService } from '../../../../platform/log/common/log.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ITerminalFirstService, TerminalFirstService } from './terminalFirstService.js';
+import './viewPruning.js';
 
 registerSingleton(ITerminalFirstService, TerminalFirstService, InstantiationType.Delayed);
 

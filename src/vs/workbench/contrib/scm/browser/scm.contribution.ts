@@ -43,7 +43,6 @@ import { ChatContextKeys } from '../../chat/common/actions/chatContextKeys.js';
 import { CHAT_SETUP_SUPPORT_ANONYMOUS_ACTION_ID } from '../../chat/browser/actions/chatActions.js';
 import { SCMInputContextKeys } from './scmInput.js';
 import product from '../../../../platform/product/common/product.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 ModesRegistry.registerLanguage({
 	id: 'scminput',
@@ -128,24 +127,22 @@ viewsRegistry.registerViews([{
 	}
 }], viewContainer);
 
-if (!terminalFirstEnabled) {
-	viewsRegistry.registerViews([{
-		id: HISTORY_VIEW_PANE_ID,
-		containerTitle,
-		name: localize2('scmGraph', "Graph"),
-		singleViewPaneContainerTitle: localize('source control graph', "Source Control Graph"),
-		ctorDescriptor: new SyncDescriptor(SCMHistoryViewPane),
-		canToggleVisibility: true,
-		canMoveView: true,
-		weight: 40,
-		order: 2,
-		when: ContextKeyExpr.and(
-			ContextKeyExpr.has('scm.historyProviderCount'),
-			ContextKeyExpr.notEquals('scm.historyProviderCount', 0),
-		),
-		containerIcon: sourceControlViewIcon
-	}], viewContainer);
-}
+viewsRegistry.registerViews([{
+	id: HISTORY_VIEW_PANE_ID,
+	containerTitle,
+	name: localize2('scmGraph', "Graph"),
+	singleViewPaneContainerTitle: localize('source control graph', "Source Control Graph"),
+	ctorDescriptor: new SyncDescriptor(SCMHistoryViewPane),
+	canToggleVisibility: true,
+	canMoveView: true,
+	weight: 40,
+	order: 2,
+	when: ContextKeyExpr.and(
+		ContextKeyExpr.has('scm.historyProviderCount'),
+		ContextKeyExpr.notEquals('scm.historyProviderCount', 0),
+	),
+	containerIcon: sourceControlViewIcon
+}], viewContainer);
 
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(SCMActiveRepositoryController, LifecyclePhase.Restored);

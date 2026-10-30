@@ -18,27 +18,24 @@ import { IOutlinePane } from './outline.js';
 // --- actions
 
 import './outlineActions.js';
-import { terminalFirstEnabled } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 
 // --- view
 
 const outlineViewIcon = registerIcon('outline-view-icon', Codicon.symbolClass, localize('outlineViewIcon', 'View icon of the outline view.'));
 
-if (!terminalFirstEnabled) {
-	Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
-		id: IOutlinePane.Id,
-		name: localize2('name', "Outline"),
-		containerIcon: outlineViewIcon,
-		ctorDescriptor: new SyncDescriptor(OutlinePane),
-		canToggleVisibility: true,
-		canMoveView: true,
-		hideByDefault: false,
-		collapsed: true,
-		order: 2,
-		weight: 30,
-		focusCommand: { id: 'outline.focus' }
-	}], VIEW_CONTAINER);
-}
+Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
+	id: IOutlinePane.Id,
+	name: localize2('name', "Outline"),
+	containerIcon: outlineViewIcon,
+	ctorDescriptor: new SyncDescriptor(OutlinePane),
+	canToggleVisibility: true,
+	canMoveView: true,
+	hideByDefault: false,
+	collapsed: true,
+	order: 2,
+	weight: 30,
+	focusCommand: { id: 'outline.focus' }
+}], VIEW_CONTAINER);
 
 // --- configurations
 
