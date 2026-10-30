@@ -27,10 +27,9 @@
 	gap: var(--vscode-spacing-size80);
 }
 
-/* Shared header role: floating terminal title, jump list heading and file browser pane titles. */
+/* Shared header role: floating terminal title and jump list heading; the preview pane title lives in filePreview.css. */
 .terminal-first-floating .floating-terminal-header,
-.terminal-first-jump-list .jump-list-header,
-.terminal-first-file-browser .file-browser-pane-title {
+.terminal-first-jump-list .jump-list-header {
 	font-size: var(--vscode-fontSize-label1);
 	font-weight: var(--vscode-fontWeight-semiBold);
 }

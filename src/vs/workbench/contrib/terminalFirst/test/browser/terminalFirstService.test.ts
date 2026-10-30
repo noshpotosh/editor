@@ -15,12 +15,14 @@ import { ICommandService } from '../../../../../platform/commands/common/command
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { IPath } from '../../../../../platform/window/common/window.js';
 import { EditorCloseContext, EditorInputWithOptions, IEditorCloseEvent, IEditorPane, IUntypedEditorInput, isResourceEditorInput } from '../../../../common/editor.js';
+import { IQuickInputService } from '../../../../../platform/quickinput/common/quickInput.js';
+import { IViewDescriptorService } from '../../../../common/views.js';
 import { ITextResourceEditorInput } from '../../../../../platform/editor/common/editor.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IEditorGroupsService, IEditorPart, IEditorGroup } from '../../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
-import { TestEditorInput, TestEditorService, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
+import { TestEditorInput, TestEditorService, TestFileEditorInput, workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
 import { ICreateTerminalOptions, ITerminalEditorService, ITerminalGroupService, ITerminalInstance, ITerminalService } from '../../../terminal/browser/terminal.js';
 import { IWorkspaceEditingService } from '../../../../services/workspaces/common/workspaceEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
@@ -54,6 +56,12 @@ suite('Terminal First', () => {
 		let failCreation = false;
 		let editorFocusCount = 0;
 		let cancelEditorClose = false;
+		/** Retained-layout keys the controller activated and closed, in order, plus the keys a restored editor part reports. */
+		const activated: string[] = [];
+		const closedKeys: string[] = [];
+		const restoredKeys: string[] = [];
+		let owns: (key: string, groupId: number) => boolean = () => true;
+		let spaceName: string | undefined = 'Review';
 		const disposedIds: number[] = [];
 		let active: ITerminalInstance | undefined;
 		let maximized = false;
@@ -139,7 +147,14 @@ suite('Terminal First', () => {
 			layout: () => { },
 		}));
 		const mainPart = upcastPartial<IEditorPart>({ groups: [upcastPartial<IEditorGroup>({ id: 0 })], count: 1, onDidAddGroup: Event.None, onDidRemoveGroup: Event.None, onDidLayout: Event.None });
-		store.add(EditorPartSessions.attach(mainPart, { activate: () => { }, owns: () => true, ids: () => [], close: async () => !cancelEditorClose, swapGroups: () => { } }));
+		store.add(EditorPartSessions.attach(mainPart, { activate: key => { activated.push(key); }, owns: (key, groupId) => owns(key, groupId), ids: () => restoredKeys, close: async key => { closedKeys.push(key); return !cancelEditorClose; }, swapGroups: () => { } }));
+		/** Answers for the quick inputs in order of appearance: the preset pick (by label) and text prompts. */
+		let presetPick: string | undefined = 'Empty';
+		const presetPicks: string[][] = [];
+		instantiationService.stub(IQuickInputService, 'input', async () => spaceName);
+		instantiationService.stub(IQuickInputService, 'pick', (async (items: { label: string }[]) => { presetPicks.push(items.map(item => item.label)); return items.find(item => item.label === presetPick); }) as IQuickInputService['pick']);
+		instantiationService.stub(IFileService, 'stat', async (resource: URI) => ({ isDirectory: !resource.path.endsWith('.txt') }));
+		instantiationService.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({ getViewContainerById: () => null, getViewDescriptorById: () => null }));
 		instantiationService.stub(IEditorGroupsService, upcastPartial<IEditorGroupsService>({ mainPart, activeGroup: upcastPartial<IEditorGroup>({ focus: () => { editorFocusCount++; } }), enforcePartOptions: () => toDisposable(() => { }) }));
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>({ filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed') }));
@@ -153,7 +168,7 @@ suite('Terminal First', () => {
 		instantiationService.stub(IDialogService, dialog);
 		instantiationService.stub(IConfigurationService, config);
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: () => { cancelEditorClose = true; }, dialog, config, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
+		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; } };
 	}
 
 	test('presents the shell before extension registration completes', async () => {
@@ -551,6 +566,148 @@ suite('Terminal First', () => {
 		deepStrictEqual([state.service.sessions[0].mode, state.maximized], ['editor', false]);
 	});
 
+	test('a new space gets its own retained layout, opens the tile picker, and is persisted', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.newSpace();
+		const shellOnly = state.service.sessions[0].spaces.length;
+		await state.service.showEditor();
+		const id = state.service.sessions[0].id;
+		await state.service.newSpace();
+		const spaces = state.service.sessions[0].spaces;
+		const stored = state.storage.getObject<{ sessions: { spaces: { id: string; name: string }[]; activeSpace: string }[] }>('terminalFirst.sessions', StorageScope.WORKSPACE)!.sessions[0];
+		deepStrictEqual({
+			shellOnly,
+			spaces: spaces.map(space => [space.name, space.active]),
+			activated: state.activated.at(-1),
+			picker: state.commands.at(-1),
+			stored: [stored.spaces.map(space => space.name), stored.activeSpace === spaces[1].id],
+		}, { shellOnly: 1, spaces: [['Space 1', false], ['Review', true]], activated: `${id}#${spaces[1].id}`, picker: 'terminalFirst.tile.new', stored: [['Space 1', 'Review'], true] });
+	});
+
+	test('space switching wraps, ignores out-of-range slots, and suggests the next free name', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		state.setSpaceName('');
+		await state.service.newSpace();
+		await state.service.newSpace();
+		const active = () => state.service.sessions[0].spaces.findIndex(space => space.active);
+		const steps: number[] = [active()];
+		await state.service.switchSpace(1); steps.push(active());
+		await state.service.switchSpace(-1); steps.push(active());
+		await state.service.selectSpaceAt(2); steps.push(active());
+		await state.service.selectSpaceAt(5); steps.push(active());
+		state.setSpaceName(undefined);
+		await state.service.newSpace();
+		deepStrictEqual({ steps, names: state.service.sessions[0].spaces.map(space => space.name) }, { steps: [2, 0, 2, 1, 1], names: ['Space 1', 'Space 2', 'Space 3'] });
+	});
+
+	test('closing a space shows its neighbor, closing the last space leaves an empty one, and cancel keeps it', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		const id = state.service.sessions[0].id;
+		await state.service.newSpace();
+		const review = `${id}#${state.service.sessions[0].spaces[1].id}`;
+		state.cancelEditorClose(true);
+		await state.service.closeSpace();
+		const afterCancel = { spaces: state.service.sessions[0].spaces.length, activated: state.activated.at(-1), closed: [...state.closedKeys] };
+		state.cancelEditorClose(false);
+		await state.service.closeSpace();
+		const afterClose = { spaces: state.service.sessions[0].spaces.map(space => space.name), activated: state.activated.at(-1), closed: state.closedKeys.slice(afterCancel.closed.length) };
+		await state.service.closeSpace();
+		const last = state.service.sessions[0].spaces;
+		deepStrictEqual({ afterCancel, afterClose, last: [last.map(space => space.name), last[0].id !== 'default', state.activated.at(-1) === `${id}#${last[0].id}`, state.closedKeys.slice(-2)] }, {
+			afterCancel: { spaces: 2, activated: review, closed: [review] },
+			afterClose: { spaces: ['Space 1'], activated: id, closed: [review, review] },
+			last: [['Space 1'], true, true, [id, id]],
+		});
+	});
+
+	test('restores spaces, defaults sessions saved without them, and recovers layouts under unknown keys', async () => {
+		const state = fixture();
+		const shell = state.addTerminal();
+		state.storage.store('terminalFirst.sessions', { managedWorkspace: 'file:///managed/vs-nosh.code-workspace', active: shell.shellIntegrationNonce, sessions: [
+			{ id: shell.shellIntegrationNonce, nonce: shell.shellIntegrationNonce, title: 'Shell', mode: 'shell', spaces: [{ id: 'default', name: 'Code' }, { id: 'rv', name: 'Review' }], activeSpace: 'rv' },
+			{ id: 'old', nonce: 'old', title: 'Old', mode: 'shell' },
+		] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		state.restoredKeys.push(`${shell.shellIntegrationNonce}#rv`, `${shell.shellIntegrationNonce}#lost`, 'ghost#x');
+		await state.service.initialize();
+		deepStrictEqual({
+			sessions: state.service.sessions.map(session => [session.title, session.spaces.map(space => [space.id === 'default' ? 'default' : space.name, space.active])]),
+			activated: state.activated[0],
+		}, {
+			sessions: [['Shell 1', [['default', false], ['Review', true], ['Recovered Space', false]]], ['Old', [['default', true]]], ['Recovered Session', [['default', true], ['Recovered Space', false]]]],
+			activated: `${shell.shellIntegrationNonce}#rv`,
+		});
+	});
+
+	test('closing a session closes every space, and cancelling in any space keeps them all', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		const id = state.service.sessions[0].id;
+		await state.service.newSpace();
+		const review = `${id}#${state.service.sessions[0].spaces[1].id}`;
+		await state.service.selectSpaceAt(1);
+		state.cancelEditorClose(true);
+		await state.service.closeSession(id);
+		const cancelled = { sessions: state.service.sessions.length, spaces: state.service.sessions[0].spaces.length, closed: [...state.closedKeys], activated: state.activated.at(-1) };
+		state.cancelEditorClose(false);
+		await state.service.closeSession(id);
+		deepStrictEqual({ cancelled, closed: state.closedKeys.slice(cancelled.closed.length), sessions: state.service.sessions.map(session => session.id !== id) }, {
+			cancelled: { sessions: 1, spaces: 2, closed: [id], activated: id },
+			closed: [id, review, id, review],
+			sessions: [true],
+		});
+	});
+
+	test('a preset names the space, opens its tiles by command, and a cancelled pick creates nothing', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		state.setPresetPick('Review');
+		await state.service.newSpace();
+		await state.service.newSpace();
+		const afterPresets = { names: state.service.sessions[0].spaces.map(space => space.name), commands: state.commands.filter(id => id.includes('Preset') || id === 'terminalFirst.tile.new') };
+		state.setPresetPick(undefined);
+		await state.service.newSpace();
+		deepStrictEqual({ afterPresets, picks: state.presetPicks[0], count: state.service.sessions[0].spaces.length }, {
+			afterPresets: { names: ['Space 1', 'Review', 'Review 2'], commands: ['_terminalFirst.tile.applyPreset', '_terminalFirst.tile.applyPreset'] },
+			picks: ['Empty', 'Code', 'Review'],
+			count: 3,
+		});
+	});
+
+	test('a session from a preset opens the editor in the chosen directory with the preset as its first space', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		state.setSpaceName('/projects/api');
+		state.setPresetPick('Code');
+		await state.service.newSessionFromPreset();
+		deepStrictEqual({
+			sessions: state.service.sessions.map(session => [session.mode, session.active, session.spaces.map(space => space.name)]),
+			folder: state.workspace.folders[0]?.uri.path,
+			cwd: state.created.at(-1) && state.terminals.length,
+			applied: state.commands.at(-1),
+		}, { sessions: [['shell', false, ['Space 1']], ['editor', true, ['Code']]], folder: '/projects/api', cwd: 2, applied: '_terminalFirst.tile.applyPreset' });
+	});
+
+	test('dirty state is reported per space and rolls up to the session', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		await state.service.showEditor();
+		const id = state.service.sessions[0].id;
+		await state.service.newSpace();
+		const review = `${id}#${state.service.sessions[0].spaces[1].id}`;
+		const input = store.add(new TestFileEditorInput(URI.file('/project/dirty.ts'), 'test'));
+		input.setDirty();
+		state.instantiationService.stub(IEditorService, 'getEditors', () => [{ editor: input, groupId: 0 }]);
+		state.setOwns(key => key === review);
+		deepStrictEqual(state.service.sessions.map(session => [session.dirty, session.spaces.map(space => !!space.dirty)]), [[true, [false, true]]]);
+	});
+
 	test('--wait survives mode switches and releases only on file close', async () => {
 		const state = fixture();
 		await state.service.initialize();
@@ -566,4 +723,5 @@ suite('Terminal First', () => {
 		await pending;
 		strictEqual(completed, true);
 	});
+
 });

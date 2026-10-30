@@ -632,13 +632,14 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 		if (locationView.groupsView === this) {
 			const restoreFocus = this.shouldRestoreFocus(locationView.element);
 
-			const shouldExpand = this.groupViews.size > 1 && this.isGroupExpanded(locationView);
+			const preserveOtherGroups = EditorPartHooks.layout?.preserveOtherGroupsOnSplit === true;
+			const shouldExpand = !preserveOtherGroups && this.groupViews.size > 1 && this.isGroupExpanded(locationView);
 			newGroupView = this.doCreateGroupView(groupToCopy);
 
 			// Add to grid widget
 			this.gridWidget.addView(
 				newGroupView,
-				this.getSplitSizingStyle(),
+				preserveOtherGroups ? Sizing.Split : this.getSplitSizingStyle(),
 				locationView,
 				this.toGridViewDirection(direction),
 			);
@@ -1487,6 +1488,12 @@ export class EditorPart extends Part<IEditorPartMemento> implements IEditorPart,
 	}
 
 	private doLayout(dimension: Dimension, top = this.top, left = this.left): void {
+		// A maximized panel can collapse the editor part. Keep its last usable layout so
+		// switching or saving retained grids does not replace their sizes with minimums.
+		if (dimension.width <= 0 || dimension.height <= 0) {
+			return;
+		}
+
 		this._contentDimension = dimension;
 
 		// Layout Grid

@@ -12,6 +12,7 @@ import { SyncDescriptor } from '../../../../../platform/instantiation/common/des
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IEditorPartUIState } from '../../../../browser/parts/editor/editorPart.js';
+import { EditorPartHooks } from '../../../../browser/parts/editor/editorPartHooks.js';
 import { EditorExtensions, EditorsOrder, IEditorFactoryRegistry } from '../../../../common/editor.js';
 import { Memento } from '../../../../common/memento.js';
 import { EditorService } from '../../../../services/editor/browser/editorService.js';
@@ -120,6 +121,40 @@ suite('Terminal First - editor part sessions', () => {
 			sessions.activate('one');
 		}
 		assert.deepStrictEqual({ groups: part.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => group.id), active: part.activeGroup.id }, { groups: ids, active: right.id });
+	});
+
+	test('preserve unequal four-tile heights when switching and saving spaces with the editor collapsed', async () => {
+		if (!EditorPartHooks.layout) {
+			// Match tile focus behavior without registering the product's global styling hook.
+			disposables.add(EditorPartHooks.setLayoutHook({ expandMinimizedGroupOnActivate: false }));
+		}
+		const [part, sessions, instantiationService] = await createPart();
+		sessions.activate('one');
+		part.layout(1080, 800, 0, 0);
+		const topLeft = part.activeGroup;
+		const topRight = part.addGroup(topLeft, GroupDirection.RIGHT);
+		const bottomLeft = part.addGroup(topLeft, GroupDirection.DOWN);
+		const bottomRight = part.addGroup(topRight, GroupDirection.DOWN);
+		part.activateGroup(bottomRight);
+		part.setSize(topLeft, { width: 540, height: 700 });
+		part.setSize(topRight, { width: 540, height: 700 });
+		const groups = [topLeft, topRight, bottomLeft, bottomRight];
+		const before = groups.map(group => part.getSize(group));
+		const gridBefore = part.createState().serializedGrid;
+		// Shell mode maximizes the panel, leaving no height for the editor grid.
+		part.layout(1080, 0, 0, 0);
+		sessions.activate('two');
+		part.testSaveState();
+		const memento = new Memento<{ 'editorpart.sessions': { states: Record<string, IEditorPartUIState> } }>(part.getId(), instantiationService.invokeFunction(accessor => accessor.get(IStorageService)));
+		const savedGrid = memento.getMemento(StorageScope.WORKSPACE, StorageTarget.USER)['editorpart.sessions']!.states.one.serializedGrid;
+		sessions.activate('one');
+		part.layout(1080, 800, 0, 0);
+		for (let i = 0; i < 3; i++) {
+			sessions.activate('two');
+			sessions.activate('one');
+		}
+		assert.deepStrictEqual({ sizes: groups.map(group => part.getSize(group)), savedGrid }, { sizes: before, savedGrid: gridBefore });
+		part.clearState();
 	});
 
 	test('cancelling a session close preserves all of its editor groups', async () => {

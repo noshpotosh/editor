@@ -33,6 +33,8 @@ suite('Floating File Browser Host', () => {
 		const instantiation = workbenchInstantiationService(undefined, store);
 		const container = document.createElement('div');
 		const editor = container.appendChild(document.createElement('div'));
+		// A wide editor area keeps the preview pane visible, so previews load.
+		Object.assign(editor.style, { width: '1200px', height: '800px' });
 		document.body.appendChild(container);
 		store.add(toDisposable(() => container.remove()));
 		instantiation.stub(IWorkbenchLayoutService, upcastPartial<IWorkbenchLayoutService>({ mainContainer: container, getContainer: () => editor, onDidLayoutMainContainer: Event.None }));
@@ -120,14 +122,14 @@ suite('Floating File Browser Host', () => {
 		await f.settle();
 		f.key('ArrowUp');
 		await f.settle();
-		strictEqual(f.container.querySelector('.file-browser-preview-message')?.textContent?.includes('1 MiB'), true);
+		strictEqual(f.container.querySelector('.terminal-first-preview-message')?.textContent?.includes('1 MiB'), true);
 		f.key('Enter');
 		await f.settle();
 		size = 10;
 		f.key('ArrowDown');
 		f.key('ArrowUp');
 		await f.settle();
-		deepStrictEqual([references, f.opened, f.container.querySelector('.file-browser-preview-message')?.textContent?.includes('binary')], [0, ['/root/app.ts'], true]);
+		deepStrictEqual([references, f.opened, f.container.querySelector('.terminal-first-preview-message')?.textContent?.includes('binary')], [0, ['/root/app.ts'], true]);
 	});
 
 	test('marks survive folder changes and F6 moves focus without changing the picker mode', async () => {

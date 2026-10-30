@@ -564,6 +564,10 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 
 ---
 
+## Workstream E: spaces
+
+Approved 2026-10-30 after A to D. A session can hold several named tile layouts ("spaces") over the same directory and shell, switched from a status bar switcher (`spaceStatus.ts`, one `IStatusbarService` entry, hidden for a single space), `Ctrl+Option` chords, and the leader, and started from presets (`common/spacePresets.ts`, setting `terminalFirst.spaces.presets`, `TileService.applyPreset`). The design reuses `EditorPartSessions` unchanged by retaining each space's grid under the key `sessionId` (first space) or `sessionId#spaceId` (`contrib/terminalFirst/common/spaces.ts`) and scopes `ViewTileInput` to that key. No upstream file changes. Requirements: `docs/specs/11-spaces.md`. Tests: `spaces.test`, `spaceStatus.test`, `terminalFirstService.test`, `tiles.test`.
+
 ## Status table (update as steps land)
 
 | Step | Status | Commit | Notes |
@@ -593,6 +597,7 @@ Each item is one commit. Mark the spec's gap as resolved in the same commit.
 | D2.8 undo watchdog | done | (see git log) | `safeKey` + test |
 | D2.10 registers persistence | done | (see git log) | `terminalFirst.vim.persistRegisters` |
 | D2.9 native Vim performance | partial | (see git log) | removed a whole-document copy from visual selection; 50k-line regression test added; model-backed `VimHost` still open |
+| E spaces | done | (see git log) | status bar switcher, `terminalFirst.space.*` commands, leader digits and `Tab` group, presets for New Space and New Session from Preset; moving a tile between spaces deferred |
 
 ## Definition of done (whole plan)
 

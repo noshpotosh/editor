@@ -66,6 +66,15 @@ const editorActions: readonly ModalAction[] = [
 	{ keys: 'ts', label: localize('session', "Pick Session"), command: 'terminalFirst.pickTerminal' },
 	{ keys: 'tn', label: localize('newSession', "New Session"), command: 'terminalFirst.newTerminal' },
 	{ keys: 'tr', label: localize('renameSession', "Rename Session"), command: 'terminalFirst.renameSession' },
+	{ keys: 'tp', label: localize('sessionFromPreset', "New Session from Preset"), command: 'terminalFirst.newSessionFromPreset' },
+	// Spaces: digits jump, the Tab group manages (as Doom Emacs workspaces do).
+	...Array.from({ length: 9 }, (_, index) => ({ keys: `${index + 1}`, label: localize('spaceSlot', "Switch to Space {0}", index + 1), command: `terminalFirst.space.select${index + 1}` })),
+	{ keys: '<Tab>n', label: localize('newSpace', "New Space"), command: 'terminalFirst.space.new' },
+	{ keys: '<Tab>r', label: localize('renameSpace', "Rename Space"), command: 'terminalFirst.space.rename' },
+	{ keys: '<Tab>x', label: localize('closeSpace', "Close Space"), command: 'terminalFirst.space.close' },
+	{ keys: '<Tab>]', label: localize('nextSpace', "Next Space"), command: 'terminalFirst.space.next' },
+	{ keys: '<Tab>[', label: localize('previousSpace', "Previous Space"), command: 'terminalFirst.space.previous' },
+	{ keys: '<Tab><Tab>', label: localize('pickSpace', "Pick Space"), command: 'terminalFirst.space.pick' },
 	{ keys: 'q', label: localize('shell', "Return to Shell"), command: 'terminalFirst.showShell' },
 	{ keys: '[', label: localize('copyMode', "Copy Scrollback"), command: 'terminalFirst.copyMode.enter' },
 ];
@@ -77,6 +86,7 @@ const shellActions: readonly ModalAction[] = [
 	{ keys: 'p', label: localize('previous', "Previous Session"), command: 'terminalFirst.previousTerminal' },
 	{ keys: 's', label: localize('pick', "Pick Session"), command: 'terminalFirst.pickTerminal' },
 	{ keys: 'c', label: localize('create', "New Session"), command: 'terminalFirst.newTerminal' },
+	{ keys: 'o', label: localize('openPreset', "New Session from Preset"), command: 'terminalFirst.newSessionFromPreset' },
 	{ keys: 'x', label: localize('close', "Close Session"), command: 'terminalFirst.closeSession' },
 	{ keys: 'R', label: localize('renameSessionShell', "Rename Session"), command: 'terminalFirst.renameSession' },
 	{ keys: '[', label: localize('copy', "Copy Scrollback"), command: 'terminalFirst.copyMode.enter' },
@@ -141,7 +151,8 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 			if (!this.active) { return; }
 			event.preventDefault(); event.stopImmediatePropagation();
 			if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) { return; }
-			this.key(event.key === 'Escape' ? '<Esc>' : event.key);
+			// Tab uses the Vim key name so the Tab group matches whether the key comes from the window or the Vim engine.
+			this.key(event.key === 'Escape' ? '<Esc>' : event.key === 'Tab' ? '<Tab>' : event.key);
 		}, true));
 	}
 	start(prefix = ''): void {
@@ -174,10 +185,11 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 		return true;
 	}
 	private describeBinding(action: ModalAction): string {
-		if (terminalFirstPolicy.shell) { return `Ctrl+Space ${action.keys}`; }
+		const keys = action.keys.replace(/<Tab>/g, 'Tab ').trim();
+		if (terminalFirstPolicy.shell) { return `Ctrl+Space ${keys}`; }
 		const leader = this.configuration.getValue<string>('terminalFirst.vim.leader') ?? ' ';
 		const label = leader === ' ' ? localize('spaceKey', "Space") : leader;
-		return action.keys.startsWith('w') ? `${label} ${action.keys} / Ctrl+W ${action.keys.slice(1)}` : `${label} ${action.keys}`;
+		return action.keys.startsWith('w') ? `${label} ${keys} / Ctrl+W ${keys.slice(1)}` : `${label} ${keys}`;
 	}
 	private render(): void {
 		if (!this.active) { return; }

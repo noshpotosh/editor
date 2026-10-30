@@ -1,0 +1,45 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.terminal-first-preview[hidden],
+.terminal-first-preview [hidden] {
+	display: none !important;
+}
+/* The pane is a control-tier surface inside an outer-tier overlay, so it steps one radius down. */
+.terminal-first-preview {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-floating-border, transparent);
+	border-radius: var(--vscode-cornerRadius-medium);
+	display: flex;
+	flex-direction: column;
+}
+.terminal-first-preview-title {
+	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex-shrink: 0;
+	font-size: var(--vscode-fontSize-label1);
+	font-weight: var(--vscode-fontWeight-semiBold);
+}
+.terminal-first-preview-editor {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+}
+.terminal-first-preview-message {
+	padding: var(--vscode-spacing-size80);
+	color: var(--vscode-descriptionForeground);
+	white-space: pre;
+	overflow: auto;
+	flex: 1;
+	min-height: 0;
+}
+.terminal-first-preview-message:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: calc(-1 * var(--vscode-strokeThickness));
+}

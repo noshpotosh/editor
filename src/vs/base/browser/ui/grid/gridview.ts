@@ -1854,6 +1854,7 @@ export class GridView implements IDisposable {
 	}
 
 	dispose(): void {
+		this.disposable2x2.dispose();
 		this._onDidChangeViewMaximized.dispose();
 		this.onDidSashResetRelay.dispose();
 		this.root.dispose();

@@ -18,6 +18,7 @@ import { tileSplitDirection } from '../../common/tileLayout.js';
 import { ITerminalFirstService } from '../../../../services/terminalFirst/common/terminalFirst.js';
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TileChrome } from '../../browser/tileChrome.js';
+import { splitEditor } from '../../../../browser/parts/editor/editorCommands.js';
 import { createEditorParts, TestFileEditorInput, TestViewsService, workbenchInstantiationService, workbenchTeardown } from '../../../../test/browser/workbenchTestServices.js';
 import { TileService, webAppTiles } from '../../browser/tiles.js';
 import { IViewTileComposites, ViewTileComposites, ViewTileEditor, ViewTileInput, ViewTileSerializer } from '../../browser/tileEditor.js';
@@ -153,6 +154,8 @@ suite('Terminal First Tiles', () => {
 			web: { written: [string, unknown][]; prompts: number; opened: IResourceEditorInput[] };
 			/** Items shown by each quick pick, in order. */
 			picks: (IQuickPickItem | IQuickPickSeparator)[][];
+			/** Makes another space of the session active; view tiles are scoped to the active space. */
+			setSpace: (id: string) => void;
 		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean; jiraBoardUrl?: string; webAppAnswer?: string } = {}): Promise<void> {
 			const instantiation = workbenchInstantiationService(undefined, store);
 			const contexts = instantiation.get(IContextKeyService);
@@ -169,8 +172,9 @@ suite('Terminal First Tiles', () => {
 			instantiation.stub(IEditorGroupsService, parts);
 			const notifications: string[] = [];
 			instantiation.stub(INotificationService, upcastPartial<INotificationService>({ info: message => { notifications.push(String(message)); return undefined!; } }));
+			let spaceId = 'default';
 			instantiation.stub(ITerminalFirstService, upcastPartial<ITerminalFirstService>({
-				sessions: [{ id: 'session', title: 'session', mode: 'editor', active: true }],
+				get sessions() { return [{ id: 'session', title: 'session', mode: 'editor' as const, active: true, spaces: [{ id: spaceId, name: spaceId, active: true }] }]; },
 				showEditor: async () => { },
 				openTerminalTile: async () => options.terminalOpens ?? true,
 			}));
@@ -197,6 +201,7 @@ suite('Terminal First Tiles', () => {
 			try {
 				await run({
 					service, groups: parts, notifications, web, picks,
+					setSpace: id => { spaceId = id; },
 					name: (group, label) => { if (group) { names.set(group.id, label); } },
 					layout: (width, height) => parts.testMainPart.layout(width, height, 0, 0),
 					elements: () => parts.testMainPart.getGroups(GroupsOrder.GRID_APPEARANCE).map(group => parts.testMainPart.groups.find(view => view.id === group.id)!.element),
@@ -216,6 +221,54 @@ suite('Terminal First Tiles', () => {
 			name(await service.open('editor'), 'c');
 			deepStrictEqual(shape(), { tiles: [['a', 540, 800], ['b', 540, 400], ['c', 540, 400]], active: 'c', maximized: false });
 		}));
+
+		for (const direction of [GroupDirection.RIGHT, GroupDirection.DOWN]) {
+			for (const native of [true, false]) {
+				test(`editor splits equalize existing editors and preserve tool tiles (${direction}, native: ${native})`, () => withTiles(async ({ service, groups, layout }) => {
+					layout(1800, 1400);
+					const outside = (await service.open({ container: 'test.fixed.left' }))!;
+					const source = (await service.open('editor', GroupDirection.RIGHT))!;
+					groups.setSize(outside, { width: 300, height: 1400 });
+					const bottom = (await service.open({ container: 'test.fixed.bottom' }, GroupDirection.DOWN))!;
+					groups.setSize(bottom, { width: 1500, height: 200 });
+					const before = { source: groups.getSize(source), outside: groups.getSize(outside), bottom: groups.getSize(bottom) };
+					for (let i = 0; i < 2; i++) {
+						groups.activateGroup(source);
+						if (native) {
+							splitEditor(groups, direction, { groupedEditors: [{ group: source, editors: [] }], preserveFocus: false });
+						} else {
+							await service.splitEditor(direction);
+						}
+					}
+					const equalSize = direction === GroupDirection.RIGHT
+						? { width: before.source.width / 3, height: before.source.height }
+						: { width: before.source.width, height: before.source.height / 3 };
+					const editors = groups.mainPart.groups.filter(group => group !== outside && group !== bottom);
+					deepStrictEqual({ editors: editors.map(group => groups.getSize(group)), outside: groups.getSize(outside), bottom: groups.getSize(bottom) }, {
+						editors: [equalSize, equalSize, equalSize], outside: before.outside, bottom: before.bottom
+					});
+					groups.setSize(source, direction === GroupDirection.RIGHT ? { ...equalSize, width: 600 } : { ...equalSize, height: 500 });
+					strictEqual(direction === GroupDirection.RIGHT ? groups.getSize(source).width : groups.getSize(source).height, direction === GroupDirection.RIGHT ? 600 : 500);
+				}));
+			}
+			test(`native editor split halves only the source tile (${direction})`, () => withTiles(async ({ service, groups, layout }) => {
+				layout(1600, 1200);
+				const outside = (await service.open({ container: 'test.fixed.left' }))!;
+				const source = (await service.open('editor', GroupDirection.RIGHT))!;
+				groups.setSize(outside, { width: 1, height: 1200 });
+				const bottom = (await service.open({ container: 'test.fixed.bottom' }, GroupDirection.DOWN))!;
+				groups.setSize(bottom, { width: groups.getSize(source).width, height: 1 });
+				groups.activateGroup(source);
+				const before = { source: groups.getSize(source), outside: groups.getSize(outside), bottom: groups.getSize(bottom) };
+				splitEditor(groups, direction, { groupedEditors: [{ group: source, editors: [] }], preserveFocus: false });
+				const half = direction === GroupDirection.RIGHT
+					? { width: before.source.width / 2, height: before.source.height }
+					: { width: before.source.width, height: before.source.height / 2 };
+				deepStrictEqual({ source: groups.getSize(source), split: groups.getSize(groups.activeGroup), outside: groups.getSize(outside), bottom: groups.getSize(bottom) }, {
+					source: half, split: half, outside: before.outside, bottom: before.bottom
+				});
+			}));
+		}
 
 		test('splits that would leave an unusable half change nothing', () => withTiles(async ({ service, layout, shape, notifications }) => {
 			layout(300, 250);
@@ -310,6 +363,45 @@ suite('Terminal First Tiles', () => {
 				for (const generated of containers.all.filter(candidate => candidate.id !== container.id && views.getViews(candidate).length === 0 && candidate.id.startsWith('workbench.views.service.'))) {
 					containers.deregisterViewContainer(generated);
 				}
+				containers.deregisterViewContainer(container);
+			}
+		}));
+
+		test('a preset opens its tiles in order, sized from the split tile, and skips what cannot open', () => withTiles(async ({ service, shape, name, groups }) => {
+			const containers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
+			const container = containers.registerViewContainer({ id: 'test.preset.container', title: localize2('preset', "Preset"), ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.Sidebar);
+			const pane = Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(EditorPaneDescriptor.create(ViewTileEditor, ViewTileEditor.ID, 'View Tile'), [new SyncDescriptor(ViewTileInput)]);
+			try {
+				await service.applyPreset({ name: 'Code', tiles: [
+					{ tile: 'editor' },
+					{ tile: container.id, direction: 'left', size: 0.25, from: 0 },
+					{ tile: 'missing.view', direction: 'down' },
+					{ tile: 'web:bitbucket', direction: 'right' },
+					{ tile: 'editor', direction: 'down', size: 0.3, from: 0 },
+				] });
+				const ordered = groups.mainPart.getGroups(GroupsOrder.GRID_APPEARANCE);
+				ordered.forEach((group, index) => name(group, group.activeEditor instanceof ViewTileInput ? 'view' : `editor${index}`));
+				deepStrictEqual(shape(), { tiles: [['view', 270, 800], ['editor1', 810, 560], ['editor2', 810, 240]], active: 'editor1', maximized: false });
+			} finally {
+				pane.dispose();
+				containers.deregisterViewContainer(container);
+			}
+		}));
+
+		test('each space holds its own tile for a view', () => withTiles(async ({ service, shape, name, setSpace }) => {
+			const containers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
+			const container = containers.registerViewContainer({ id: 'test.spaces.container', title: localize2('spaces', "Spaces"), ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.Panel);
+			const pane = Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(EditorPaneDescriptor.create(ViewTileEditor, ViewTileEditor.ID, 'View Tile'), [new SyncDescriptor(ViewTileInput)]);
+			try {
+				const first = await service.openView(container.id, GroupDirection.RIGHT);
+				name(first, 'first');
+				setSpace('review');
+				const second = await service.openView(container.id, GroupDirection.DOWN);
+				name(second, 'second');
+				const scopes = [first, second].map(group => (group?.activeEditor as ViewTileInput | undefined)?.sessionId);
+				deepStrictEqual({ distinct: first !== second, scopes, reused: await service.openView(container.id) === second, tiles: shape().tiles.map(([label]) => label) }, { distinct: true, scopes: ['session', 'session#review'], reused: true, tiles: ['a', 'first', 'second'] });
+			} finally {
+				pane.dispose();
 				containers.deregisterViewContainer(container);
 			}
 		}));

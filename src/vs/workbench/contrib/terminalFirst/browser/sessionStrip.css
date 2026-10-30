@@ -36,7 +36,7 @@
 .terminal-first-sessions button:focus-visible { outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder); outline-offset: calc(-1 * var(--vscode-strokeThickness)); }
 
 /* Quiet at rest: close is revealed on the active tab or on intent, and a dirty dot stands in for it. */
-.terminal-first-sessions .session-close { padding: 0 var(--vscode-spacing-size40); }
+.terminal-first-sessions .session-close { padding: 0 var(--vscode-spacing-size120); }
 .terminal-first-sessions .session-close .codicon { font-size: var(--vscode-codiconFontSize-compact); }
 .terminal-first-sessions .session-tab:not(.active):not(:hover):not(:focus-within) .session-close > .codicon:not(.session-dirty-indicator) { visibility: hidden; }
 .terminal-first-sessions .session-close > .session-dirty-indicator { display: none; }

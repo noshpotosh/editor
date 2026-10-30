@@ -46,6 +46,7 @@ import { IWorkingCopyService } from '../../../services/workingCopy/common/workin
 import { DIFF_FOCUS_OTHER_SIDE, DIFF_FOCUS_PRIMARY_SIDE, DIFF_FOCUS_SECONDARY_SIDE, registerDiffEditorCommands } from './diffEditorCommands.js';
 import { IResolvedEditorCommandsContext, resolveCommandsContext } from './editorCommandsContext.js';
 import { fillActiveEditorSelection, prepareMoveCopyEditors } from './editor.js';
+import { EditorPartHooks } from './editorPartHooks.js';
 import { IRange } from '../../../../editor/common/core/range.js';
 
 export const CLOSE_SAVED_EDITORS_COMMAND_ID = 'workbench.action.closeUnmodifiedEditors';
@@ -756,6 +757,7 @@ export function splitEditor(editorGroupsService: IEditorGroupsService, direction
 	const { group, editors } = resolvedContext.groupedEditors[0];
 	const preserveFocus = resolvedContext.preserveFocus;
 	const newGroup = editorGroupsService.addGroup(group, direction);
+	EditorPartHooks.layout?.onDidSplitEditor?.(editorGroupsService.getPart(group), group);
 
 	for (const editorToCopy of editors) {
 

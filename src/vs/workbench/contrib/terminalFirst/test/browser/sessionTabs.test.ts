@@ -22,7 +22,7 @@ suite('Session title-bar tabs', () => {
 		const parent = document.createElement('div'); document.body.appendChild(parent);
 		store.add(toDisposable(() => parent.remove()));
 		const changed = store.add(new Emitter<void>());
-		let sessions: ITerminalFirstSession[] = [{ id: 'one', title: 'One', mode: 'shell', active: true }, { id: 'two', title: 'Two', mode: 'editor', dirty: true, active: false }];
+		let sessions: ITerminalFirstSession[] = [{ id: 'one', title: 'One', mode: 'shell', active: true, spaces: [] }, { id: 'two', title: 'Two', mode: 'editor', dirty: true, active: false, spaces: [] }];
 		const service = upcastPartial<ITerminalFirstService>({
 			get sessions() { return sessions; }, onDidChangeSessions: changed.event,
 			switchTerminal: async offset => { sessions = sessions.map((session, index) => ({ ...session, active: index === offset })); changed.fire(); },

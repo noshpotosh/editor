@@ -19,6 +19,7 @@ import { DEFAULT_LABELS_CONTAINER, IResourceLabel, ResourceLabels } from '../../
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { TerminalFirstJumpListFocusedContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
+import { FilePreview, FilePreviewTarget } from './filePreview.js';
 import { layoutFloatingOverlay } from './floatingOverlay.js';
 import { JumpListModel } from './jumpListModel.js';
 
@@ -29,6 +30,8 @@ export class FloatingJumpList extends Disposable {
 	private readonly message: HTMLElement;
 	private readonly listContainer: HTMLElement;
 	private readonly list: WorkbenchList<URI>;
+	private readonly preview: FilePreview;
+	private previewTarget: FilePreviewTarget | undefined;
 	private readonly focusedContext;
 	private project: URI | undefined;
 	private visible = false;
@@ -57,7 +60,8 @@ export class FloatingJumpList extends Disposable {
 		const close = append(header, $<HTMLButtonElement>('button'));
 		close.textContent = localize('close', "Close");
 		this._register(addDisposableListener(close, EventType.CLICK, () => this.hide(true)));
-		this.listContainer = append(this.element, $('.jump-list-rows.show-file-icons'));
+		const body = append(this.element, $('.jump-list-body'));
+		this.listContainer = append(body, $('.jump-list-rows.show-file-icons'));
 		const labels = this._register(instantiation.createInstance(ResourceLabels, DEFAULT_LABELS_CONTAINER));
 		const renderer: IListRenderer<URI, { number: HTMLElement; label: IResourceLabel }> = {
 			templateId: 'jumpFile',
@@ -78,11 +82,15 @@ export class FloatingJumpList extends Disposable {
 				accessibilityProvider: { getAriaLabel: resource => this.label(resource), getWidgetAriaLabel: () => localize('jumpFiles', "Jump List Files") },
 				multipleSelectionSupport: false, typeNavigationEnabled: false,
 			}));
+		this.preview = this._register(instantiation.createInstance(FilePreview, body, () => false));
 		this.message = append(this.element, $('.jump-list-status'));
 		this.message.setAttribute('role', 'status');
 		const hints = append(this.element, $('.jump-list-hints'));
-		hints.textContent = localize('jumpHints', "j/k Navigate · J/K Move · 1-9 Open Slot · gg/G First/Last · dd Remove · p/P Put After/Before · u Undo · Ctrl+R Redo · Enter Open · q/Esc Close");
-		this._register(this.list.onDidChangeFocus(event => this.list.setSelection([...event.indexes])));
+		hints.textContent = localize('jumpHints', "j/k Navigate · J/K Move · 1-9 Open Slot · gg/G First/Last · dd Remove · p/P Put After/Before · u Undo · Ctrl+R Redo · Ctrl+D/U Scroll Preview · Enter Open · q/Esc Close");
+		this._register(this.list.onDidChangeFocus(event => {
+			this.list.setSelection([...event.indexes]);
+			this.updatePreview(event.elements[0]);
+		}));
 		this._register(this.list.onMouseDblClick(event => { if (event.element) { void this.accept(event.element); } }));
 		this._register(addDisposableListener(this.element, EventType.KEY_DOWN, event => this.keydown(event), true));
 		const focus = this._register(trackFocus(this.element));
@@ -117,6 +125,8 @@ export class FloatingJumpList extends Disposable {
 		this.generation++;
 		this.pending = '';
 		this.element.hidden = true;
+		this.previewTarget = undefined;
+		this.preview.clear();
 		this.focusedContext.reset();
 	}
 
@@ -127,9 +137,10 @@ export class FloatingJumpList extends Disposable {
 
 	private render(index: number): void {
 		this.list.splice(0, this.list.length, [...this.model.entries]);
-		this.select(index);
 		this.message.textContent = this.list.length ? '' : localize('emptyJumpList', "No files yet. Focus a file editor and press Cmd+Shift+A to add it.");
+		// Layout first so the preview knows whether it is visible before the focused row asks it to load.
 		this.layout();
+		this.select(index);
 	}
 
 	private select(index: number): void {
@@ -137,6 +148,14 @@ export class FloatingJumpList extends Disposable {
 		index = Math.max(0, Math.min(this.list.length - 1, index));
 		this.list.setFocus([index]);
 		this.list.reveal(index);
+	}
+
+	/** Re-rendering keeps the same target for an unchanged row, so the preview is not reloaded. */
+	private updatePreview(resource: URI | undefined): void {
+		if (!this.visible) { return; }
+		if (!resource) { this.previewTarget = undefined; }
+		else if (!this.previewTarget || !this.identity.extUri.isEqual(this.previewTarget.resource, resource)) { this.previewTarget = { resource }; }
+		void this.preview.update(this.previewTarget);
 	}
 
 	private keydown(event: KeyboardEvent): void {
@@ -148,8 +167,9 @@ export class FloatingJumpList extends Disposable {
 			const pending = this.pending;
 			this.pending = '';
 			if (event.ctrlKey) {
-				if (event.key !== 'r') { return; }
-				this.model.redo(); this.render(index);
+				if (event.key === 'r') { this.model.redo(); this.render(index); }
+				else if (event.key === 'd' || event.key === 'u') { this.preview.scroll(event.key === 'd' ? 1 : -1); }
+				else { return; }
 			} else if (event.key === 'j' || event.key === 'ArrowDown') { this.select(index + 1);
 			} else if (event.key === 'k' || event.key === 'ArrowUp') { this.select(index - 1);
 			} else if (event.key === 'J' || event.key === 'K') { this.render(this.model.move(index, event.key === 'J' ? 1 : -1));
@@ -178,8 +198,10 @@ export class FloatingJumpList extends Disposable {
 
 	private layout(): void {
 		if (!this.visible) { return; }
-		layoutFloatingOverlay(this.element, this.layoutService);
+		const width = layoutFloatingOverlay(this.element, this.layoutService);
+		this.preview.hidden = width < 600;
 		this.list.layout(this.listContainer.clientHeight, this.listContainer.clientWidth);
+		this.preview.layout();
 	}
 
 	override dispose(): void { this.hideList(); super.dispose(); }

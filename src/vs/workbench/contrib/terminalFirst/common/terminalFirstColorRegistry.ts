@@ -5,7 +5,7 @@
 
 import { localize } from '../../../../nls.js';
 import { activeContrastBorder, badgeBackground, badgeForeground, contrastBorder, focusBorder, listHighlightForeground, oneOf, quickInputBackground, quickInputForeground, registerColor, toolbarHoverBackground, widgetBorder, ColorTransformType } from '../../../../platform/theme/common/colorRegistry.js';
-import { COMMAND_CENTER_ACTIVEBACKGROUND, EDITOR_GROUP_BORDER, PANEL_BACKGROUND, PANEL_BORDER, SIDE_BAR_BACKGROUND, TAB_ACTIVE_BORDER_TOP, TAB_ACTIVE_FOREGROUND, TAB_INACTIVE_FOREGROUND } from '../../../common/theme.js';
+import { COMMAND_CENTER_ACTIVEBACKGROUND, EDITOR_GROUP_BORDER, PANEL_BACKGROUND, PANEL_BORDER, SIDE_BAR_BACKGROUND, STATUS_BAR_ITEM_HOVER_BACKGROUND, STATUS_BAR_PROMINENT_ITEM_BACKGROUND, STATUS_BAR_PROMINENT_ITEM_FOREGROUND, TAB_ACTIVE_BORDER_TOP, TAB_ACTIVE_FOREGROUND, TAB_INACTIVE_FOREGROUND } from '../../../common/theme.js';
 import { TERMINAL_BACKGROUND_COLOR, TERMINAL_CURSOR_FOREGROUND_COLOR, TERMINAL_FOREGROUND_COLOR } from '../../terminal/common/terminalColorRegistry.js';
 
 /*
@@ -28,6 +28,12 @@ export const TERMINAL_FIRST_SESSION_TAB_ACTIVE_BORDER = registerColor('terminalF
 }, localize('terminalFirst.sessionTab.activeBorder', "Border at the top of the active session tab."));
 export const TERMINAL_FIRST_SESSION_TAB_INACTIVE_FOREGROUND = registerColor('terminalFirst.sessionTab.inactiveForeground', TAB_INACTIVE_FOREGROUND, localize('terminalFirst.sessionTab.inactiveForeground', "Foreground color of inactive session tabs and session strip buttons."));
 export const TERMINAL_FIRST_SESSION_TAB_HOVER_BACKGROUND = registerColor('terminalFirst.sessionTab.hoverBackground', toolbarHoverBackground, localize('terminalFirst.sessionTab.hoverBackground', "Background color of session tabs and session strip buttons when hovered."));
+
+// Space switcher in the status bar; defaults follow the status bar's own item colors
+
+export const TERMINAL_FIRST_SPACE_ACTIVE_BACKGROUND = registerColor('terminalFirst.space.activeBackground', STATUS_BAR_PROMINENT_ITEM_BACKGROUND, localize('terminalFirst.space.activeBackground', "Background color of the active space in the status bar space switcher."));
+export const TERMINAL_FIRST_SPACE_ACTIVE_FOREGROUND = registerColor('terminalFirst.space.activeForeground', STATUS_BAR_PROMINENT_ITEM_FOREGROUND, localize('terminalFirst.space.activeForeground', "Foreground color of the active space in the status bar space switcher."));
+export const TERMINAL_FIRST_SPACE_HOVER_BACKGROUND = registerColor('terminalFirst.space.hoverBackground', STATUS_BAR_ITEM_HOVER_BACKGROUND, localize('terminalFirst.space.hoverBackground', "Background color of a space in the status bar space switcher when hovered."));
 
 // Floating surfaces: terminal, file browser, jump list, leader menu and Vim status
 

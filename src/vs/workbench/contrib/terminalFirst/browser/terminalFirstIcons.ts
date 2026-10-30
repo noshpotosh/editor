@@ -15,3 +15,6 @@ export const sessionNewIcon = registerIcon('terminal-first-session-new', Codicon
 export const sessionNotificationsIcon = registerIcon('terminal-first-session-notifications', Codicon.bellDot, localize('sessionNotificationsIcon', "Icon for the session strip notifications button."));
 export const fileBrowserPromptIcon = registerIcon('terminal-first-file-browser-prompt', Codicon.chevronRight, localize('fileBrowserPromptIcon', "Icon for the file browser filter prompt."));
 export const fileBrowserMarkedIcon = registerIcon('terminal-first-file-browser-marked', Codicon.check, localize('fileBrowserMarkedIcon', "Icon for a marked file browser row."));
+export const spaceDirtyIcon = registerIcon('terminal-first-space-dirty', Codicon.circleFilled, localize('spaceDirtyIcon', "Icon for a space tab with unsaved changes."));
+export const spaceCloseIcon = registerIcon('terminal-first-space-close', Codicon.closeCompact, localize('spaceCloseIcon', "Icon for closing a space."));
+export const spaceNewIcon = registerIcon('terminal-first-space-new', Codicon.add, localize('spaceNewIcon', "Icon for creating a space."));

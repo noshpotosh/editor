@@ -146,7 +146,11 @@ export class ViewTileComposites extends Disposable {
 	}
 }
 
-/** A tile that hosts one view container (built-in or contributed by an extension) for one session. */
+/**
+ * A tile that hosts one view container (built-in or contributed by an extension) for one space.
+ * `sessionId` is the space's retained-layout key: the session id for a session's first space,
+ * `session#space` for the others (see `spaceLayoutKey`).
+ */
 export class ViewTileInput extends EditorInput {
 	static readonly ID = 'terminalFirst.toolTile';
 	override readonly typeId = ViewTileInput.ID;

@@ -125,7 +125,7 @@ Every Terminal First surface is styled from design tokens (spacing, corner radiu
 | `terminalFirst.floating.foreground` | `quickInput.foreground` | Same as above |
 | `terminalFirst.floating.border` | `widget.border`, then `panel.border` (HC: `contrastBorder`) | Same as above, plus the file browser preview |
 | `terminalFirst.marker.foreground` | `list.highlightForeground` | File browser prompt and marked rows |
-| `terminalFirst.tile.border` | `editorGroup.border` (HC: `contrastBorder`) | Tile cards and the rounded tray that holds them |
+| `terminalFirst.tile.border` | `editorGroup.border` (HC: `contrastBorder`) | Tile cards |
 | `terminalFirst.tile.activeBorder` | `focusBorder` (HC: `contrastActiveBorder`) | Active tile when more than one is open |
 | `terminalFirst.tile.hoverBorder` | opaque midpoint of `terminalFirst.tile.activeBorder` and `terminalFirst.tile.border` (HC: `contrastActiveBorder`) | Tile under a resting pointer unless it carries the active border |
 | `terminalFirst.tile.gutterBackground` | `sideBar.background` | Gutter between tiles and view tiles |

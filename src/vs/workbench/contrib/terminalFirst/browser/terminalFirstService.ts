@@ -50,8 +50,22 @@ import { TerminalFirstLaunch } from './terminalPolicy.js';
 import { EditorPartSessions, IEditorPartSessions } from './editorPartSessions.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { ITextEditorSelection } from '../../../../platform/editor/common/editor.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
+import { DEFAULT_SPACE_ID, defaultSpaceName, nextSpaceName, parseSpaceLayoutKey, spaceLayoutKey } from '../common/spaces.js';
+import { defaultSpacePresets, describeSpacePreset, ISpacePreset, SPACE_PRESETS_SETTING, validateSpacePresets } from '../common/spacePresets.js';
+import { IViewDescriptorService } from '../../../common/views.js';
+import { IPathService } from '../../../services/path/common/pathService.js';
+import { untildify } from '../../../../base/common/labels.js';
+import { isAbsolute, join } from '../../../../base/common/path.js';
+import { viewContainerDisplayName } from './tileCatalog.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
+
+interface Space {
+	id: string;
+	name: string;
+}
 
 interface Session {
 	id: string;
@@ -66,12 +80,21 @@ interface Session {
 	floatingNonce?: string;
 	floatingCwd?: string;
 	tileNonces?: string[];
+	/** Tile layouts over the session directory, in tab order; never empty. */
+	spaces: Space[];
+	activeSpace: string;
 }
+
+type StoredSession = Omit<Session, 'terminal' | 'floatingTerminal' | 'spaces' | 'activeSpace'> & Partial<Pick<Session, 'spaces' | 'activeSpace'>>;
 
 interface StoredSessions {
 	active?: string;
 	managedWorkspace?: string;
-	sessions: Omit<Session, 'terminal' | 'floatingTerminal'>[];
+	sessions: StoredSession[];
+}
+
+function defaultSpaces(): Space[] {
+	return [{ id: DEFAULT_SPACE_ID, name: defaultSpaceName(1) }];
 }
 
 /** Owns terminal sessions and serializes every change of the visible surface. */
@@ -107,7 +130,23 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	get floatingTerminalVisible(): boolean { return this.floatingVisible; }
 
 	get sessions(): readonly ITerminalFirstSession[] {
-		return this.sessionList.map(session => ({ id: session.id, title: session.customTitle || session.terminal?.title || session.title, mode: session.mode, dirty: this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).some(({ editor, groupId }) => editor.isDirty() && this.editorSessions?.owns(session.id, groupId)), active: session === this.active }));
+		const dirtyGroups = new Set(this.editorService.getEditors(EditorsOrder.SEQUENTIAL, { includeInactive: true }).filter(({ editor }) => editor.isDirty()).map(({ groupId }) => groupId));
+		return this.sessionList.map(session => {
+			const spaces = session.spaces.map(space => ({
+				id: space.id, name: space.name, active: space.id === session.activeSpace,
+				dirty: [...dirtyGroups].some(groupId => this.editorSessions?.owns(spaceLayoutKey(session.id, space.id), groupId)),
+			}));
+			return { id: session.id, title: session.customTitle || session.terminal?.title || session.title, mode: session.mode, dirty: spaces.some(space => space.dirty), active: session === this.active, spaces };
+		});
+	}
+
+	/** The retained-layout keys of a session's spaces. */
+	private layoutKeys(session: Session): string[] {
+		return session.spaces.map(space => spaceLayoutKey(session.id, space.id));
+	}
+
+	private activeLayoutKey(session: Session): string {
+		return spaceLayoutKey(session.id, session.activeSpace);
 	}
 
 	constructor(
@@ -135,6 +174,9 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		@IWorkspaceTrustManagementService private readonly trust: IWorkspaceTrustManagementService,
 		@IWorkspaceTrustRequestService private readonly trustRequests: IWorkspaceTrustRequestService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
+		@IViewDescriptorService private readonly viewDescriptors: IViewDescriptorService,
+		@IPathService private readonly pathService: IPathService,
 	) {
 		super();
 		const updatePadding = () => {
@@ -212,8 +254,12 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		mark('code/terminalFirst/connected');
 		if (stored) {
 			for (const session of stored.sessions) {
+				// Sessions saved before spaces existed hold one space whose layout key is the session id.
+				const spaces = session.spaces?.length ? session.spaces : defaultSpaces();
 				this.sessionList.push({
 					...session,
+					spaces,
+					activeSpace: spaces.some(space => space.id === session.activeSpace) ? session.activeSpace! : spaces[0].id,
 					terminal: this.terminalGroupService.instances.find(instance => instance.shellIntegrationNonce === session.nonce),
 					floatingTerminal: this.terminalService.instances.find(instance => TerminalFirstLaunch.isDetached(instance) && instance.shellIntegrationNonce === session.floatingNonce),
 				});
@@ -224,15 +270,21 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		}
 		if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 		this.active = this.sessionList.find(session => session.id === stored?.active) ?? this.sessionList.find(session => session.terminal === this.terminalGroupService.activeInstance) ?? this.sessionList[0];
-		this.editorSessions?.activate(this.active.id);
-		// Restore inactive editors too, so backups and shutdown include every session.
-		for (const id of this.editorSessions?.ids() ?? []) {
-			this.editorSessions?.activate(id);
-			if (!this.sessionList.some(session => session.id === id)) {
-				this.sessionList.push({ id, nonce: id, title: localize('recovered', "Recovered Session"), mode: 'editor' });
+		this.editorSessions?.activate(this.activeLayoutKey(this.active));
+		// Restore inactive editors too, so backups and shutdown include every session and space.
+		for (const key of this.editorSessions?.ids() ?? []) {
+			this.editorSessions?.activate(key);
+			const { sessionId, spaceId } = parseSpaceLayoutKey(key);
+			let session = this.sessionList.find(session => session.id === sessionId);
+			if (!session) {
+				session = { id: sessionId, nonce: sessionId, title: localize('recovered', "Recovered Session"), mode: 'editor', spaces: defaultSpaces(), activeSpace: DEFAULT_SPACE_ID };
+				this.sessionList.push(session);
+			}
+			if (!session.spaces.some(space => space.id === spaceId)) {
+				session.spaces.push({ id: spaceId, name: localize('recoveredSpace', "Recovered Space") });
 			}
 		}
-		this.editorSessions?.activate(this.active.id);
+		this.editorSessions?.activate(this.activeLayoutKey(this.active));
 		this.initialized = true;
 		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
 		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
@@ -262,7 +314,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	private addSession(terminal: ITerminalInstance): Session {
-		const session: Session = { id: terminal.shellIntegrationNonce, nonce: terminal.shellIntegrationNonce, title: terminal.title || localize('terminal', "Terminal"), mode: 'shell', terminal };
+		const session: Session = { id: terminal.shellIntegrationNonce, nonce: terminal.shellIntegrationNonce, title: terminal.title || localize('terminal', "Terminal"), mode: 'shell', terminal, spaces: defaultSpaces(), activeSpace: DEFAULT_SPACE_ID };
 		this.sessionList.push(session);
 		return session;
 	}
@@ -289,10 +341,10 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		const state: StoredSessions = {
 			active: this.active?.id,
 			managedWorkspace: this.managedWorkspace?.toString(),
-			sessions: this.sessionList.map(({ id, nonce, title, customTitle, mode, cwd: savedCwd, terminal, floatingTerminal, floatingNonce, floatingCwd, tileNonces }) => {
+			sessions: this.sessionList.map(({ id, nonce, title, customTitle, mode, cwd: savedCwd, terminal, floatingTerminal, floatingNonce, floatingCwd, tileNonces, spaces, activeSpace }) => {
 				const cwd = terminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd();
 				return {
-					id, nonce, mode, title: terminal?.title || title, customTitle,
+					id, nonce, mode, title: terminal?.title || title, customTitle, spaces, activeSpace,
 					cwd: cwd ? URI.file(cwd).toString() : savedCwd || (terminal?.initialCwd ? URI.file(terminal.initialCwd).toString() : undefined),
 					floatingNonce, tileNonces,
 					floatingCwd: floatingTerminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd() || floatingCwd,
@@ -525,7 +577,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		try {
 			const terminal = await this.ensureTerminal(session);
 			if (mode === 'editor') { await this.updateDirectory(session, cwd); }
-			this.editorSessions?.activate(session.id);
+			this.editorSessions?.activate(this.activeLayoutKey(session));
 			this.active = session;
 			session.mode = mode;
 			terminalFirstPolicy.mode = mode;
@@ -637,12 +689,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			}
 			this.changingSession = true;
 			try {
-				// Activate before close so normal dirty-editor dialogs refer to visible files.
-				this.editorSessions?.activate(id);
-				if (this.editorSessions && !await this.editorSessions.close(id)) {
-					this.editorSessions.activate(this.active!.id);
-					return;
-				}
+				if (!await this.closeLayouts(this.layoutKeys(session))) { return; }
 				this.sessionList.splice(this.sessionList.indexOf(session), 1);
 				if (session === this.active) { this.hideBrowser(); this.hideFloating(); this.hideJumpList(); }
 				this.browserHost?.forgetSession(session.id);
@@ -651,9 +698,194 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 				if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 				const next = this.active === session ? this.sessionList[0] : this.active!;
 				await this.present(next, next.mode);
-				await this.editorSessions?.close(id);
+				await this.disposeLayouts(this.layoutKeys(session));
 			} finally { this.changingSession = false; }
 		});
+	}
+
+	/**
+	 * First half of closing layouts: every editor of every key is closed after save, discard, or
+	 * cancel decisions. Each layout is activated first so the dialogs refer to visible files.
+	 * Resolves false, with the active layout restored, when the user cancels.
+	 */
+	private async closeLayouts(keys: readonly string[]): Promise<boolean> {
+		if (!this.editorSessions) { return true; }
+		for (const key of keys) {
+			this.editorSessions.activate(key);
+			if (!await this.editorSessions.close(key)) {
+				this.editorSessions.activate(this.activeLayoutKey(this.active!));
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Second half: once a successor layout is shown, the emptied layouts are disposed. */
+	private async disposeLayouts(keys: readonly string[]): Promise<void> {
+		for (const key of keys) {
+			await this.editorSessions?.close(key);
+		}
+	}
+
+	private get activeEditorSession(): Session | undefined {
+		return this.active?.mode === 'editor' ? this.active : undefined;
+	}
+
+	/** The configured presets; the setting's default holds the built-in ones, which also stand in when no value is registered. */
+	private presets(): ISpacePreset[] {
+		const value = this.configurationService.getValue(SPACE_PRESETS_SETTING);
+		return Array.isArray(value) ? validateSpacePresets(value) : [...defaultSpacePresets];
+	}
+
+	/** Empty (`null`), one of the presets, or `undefined` when the user cancels. */
+	private async pickPreset(): Promise<ISpacePreset | null | undefined> {
+		const viewName = (id: string): string | undefined => {
+			const container = this.viewDescriptors.getViewContainerById(id);
+			return container ? viewContainerDisplayName(container, this.viewDescriptors.getViewContainerModel(container)) : this.viewDescriptors.getViewDescriptorById(id)?.name.value;
+		};
+		const picks = [
+			{ label: localize('presetEmpty', "Empty"), description: localize('presetEmptyDescription', "Start from the New Tile picker"), preset: null },
+			...this.presets().map(preset => ({ label: preset.name, description: describeSpacePreset(preset, viewName), preset })),
+		];
+		const selected = await this.quickInputService.pick(picks, { placeHolder: localize('pickPreset', "Start the space from a preset"), matchOnDescription: true });
+		return selected?.preset;
+	}
+
+	/** `base`, or `base 2`, `base 3`, … when the session already has a space of that name. */
+	private uniqueSpaceName(session: Session, base: string): string {
+		const names = session.spaces.map(space => space.name);
+		for (let n = 1; ; n++) {
+			const name = n === 1 ? base : `${base} ${n}`;
+			if (!names.includes(name)) { return name; }
+		}
+	}
+
+	/** Empty spaces open the New Tile picker; presets open their tiles. The tile controller depends on this service, so both go by command. */
+	private applyPreset(preset: ISpacePreset | null): Promise<unknown> {
+		return preset ? this.commandService.executeCommand('_terminalFirst.tile.applyPreset', preset) : this.commandService.executeCommand('terminalFirst.tile.new');
+	}
+
+	async newSpace(): Promise<void> {
+		const created = await this.transitions.queue(async (): Promise<{ preset: ISpacePreset | null } | undefined> => {
+			const session = this.activeEditorSession;
+			if (!session) { return undefined; }
+			const preset = await this.pickPreset();
+			if (preset === undefined) { return undefined; }
+			let name: string;
+			if (preset) {
+				name = this.uniqueSpaceName(session, preset.name);
+			} else {
+				const suggested = nextSpaceName(session.spaces.map(space => space.name));
+				const value = await this.quickInputService.input({ prompt: localize('newSpacePrompt', "Name of the new space"), value: suggested, ignoreFocusLost: true });
+				if (value === undefined) { return undefined; }
+				name = value.trim() || suggested;
+			}
+			session.spaces.push({ id: generateUuid(), name });
+			session.activeSpace = session.spaces[session.spaces.length - 1].id;
+			await this.present(session, 'editor');
+			return { preset };
+		});
+		if (created && this.activeEditorSession) { await this.applyPreset(created.preset); }
+	}
+
+	async newSessionFromPreset(): Promise<void> {
+		const created = await this.transitions.queue(async (): Promise<{ preset: ISpacePreset | null } | undefined> => {
+			const current = this.active;
+			const start = current?.cwd ? URI.parse(current.cwd).fsPath : current?.terminal?.capabilities.get(TerminalCapability.CwdDetection)?.getCwd() || current?.terminal?.initialCwd || this.workspaceContextService.getWorkspace().folders[0]?.uri.fsPath || '';
+			const home = (await this.pathService.userHome({ preferLocal: true })).fsPath;
+			const resolve = (value: string): URI => {
+				const expanded = untildify(value.trim(), home);
+				return URI.file(isAbsolute(expanded) ? expanded : join(start, expanded));
+			};
+			const value = await this.quickInputService.input({
+				prompt: localize('sessionDirectoryPrompt', "Directory for the new session"),
+				value: start,
+				ignoreFocusLost: true,
+				validateInput: async value => {
+					if (!value.trim()) { return localize('sessionDirectoryEmpty', "Enter a directory."); }
+					try {
+						return (await this.fileService.stat(resolve(value))).isDirectory ? undefined : localize('sessionDirectoryNotDirectory', "Not a directory.");
+					} catch {
+						return localize('sessionDirectoryMissing', "The directory does not exist.");
+					}
+				},
+			});
+			if (value === undefined) { return undefined; }
+			const preset = await this.pickPreset();
+			if (preset === undefined) { return undefined; }
+			const cwd = resolve(value);
+			const session = this.addSession(await this.createTerminal(cwd.fsPath));
+			if (preset) { session.spaces[0].name = preset.name; }
+			await this.present(session, 'editor', true, cwd.toString());
+			return { preset };
+		});
+		if (created && this.activeEditorSession) { await this.applyPreset(created.preset); }
+	}
+
+	selectSpace(id: string): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.active;
+			if (!session || !session.spaces.some(space => space.id === id)) { return; }
+			session.activeSpace = id;
+			await this.present(session, 'editor');
+		});
+	}
+
+	selectSpaceAt(index: number): Promise<void> {
+		const space = this.active?.spaces[index - 1];
+		return space ? this.selectSpace(space.id) : Promise.resolve();
+	}
+
+	switchSpace(offset: number): Promise<void> {
+		const session = this.active;
+		if (!session) { return Promise.resolve(); }
+		const index = session.spaces.findIndex(space => space.id === session.activeSpace);
+		return this.selectSpace(session.spaces[(index + offset + session.spaces.length) % session.spaces.length].id);
+	}
+
+	renameSpace(): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.activeEditorSession;
+			const space = session?.spaces.find(space => space.id === session.activeSpace);
+			if (!session || !space) { return; }
+			const value = await this.quickInputService.input({ prompt: localize('renameSpacePrompt', "Space name"), value: space.name, ignoreFocusLost: true });
+			if (value === undefined || !value.trim()) { return; }
+			space.name = value.trim();
+			this.saveSessions();
+			this.changed.fire();
+		});
+	}
+
+	closeSpace(id?: string): Promise<void> {
+		return this.transitions.queue(async () => {
+			const session = this.activeEditorSession;
+			const space = session?.spaces.find(space => space.id === (id ?? session.activeSpace));
+			if (!session || !space) { return; }
+			const key = spaceLayoutKey(session.id, space.id);
+			this.changingSession = true;
+			try {
+				if (!await this.closeLayouts([key])) { return; }
+				const index = session.spaces.indexOf(space);
+				session.spaces.splice(index, 1);
+				// Like closing the final session, closing the final space leaves a fresh empty one.
+				if (!session.spaces.length) { session.spaces.push({ id: generateUuid(), name: defaultSpaceName(1) }); }
+				if (session.activeSpace === space.id) { session.activeSpace = session.spaces[Math.min(index, session.spaces.length - 1)].id; }
+				await this.present(session, 'editor');
+				await this.disposeLayouts([key]);
+			} finally { this.changingSession = false; }
+		});
+	}
+
+	async pickSpace(): Promise<void> {
+		const session = this.activeEditorSession;
+		if (!session) { return; }
+		const selected = await this.quickInputService.pick(session.spaces.map((space, index) => ({
+			id: space.id,
+			label: space.name,
+			description: space.id === session.activeSpace ? localize('activeSpace', "Active") : undefined,
+			keybinding: index < 9 ? this.keybindingService.lookupKeybinding(`terminalFirst.space.select${index + 1}`) : undefined,
+		})), { placeHolder: localize('pickSpace', "Switch Space") });
+		if (selected) { await this.selectSpace(selected.id); }
 	}
 
 	openTerminalTile(groupId: number): Promise<boolean> {
@@ -690,7 +922,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			if (!resources.length) { return; }
 			const editors = await Promise.all(targets.map(async ({ resource, selection }) => ({ resource, forceUntitled: !await this.fileService.exists(resource), options: { pinned: true, selection } })));
 			await this.editorService.openEditors(editors);
-			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorSessions || this.editorSessions.owns(session.id, groupId))); }
+			if (wait) { closed = this.instantiationService.invokeFunction(accessor => whenEditorClosed(accessor, resources, groupId => !this.editorSessions || this.layoutKeys(session).some(key => this.editorSessions!.owns(key, groupId)))); }
 		});
 		await closed;
 	}

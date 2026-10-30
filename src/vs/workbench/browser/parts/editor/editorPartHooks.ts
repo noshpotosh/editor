@@ -8,7 +8,7 @@ import { Color } from '../../../../base/common/color.js';
 import { IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { GroupIdentifier } from '../../../common/editor.js';
-import { IEditorPart } from '../../../services/editor/common/editorGroupsService.js';
+import { IEditorGroup, IEditorPart } from '../../../services/editor/common/editorGroupsService.js';
 import { IEditorGroupTitleHeight, IEditorGroupView } from './editor.js';
 import type { IEditorPartUIState } from './editorPart.js';
 
@@ -32,6 +32,10 @@ export interface IEditorGroupLayoutHook {
 	titleHeight?(height: IEditorGroupTitleHeight): IEditorGroupTitleHeight;
 	/** Whether activating a minimized group expands it. Defaults to true. */
 	readonly expandMinimizedGroupOnActivate?: boolean;
+	/** Split only the source group's space equally, without distributing or expanding other groups. */
+	readonly preserveOtherGroupsOnSplit?: boolean;
+	/** Adjusts the layout after an editor split, without affecting ordinary group creation. */
+	onDidSplitEditor?(part: IEditorPart, source: IEditorGroup): void;
 	/** The color of the separators between groups; defaults to the theme's group border. */
 	readonly gridSeparatorBorder?: Color;
 }

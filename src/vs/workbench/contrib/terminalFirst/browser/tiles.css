@@ -71,10 +71,10 @@
 	border-color: var(--vscode-terminalFirst-tile-activeBorder, var(--vscode-terminalFirst-tile-border, transparent));
 }
 
-/* The tiles sit in one rounded tray set into the window chrome; the tile stroke outlines it in every theme, even where the gutter and the chrome share a color. */
+/* Keep the rounded tray quiet around the tile cards; only contrast themes need an outer stroke. */
 .monaco-workbench.terminal-first-tiles .monaco-grid-view .part.editor:not(.modal-editor-part) {
-	--modern-ui-editor-border-color: var(--vscode-terminalFirst-tile-border, transparent);
-	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-tile-border, transparent);
+	--modern-ui-editor-border-color: var(--vscode-contrastBorder, transparent);
+	border: var(--vscode-strokeThickness) solid var(--vscode-contrastBorder, transparent);
 	border-radius: var(--vscode-cornerRadius-large);
 	box-sizing: border-box;
 	overflow: hidden;

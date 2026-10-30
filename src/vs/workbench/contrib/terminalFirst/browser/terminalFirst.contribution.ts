@@ -27,6 +27,8 @@ import './viewPruning.js';
 import { TileListFocusTracker } from './tileListNavigation.js';
 import { createTerminalFirstTerminalPolicy } from './terminalPolicy.js';
 import { SessionStripContribution } from './sessionStripContribution.js';
+import { SpaceStatusContribution } from './spaceStatus.js';
+import { spaceCommandIds } from './spaceCommands.js';
 import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';
 
 registerSingleton(ITerminalFirstService, TerminalFirstService, InstantiationType.Delayed);
@@ -48,6 +50,7 @@ if (terminalFirstEnabled) {
 	} });
 	registerWorkbenchContribution2('workbench.contrib.terminalFirst', TerminalFirstContribution, WorkbenchPhase.AfterRestored);
 	registerWorkbenchContribution2(SessionStripContribution.ID, SessionStripContribution, WorkbenchPhase.BlockRestore);
+	registerWorkbenchContribution2(SpaceStatusContribution.ID, SpaceStatusContribution, WorkbenchPhase.AfterRestored);
 	registerWorkbenchContribution2(TileListFocusTracker.ID, TileListFocusTracker, WorkbenchPhase.BlockRestore);
 	Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
 		overrides: {
@@ -98,6 +101,7 @@ if (terminalFirstEnabled) {
 				'terminalFirst.leader', 'terminalFirst.copyMode.enter', 'terminalFirst.toggleFloatingTerminal',
 				...['new', 'explorer', 'scm', 'terminal', 'close', 'maximize', 'toggleSplit', 'balance'].map(id => `terminalFirst.tile.${id}`),
 				...['Left', 'Down', 'Up', 'Right'].flatMap(direction => ['focus', 'move', 'swap', 'resize'].map(action => `terminalFirst.tile.${action}${direction}`)),
+				...spaceCommandIds, 'terminalFirst.newSessionFromPreset',
 			],
 			'terminal.integrated.tabs.enabled': false,
 			'terminal.integrated.tabs.showActiveTerminal': 'never',
@@ -129,6 +133,10 @@ if (terminalFirstEnabled) {
 
 	CommandsRegistry.registerCommand('terminalFirst.showEditor', accessor => accessor.get(ITerminalFirstService).showEditor());
 	CommandsRegistry.registerCommand('terminalFirst.renameSession', accessor => accessor.get(ITerminalFirstService).renameSession());
+	registerAction2(class extends Action2 {
+		constructor() { super({ id: 'terminalFirst.newSessionFromPreset', title: localize2('terminalFirst.newSessionFromPreset', "New Session from Preset"), category: localize2('terminalFirst.category', "VS NOSH"), f1: true }); }
+		run(accessor: ServicesAccessor): Promise<void> { return accessor.get(ITerminalFirstService).newSessionFromPreset(); }
+	});
 	for (let slot = 1; slot <= 9; slot++) {
 		CommandsRegistry.registerCommand(`terminalFirst.jumpToSlot${slot}`, accessor => accessor.get(ITerminalFirstService).jumpToSlot(slot));
 	}

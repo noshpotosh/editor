@@ -15,6 +15,7 @@ When working across a handful of files, the user wants a short, ordered, hand-cu
 - **S5.3** Lists are stored per project in profile storage. They survive restarts and are shared by all sessions and windows that resolve to the same project.
 - **S5.4** **Toggle Floating Jump List** (`Cmd+Shift+J`, leader `j j`) shows a numbered list overlay titled "Jump List — `<project path>`". It is mutually exclusive with the other overlays. The cursor starts on the active file if it is listed.
 - **S5.5** Rows show file icons and paths relative to the project, or absolute paths for files outside it.
+- **S5.5a** A preview pane beside the rows shows the focused file the same way the file browser does (S4.16): a read-only editor with live unsaved text, or a placeholder for binary, missing, or larger than 1 MiB files. It is hidden when the overlay is narrower than 600 px. While the next file loads, the previous preview stays on screen; there is no loading flash.
 - **S5.6** Keys in the list:
 
   | Keys | Action |
@@ -24,6 +25,7 @@ When working across a handful of files, the user wants a short, ordered, hand-cu
   | `dd` | Remove (remembered for put) |
   | `p` / `P` | Put the last removed entry after / before the cursor |
   | `u` / `Ctrl+R` | Undo / redo list edits |
+  | `Ctrl+D` / `Ctrl+U` | Scroll the preview |
   | `Enter`, double-click | Open as pinned editor and close |
   | `q`, `Esc`, Close button, editor click | Close |
 
@@ -45,12 +47,13 @@ Both bindings use weight `ExternalExtension + 1000`, to rank above extension def
 
 - `jumpListModel.ts`: project resolution, load, save, add, remove, put, and undo/redo stacks.
 - `floatingJumpList.ts` and `floatingJumpList.css`: `WorkbenchList` UI and key handling.
+- `filePreview.ts` and `filePreview.css`: the preview pane shared with the file browser.
 - `TerminalFirstService.addToJumpList`, `toggleFloatingJumpList`, `hideJumpList`: lifecycle and the generation guard.
 
 ## Tests
 
 - `jumpListModel.test.ts` (4 tests)
-- `floatingJumpList.test.ts` (2 tests)
+- `floatingJumpList.test.ts` (4 tests)
 
 ## Known gaps and risks
 

@@ -10,12 +10,9 @@ import { status } from '../../../../base/browser/ui/aria/aria.js';
 import { renderIcon } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { InputBox } from '../../../../base/browser/ui/inputbox/inputBox.js';
 import { IListRenderer } from '../../../../base/browser/ui/list/list.js';
-import { Disposable, MutableDisposable, IReference, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { dirname, isEqual, isEqualOrParent } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
-import { CodeEditorWidget } from '../../../../editor/browser/widget/codeEditor/codeEditorWidget.js';
-import { IModelService } from '../../../../editor/common/services/model.js';
-import { IResolvedTextEditorModel, ITextModelService } from '../../../../editor/common/services/resolverService.js';
 import { localize } from '../../../../nls.js';
 import { StandardKeyboardEvent } from '../../../../base/browser/keyboardEvent.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
@@ -27,7 +24,7 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IPathService } from '../../../services/path/common/pathService.js';
 import { FileBrowserOperations, FileBrowserOperation } from './fileBrowserOperations.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
-import { FileKind, IFileService, IFileStat } from '../../../../platform/files/common/files.js';
+import { FileKind } from '../../../../platform/files/common/files.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { WorkbenchList } from '../../../../platform/list/browser/listService.js';
 import { defaultInputBoxStyles } from '../../../../platform/theme/browser/defaultStyles.js';
@@ -35,8 +32,8 @@ import { DEFAULT_LABELS_CONTAINER, IResourceLabel, ResourceLabels } from '../../
 import { IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 import { TerminalFirstBrowserFocusedContext, TerminalFirstBrowserModeContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
-import { ITextFileService } from '../../../services/textfile/common/textfiles.js';
 import { FileBrowserEntry, FileBrowserModel } from './fileBrowserModel.js';
+import { FilePreview } from './filePreview.js';
 import { fileBrowserMarkedIcon, fileBrowserPromptIcon } from './terminalFirstIcons.js';
 
 const fileBrowserActions: { id: string; label: string; keys: string }[] = [];
@@ -56,16 +53,10 @@ export class FloatingFileBrowser extends Disposable {
 	private readonly actions = fileBrowserActions;
 	private readonly body: HTMLElement;
 	private readonly listContainer: HTMLElement;
-	private readonly previewContainer: HTMLElement;
-	private readonly previewMessage: HTMLElement;
-	private readonly previewEditorContainer: HTMLElement;
 	private readonly input: InputBox;
 	private readonly list: WorkbenchList<FileBrowserEntry>;
-	private readonly preview: CodeEditorWidget;
+	private readonly preview: FilePreview;
 	private readonly model: FileBrowserModel;
-	private readonly reference = this._register(new MutableDisposable<IReference<IResolvedTextEditorModel>>());
-	private previewGeneration = 0;
-	private previewStat: IFileStat | undefined;
 	private visible = false;
 	private mode: 'insert' | 'normal' = 'insert';
 	private opening = false;
@@ -78,10 +69,6 @@ export class FloatingFileBrowser extends Disposable {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IEditorGroupsService groups: IEditorGroupsService,
-		@IFileService private readonly fileService: IFileService,
-		@ITextModelService private readonly resolver: ITextModelService,
-		@ITextFileService private readonly textFiles: ITextFileService,
-		@IModelService private readonly models: IModelService,
 		@IContextKeyService contextKeys: IContextKeyService,
 		@IQuickInputService private readonly quickInput: IQuickInputService,
 		@IKeybindingService private readonly keybindings: IKeybindingService,
@@ -126,15 +113,7 @@ export class FloatingFileBrowser extends Disposable {
 				accessibilityProvider: { getAriaLabel: entry => this.model.marked.has(entry.stat.resource.toString()) ? localize('markedEntry', "{0}, marked", entry.stat.name) : entry.stat.name, getWidgetAriaLabel: () => localize('files', "Files") },
 				multipleSelectionSupport: false, typeNavigationEnabled: false,
 			}));
-		this.previewContainer = append(this.body, $('.file-browser-preview'));
-		const previewTitle = append(this.previewContainer, $('span.file-browser-pane-title'));
-		previewTitle.textContent = localize('previewTitle', "Preview");
-		this.previewMessage = append(this.previewContainer, $('.file-browser-preview-message'));
-		this.previewEditorContainer = append(this.previewContainer, $('.file-browser-preview-editor'));
-		this.preview = this._register(instantiationService.createInstance(CodeEditorWidget, this.previewEditorContainer, {
-			readOnly: true, domReadOnly: true, minimap: { enabled: false }, lineNumbers: 'on', scrollBeyondLastLine: false,
-			contextmenu: false, renderLineHighlight: 'none', ariaLabel: localize('filePreview', "File Preview"),
-		}, { contributions: [] }));
+		this.preview = this._register(instantiationService.createInstance(FilePreview, this.body, () => this.model.hidden));
 		const footer = append(this.element, $('.file-browser-footer'));
 		this.status = append(footer, $('.file-browser-status'));
 		this.status.setAttribute('role', 'status');
@@ -148,7 +127,7 @@ export class FloatingFileBrowser extends Disposable {
 			this.list.setSelection([...event.indexes]);
 			if (this.visible && event.elements[0]) { status(event.elements[0].stat.name); }
 			this.model.selected = event.elements[0]?.stat.resource;
-			void this.updatePreview(event.elements[0]);
+			this.updatePreview(event.elements[0]);
 		}));
 		this._register(this.list.onMouseDblClick(event => { if (event.element) { void this.accept(event.element); } }));
 		this._register(addDisposableListener(this.element, EventType.KEY_DOWN, event => this.keydown(event), true));
@@ -186,10 +165,7 @@ export class FloatingFileBrowser extends Disposable {
 		this.visible = false;
 		this.element.hidden = true;
 		this.model.hide();
-		this.previewStat = undefined;
-		this.previewGeneration++;
-		this.preview.setModel(null);
-		this.reference.clear();
+		this.preview.clear();
 		this.focusedContext.reset();
 		this.modeContext.reset();
 	}
@@ -242,7 +218,7 @@ export class FloatingFileBrowser extends Disposable {
 				case 'root': if (this.model.root) { this.model.navigate(this.model.root); } return;
 				case 'setRoot': if (focused) { this.model.setRoot(focused.stat.isDirectory ? focused.stat.resource : dirname(focused.stat.resource)); } return;
 				case 'browser': this.model.toggleBrowser(); return;
-				case 'hidden': this.model.toggleHidden(); this.previewStat = undefined; void this.updatePreview(focused); return;
+				case 'hidden': this.model.toggleHidden(); this.updatePreview(focused, true); return;
 				case 'insert': case 'filter': this.setMode('insert'); return;
 				case 'escape': if (this.mode === 'insert') { this.setMode('normal'); } else { this.hide(true); } return;
 				case 'close': this.hide(true); return;
@@ -250,17 +226,12 @@ export class FloatingFileBrowser extends Disposable {
 				case 'focus': {
 					const active = this.element.ownerDocument.activeElement;
 					if (active === this.actionsButton) { this.setMode(this.mode); }
-					else if (this.previewContainer.contains(active)) { this.actionsButton.focus(); }
-					else if (!this.previewContainer.hidden) { this.previewMessage.tabIndex = 0; this.previewMessage.hidden ? this.preview.focus() : this.previewMessage.focus(); }
+					else if (this.preview.contains(active)) { this.actionsButton.focus(); }
+					else if (!this.preview.hidden) { this.preview.focus(); }
 					else { this.actionsButton.focus(); }
 					return;
 				}
-				case 'previewDown': case 'previewUp': {
-					const delta = (id === 'previewDown' ? 1 : -1) * this.previewContainer.clientHeight / 2;
-					this.preview.setScrollTop(this.preview.getScrollTop() + delta);
-					this.previewMessage.scrollTop += delta;
-					return;
-				}
+				case 'previewDown': case 'previewUp': this.preview.scroll(id === 'previewDown' ? 1 : -1); return;
 			}
 			restoreFocus = true;
 			this.busy = true;
@@ -318,7 +289,7 @@ export class FloatingFileBrowser extends Disposable {
 		this.renderStatus();
 		if (index >= 0) { this.list.reveal(index); }
 		// A refresh may retain the same focus while its file contents have changed.
-		void this.updatePreview(entries[index]);
+		this.updatePreview(entries[index]);
 		this.layout();
 	}
 
@@ -331,46 +302,8 @@ export class FloatingFileBrowser extends Disposable {
 		finally { this.opening = false; }
 	}
 
-	private async updatePreview(entry: FileBrowserEntry | undefined): Promise<void> {
-		if (entry?.stat === this.previewStat) { return; }
-		this.previewStat = entry?.stat;
-		const generation = ++this.previewGeneration;
-		this.preview.setModel(null);
-		this.reference.clear();
-		this.previewEditorContainer.hidden = true;
-		this.previewMessage.hidden = false;
-		this.previewMessage.textContent = '';
-		if (!entry || !this.visible) { return; }
-		const resource = entry.stat.resource;
-		this.previewMessage.textContent = localize('loadingPreview', "Loading preview…");
-		try {
-			if (entry.stat.isDirectory) {
-				const directory = await this.fileService.resolve(resource);
-				if (generation !== this.previewGeneration) { return; }
-				const children = (directory.children ?? []).filter(child => this.model.hidden || !child.name.startsWith('.'));
-				children.sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
-				this.previewMessage.textContent = children.map(child => child.name + (child.isDirectory ? '/' : '')).join('\n') || localize('emptyFolder', "Empty Folder");
-				return;
-			}
-			const stat = await this.fileService.stat(resource);
-			if (generation !== this.previewGeneration) { return; }
-			const existing = this.models.getModel(resource);
-			if (stat.size > 1024 * 1024 || (existing && existing.getValueLength() > 1024 * 1024)) {
-				this.previewMessage.textContent = localize('largePreview', "Preview unavailable for files larger than 1 MiB. Press Enter to open.");
-				return;
-			}
-			if (!existing) { await this.textFiles.read(resource, { acceptTextOnly: true, limits: { size: 1024 * 1024 } }); }
-			if (generation !== this.previewGeneration) { return; }
-			const reference = await this.resolver.createModelReference(resource);
-			if (generation !== this.previewGeneration) { reference.dispose(); return; }
-			this.reference.value = reference;
-			this.preview.setModel(reference.object.textEditorModel);
-			this.previewMessage.hidden = true;
-			this.previewEditorContainer.hidden = false;
-			this.layout();
-		} catch {
-			if (generation === this.previewGeneration) { this.previewMessage.textContent = localize('unavailablePreview', "Preview unavailable: this file is binary, missing, or cannot be read. Press Enter to open."); }
-		}
+	private updatePreview(entry: FileBrowserEntry | undefined, force = false): void {
+		void this.preview.update(this.visible ? entry?.stat : undefined, force);
 	}
 
 	private layout(): void {
@@ -382,11 +315,11 @@ export class FloatingFileBrowser extends Disposable {
 		const width = area.width * 0.8;
 		const height = area.height * 0.8;
 		Object.assign(this.element.style, { width: `${width}px`, height: `${height}px`, left: `${area.left - container.left + (area.width - width) / 2}px`, top: `${area.top - container.top + (area.height - height) / 2}px` });
-		this.previewContainer.hidden = width < 600;
+		this.preview.hidden = width < 600;
 		const available = this.listContainer.parentElement!.clientHeight - this.path.offsetHeight;
 		this.listContainer.style.height = `${Math.min(available, this.list.length * fileBrowserRowHeight)}px`;
 		this.list.layout(this.listContainer.clientHeight, this.listContainer.clientWidth);
-		this.preview.layout({ width: this.previewEditorContainer.clientWidth, height: this.previewEditorContainer.clientHeight });
+		this.preview.layout();
 	}
 
 	override dispose(): void { this.hideBrowser(); super.dispose(); }

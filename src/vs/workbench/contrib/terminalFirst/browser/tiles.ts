@@ -22,6 +22,7 @@ import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../.
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
+import { EditorPartHooks } from '../../../browser/parts/editor/editorPartHooks.js';
 import { PaneComposite } from '../../../browser/panecomposite.js';
 import { EditorExtensions, EditorInputCapabilities, IEditorFactoryRegistry } from '../../../common/editor.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
@@ -43,6 +44,11 @@ import './tileRouting.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { buildTileCatalog, TileCatalogTarget, TileGroup, tileGroupLabels } from './tileCatalog.js';
+import { DEFAULT_SPACE_ID, spaceLayoutKey } from '../common/spaces.js';
+import { defaultSpacePresets, ISpacePreset, SPACE_PRESETS_SETTING, SpacePresetDirection } from '../common/spacePresets.js';
+import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
+
+const presetDirections: Record<SpacePresetDirection, GroupDirection> = { left: GroupDirection.LEFT, right: GroupDirection.RIGHT, up: GroupDirection.UP, down: GroupDirection.DOWN };
 
 type TileKind = 'editor' | 'terminal' | { readonly container: string };
 
@@ -75,6 +81,10 @@ export const webAppTiles: Readonly<Record<WebAppTileId, IWebAppTile>> = {
 		placeHolder: 'https://bitbucket.org/your-workspace/your-repo/pull-requests/',
 	},
 };
+
+function isWebAppTileId(id: string): id is WebAppTileId {
+	return Object.hasOwn(webAppTiles, id);
+}
 
 /** Returns the trimmed URL when it is an http(s) address, which is all a web app tile loads. */
 function parseWebAppUrl(value: string): string | undefined {
@@ -136,9 +146,16 @@ export class TileService extends Disposable {
 
 	private get part() { return this.groups.mainPart; }
 
-	private findTool(containerId: string): IEditorGroup | undefined {
+	/** The layout key of the active session's active space; view tiles are scoped to it, so every space may hold its own tile for a view. */
+	private get activeScope(): string | undefined {
 		const session = this.sessions.sessions.find(session => session.active);
-		return this.part.groups.find(group => group.editors.some(input => input instanceof ViewTileInput && input.containerId === containerId && input.sessionId === session?.id));
+		const space = session?.spaces.find(space => space.active);
+		return session && spaceLayoutKey(session.id, space?.id ?? DEFAULT_SPACE_ID);
+	}
+
+	private findTool(containerId: string): IEditorGroup | undefined {
+		const scope = this.activeScope;
+		return this.part.groups.find(group => group.editors.some(input => input instanceof ViewTileInput && input.containerId === containerId && input.sessionId === scope));
 	}
 
 	private getComposite(containerId: string): PaneComposite | undefined {
@@ -249,8 +266,8 @@ export class TileService extends Disposable {
 	open(kind: TileKind, direction?: GroupDirection, focus = true): Promise<IEditorGroup | undefined> {
 		return this.operations.queue(async () => {
 			await this.sessions.showEditor(false);
-			const session = this.sessions.sessions.find(session => session.active);
-			if (!session) { return undefined; }
+			const scope = this.activeScope;
+			if (!scope) { return undefined; }
 			if (typeof kind === 'object') {
 				const existing = this.findTool(kind.container);
 				if (existing) { if (focus) { existing.focus(); } return existing; }
@@ -274,7 +291,7 @@ export class TileService extends Disposable {
 			};
 			try {
 				if (typeof kind === 'object') {
-					await this.editors.openEditor(this.instantiation.createInstance(ViewTileInput, kind.container, session.id), { pinned: true, preserveFocus: !focus }, group);
+					await this.editors.openEditor(this.instantiation.createInstance(ViewTileInput, kind.container, scope), { pinned: true, preserveFocus: !focus }, group);
 				} else if (kind === 'terminal' && !await this.sessions.openTerminalTile(group.id)) {
 					rollback();
 					return undefined;
@@ -289,11 +306,48 @@ export class TileService extends Disposable {
 		});
 	}
 
+	/**
+	 * Opens a preset's tiles in order into the active space. Each step splits the tile of step
+	 * `from` (default: the previous step) toward its direction and takes `size` of that cell.
+	 * Tiles that cannot open (an unknown view, a web app with no URL configured) are skipped
+	 * rather than prompting, so a preset never blocks on input. Focus ends on the first tile.
+	 */
+	async applyPreset(preset: ISpacePreset): Promise<void> {
+		const opened: (IEditorGroup | undefined)[] = [];
+		for (const step of preset.tiles) {
+			const from = step.from !== undefined ? opened[step.from] : opened.at(-1);
+			if (from && this.part.groups.includes(from)) { this.part.activateGroup(from); }
+			const source = this.part.activeGroup;
+			const cell = this.part.getSize(source);
+			const direction = step.direction ? presetDirections[step.direction] : undefined;
+			const group = await this.openPresetTile(step.tile, direction);
+			opened.push(group);
+			if (group && group !== source && direction !== undefined && step.size !== undefined && this.part.groups.includes(group)) {
+				this.part.setSize(group, isHorizontal(direction) ? { width: Math.round(cell.width * step.size), height: cell.height } : { width: cell.width, height: Math.round(cell.height * step.size) });
+			}
+		}
+		const first = opened.find(group => group && this.part.groups.includes(group));
+		first?.focus();
+	}
+
+	private openPresetTile(id: string, direction: GroupDirection | undefined): Promise<IEditorGroup | undefined> {
+		if (id === 'editor' || id === 'terminal') { return this.open(id, direction); }
+		if (id.startsWith('web:')) {
+			const app = id.slice('web:'.length);
+			if (!isWebAppTileId(app) || !parseWebAppUrl(this.configuration.getValue<string>(webAppTiles[app].setting) ?? '')) { return Promise.resolve(undefined); }
+			return this.openWebApp(app, direction);
+		}
+		return this.openView(id, direction);
+	}
+
 	/** Splits the focused editor tile and shows its active file in the new tile, like `:split`. */
 	async splitEditor(direction: GroupDirection): Promise<void> {
 		const source = this.part.activeGroup;
 		const editor = source.activeEditor;
 		const group = await this.open('editor', direction);
+		if (group) {
+			EditorPartHooks.layout?.onDidSplitEditor?.(this.part, source);
+		}
 		if (group && editor && !editor.hasCapability(EditorInputCapabilities.RequiresDedicatedGroup) && source.contains(editor)) {
 			source.copyEditor(editor, group);
 		}
@@ -413,6 +467,31 @@ if (terminalFirstEnabled) {
 			'terminalFirst.tiles.resizeStep': { type: 'number', default: 40, minimum: 4, maximum: 400, description: localize('resizeStep', "Pixels to move a tile edge for each resize command.") },
 		}
 	});
+	Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
+		id: 'terminalFirst.spaces', title: localize('spaceSettings', "Spaces"), type: 'object', properties: {
+			[SPACE_PRESETS_SETTING]: {
+				type: 'array',
+				default: defaultSpacePresets,
+				markdownDescription: localize('spacePresets', "Tile layouts offered when creating a space or a session. Each tile is `editor`, `terminal`, `web:jira`, `web:bitbucket`, or a view or view container ID such as `workbench.view.explorer`. Tiles open in order; `from` is the step whose tile is split (default: the previous one), `direction` is where the new tile goes, and `size` is its share of that tile (0 to 1)."),
+				items: {
+					type: 'object', required: ['name', 'tiles'], properties: {
+						name: { type: 'string', description: localize('spacePresetName', "Preset name; also the name of spaces created from it.") },
+						tiles: {
+							type: 'array', items: {
+								type: 'object', required: ['tile'], properties: {
+									tile: { type: 'string', description: localize('spacePresetTile', "`editor`, `terminal`, `web:jira`, `web:bitbucket`, or a view or view container ID.") },
+									direction: { type: 'string', enum: ['left', 'right', 'up', 'down'], description: localize('spacePresetDirection', "Where the tile opens relative to the tile it splits.") },
+									size: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1, description: localize('spacePresetSize', "The new tile's share of the split tile.") },
+									from: { type: 'integer', minimum: 0, description: localize('spacePresetFrom', "Index of the earlier step whose tile is split; defaults to the previous step.") },
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	});
+	CommandsRegistry.registerCommand('_terminalFirst.tile.applyPreset', (accessor, preset: ISpacePreset) => accessor.get(ITileService).applyPreset(preset));
 	Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
 		id: 'terminalFirst.webApps', title: localize('webAppSettings', "Web App Tiles"), type: 'object', properties: {
 			[webAppTiles.jira.setting]: { type: 'string', default: '', format: 'uri', description: localize('jiraBoardUrl', "The Jira board to show in the Jira Board tile. When empty, Open Jira Board asks for it.") },

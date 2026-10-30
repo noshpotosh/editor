@@ -25,8 +25,7 @@
 	flex: 1;
 	min-height: 0;
 }
-.terminal-first-file-browser .file-browser-path,
-.terminal-first-file-browser .file-browser-pane-title {
+.terminal-first-file-browser .file-browser-path {
 	padding: var(--vscode-spacing-size40) var(--vscode-spacing-size80);
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -86,28 +85,6 @@
 .terminal-first-file-browser .monaco-inputbox input {
 	font-family: inherit;
 }
-.terminal-first-file-browser .file-browser-preview {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	border: var(--vscode-strokeThickness) solid var(--vscode-terminalFirst-floating-border, transparent);
-	border-radius: var(--vscode-cornerRadius-medium);
-	display: flex;
-	flex-direction: column;
-}
-.terminal-first-file-browser .file-browser-preview-editor {
-	flex: 1;
-	min-height: 0;
-	width: 100%;
-}
-.terminal-first-file-browser .file-browser-preview-message {
-	padding: var(--vscode-spacing-size80);
-	color: var(--vscode-descriptionForeground);
-	white-space: pre;
-	overflow: auto;
-	flex: 1;
-	min-height: 0;
-}
 .terminal-first-file-browser .file-browser-footer {
 	display: flex;
 	align-items: center;
@@ -120,8 +97,4 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-.terminal-first-file-browser .file-browser-preview-message:focus-visible {
-	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
-	outline-offset: calc(-1 * var(--vscode-strokeThickness));
 }
