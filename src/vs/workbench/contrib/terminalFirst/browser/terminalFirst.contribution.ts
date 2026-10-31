@@ -8,7 +8,7 @@ import './tiles.js';
 import './terminalCopyMode.js';
 import './terminalFirstLeader.js';
 import './terminalFirstNavigation.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { terminalFirstEnabled, TerminalFirstFloatingEnabledContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
@@ -19,6 +19,7 @@ import { Extensions, IConfigurationRegistry } from '../../../../platform/configu
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
+import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
@@ -30,15 +31,19 @@ import { SessionStripContribution } from './sessionStripContribution.js';
 import { SpaceStatusContribution } from './spaceStatus.js';
 import { spaceCommandIds } from './spaceCommands.js';
 import { TerminalPolicy } from '../../terminal/browser/terminalPolicy.js';
+import { TerminalInstance } from '../../terminal/browser/terminalInstance.js';
 
 registerSingleton(ITerminalFirstService, TerminalFirstService, InstantiationType.Delayed);
 
-/** Starts the terminal-first surface after workbench and terminal restoration. */
+/** Starts loading the terminal renderer while the shell controller waits for layout and reconnection. */
 class TerminalFirstContribution {
 	constructor(
 		@ITerminalFirstService service: ITerminalFirstService,
 		@ILogService logService: ILogService,
+		@IKeybindingService keybindingService: IKeybindingService,
+		@IContextKeyService contextKeyService: IContextKeyService,
 	) {
+		void TerminalInstance.getXtermConstructor(keybindingService, contextKeyService).catch(error => logService.error(error));
 		void service.initialize().catch(error => logService.error(error));
 	}
 }

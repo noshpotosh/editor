@@ -274,16 +274,16 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		for (const terminal of this.terminalGroupService.instances) {
 			if (!this.sessionList.some(session => session.terminal === terminal)) { this.addSession(terminal); }
 		}
+		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
+		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
+		if (!explicitFiles) {
+			// Prepare the container before creating even the first session on a fresh profile.
+			await this.terminalGroupService.showPanel(false);
+		}
 		if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 		this.active = this.sessionList.find(session => session.id === stored?.active) ?? this.sessionList.find(session => session.terminal === this.terminalGroupService.activeInstance) ?? this.sessionList[0];
 		this.editorSessions?.activate(this.activeLayoutKey(this.active));
 		this.initialized = true;
-		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
-		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
-		if (!explicitFiles) {
-			// The panel exists before the shell is created, so the new instance attaches to its container at once.
-			await this.terminalGroupService.showPanel(false);
-		}
 		this.startupTimings.track(await this.ensureTerminal(this.active));
 		mark('code/terminalFirst/created');
 		await this.present(this.active, explicitFiles ? 'editor' : 'shell');

@@ -122,6 +122,7 @@ Workstream F in `IMP_PLAN.md`. Requirements:
 - **S7.36** The VS NOSH launcher builds with `VSCODE_SKIP_COPILOT=1`: the packaged app has no Copilot extension and no auto-updated built-in. `product.json` retains upstream's required `defaultChatAgent` metadata: onboarding and account services assume it exists even when chat is disabled. Removing the metadata prevents the workbench from loading; retaining it does not bundle the extension.
 - **S7.37** Quit waits at most one second for extension deactivation and 1.5 seconds for extension host exit in VS NOSH.
 - **S7.38** `e` with plain file or directory arguments (optionally after `--wait`) sends the request to the window's CLI socket with `curl` and starts no Node process; options, `--goto`, and names outside `A-Za-z0-9/._~@+-` go through `cli.cjs` as before. The extension removes its pointer on deactivation and sweeps pointers whose socket is gone.
+- **S7.39** The fork starts loading xterm when its BlockRestore contribution is created and prepares the panel before creating a fresh profile's first session. The measured Codex status and chat pet context contributions join the deferred list; content providers, notebook working-copy handlers, and chat URL setup remain in their original phases.
 
 Results (medians, p90 in parentheses; one row per landed step). Upstream `ellapsed` (main start to `code/didStartWorkbench`) grows from F1 on because the hidden session layouts, whose restore completes the workbench's own restore, now wait for the shell to be presented; it is reported for comparison with upstream, not as a target.
 
@@ -135,6 +136,10 @@ F2 changed nothing measurable on this machine (the login shell here finishes wel
 | F3.1 + F1 `ef7f9dcb5e0` | owner | warm | 1152 (1212) | 1365 (1404) | 1374 (1409) | 192 (219) | 996 (1038) | |
 | F2 `b53e117c3a5` | stock | warm | 1159 (1325) | 1394 (1609) | 1412 (1614) | 244 (339) | 1009 (1128) | |
 | F2 `b53e117c3a5` | owner | warm | 1181 (1288) | 1394 (1509) | 1408 (1516) | 212 (303) | 1018 (1121) | |
+| F4–F6 corrected `306af882f47` | stock | warm | 1123 (1158) | 1322 (1341) | 1671 (1705) | 191 (220) | 965 (986) | 188 (222) |
+| F4–F6 corrected `306af882f47` | owner | warm | 1013 (1080) | 1209 (1242) | 1546 (1558) | 196 (223) | 880 (909) |  |
+
+The 2026-10-31 rows use a short encoded command response with bracketed paste. Older input rows accepted arbitrary output after a newline and can understate actual readiness; their input values are not directly comparable. An initial long encoded probe measured stock/owner input at 1840/1864 ms and was discarded as a comparison baseline because unbracketed input exercises zsh editing hooks. First-output medians in that run were 1327/1318 ms. Quit now targets the measured PID and starts its clock immediately before requesting termination, excluding automation startup.
 
 ### Verification result
 

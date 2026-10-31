@@ -21,6 +21,8 @@ const RESTORED_PHASE = 3;
  */
 const DEFERRED_BLOCK_RESTORE_CONTRIBUTIONS = new Set<string>([
 	'workbench.contrib.agentHostChatDebug',
+	'workbench.contrib.codexStatusBarEntry',
+	'workbench.contrib.chatPetContext',
 ]);
 
 /**
