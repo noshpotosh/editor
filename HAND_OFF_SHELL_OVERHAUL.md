@@ -1,6 +1,6 @@
 # Shell startup and quit performance: completion record (Workstream F)
 
-> Updated 2026-10-31 on branch `terminal-first`. The implementation through F7 is committed and the packaged build of `b7f7657299e` passed. Final F7 measurements and the packaged smoke checklist are **pending below**. Its first packaged run fell back because upstream profile detection mutated frozen configuration objects; a deep-clone fix and regression are being prepared, so that run is not evidence of prespawn performance. The most recent completed stock measurement is 1660 ms launch→input, so the under-500 ms target has not been achieved. Read Workstream F in `IMP_PLAN.md` and Startup performance in `docs/specs/07-workbench-branding-distribution.md` for the design and requirements.
+> Updated 2026-10-31 on branch `terminal-first`, through `c4dd2dea51d`. F0–F7 and the packaged lifecycle checks are implemented and validated. The final package measured 1239 ms stock launch→input, 1245 ms owner launch→input and 194 ms quit; the under-500 ms input target remains unmet. The final package includes the startup view-restoration guard and has built successfully. Final performance reruns, fresh trusted/untrusted launches and workspace-file override checks passed. Cold-cache timing and direct Terminal.app comparison remain unavailable for the host-permission reasons recorded below. Read Workstream F in `IMP_PLAN.md` and Startup performance in `docs/specs/07-workbench-branding-distribution.md` for the design and requirements.
 
 ## Owner decisions retained
 
@@ -21,7 +21,9 @@ The owner uses VS NOSH as the everyday terminal: launch, run a command, quit. Th
 | `87b7cd66ea7` | F4–F6 validation fixes | Restored required product metadata, corrected input/quit measurement, added upstream startup diagnostics, and documented the pre-existing upstream edits |
 | `306af882f47` | Input probe | Short unique encoded `printf` response with bracketed paste; command echo and unrelated output cannot satisfy readiness |
 | `d38d8362725` | F3.2 and measured F4 list | Preload core xterm at `BlockRestore`, show the panel before creating the first fresh session, defer Codex status and chat pet context contributions |
-| `b7f7657299e` | F7 | Speculative main-process shell startup, coordinated adoption and fallback, shared environment construction, live-reload preservation and race regressions; PENDING corrective profile-clone commit and successful adoption measurement |
+| `b7f7657299e` | F7 | Speculative main-process shell startup, coordinated adoption and fallback, shared environment construction, live-reload preservation and race regressions |
+| `2d735dff9e3` | F7 packaged correction | Deep-clone frozen profile defaults before upstream profile detection mutates them; regression covered and prespawn adoption verified in stock and owner runs |
+| `c4dd2dea51d` | Startup restoration correction | Prevent automatic nonterminal view restoration from replacing the shell while the policy is `starting`; actual pane-entry/session-queue regression and explicit-file startup covered |
 
 ### F3.2 and contribution deferral
 
@@ -53,10 +55,14 @@ Every row below is a five-run median in milliseconds. Full p90s, per-run marks a
 | F4–F6 corrected `306af882f47` | owner | 1013 | 1209 | 1546 | 196 | |
 | F3.2 + measured F4 IDs `d38d8362725` | stock | 1128 | 1337 | 1660 | 209 | 191 |
 | F3.2 + measured F4 IDs `d38d8362725` | owner | 1139 | 1346 | 1695 | 203 | |
-| F7 `b7f7657299e` | stock | PENDING | PENDING | PENDING | PENDING | PENDING |
-| F7 `b7f7657299e` | owner | PENDING | PENDING | PENDING | PENDING | |
+| F7 corrected `2d735dff9e3` | stock | 1135 | 1224 | 1365 | 88 | 192 |
+| F7 corrected `2d735dff9e3` | owner | 1135 | 1222 | 1372 | 83 | |
+| Final restoration guard `c4dd2dea51d` | stock | 1021 | 1102 | 1239 | 81 | 194 |
+| Final restoration guard `c4dd2dea51d` | owner | 1027 | 1109 | 1245 | 82 | |
 
 F3.2's stock change is within the observed noise; the owner row was 149 ms slower at input. These rows do not establish an isolated gain for xterm preload or the two tiny contribution deferrals. F7's decision rule remained satisfied: first output lagged presentation by more than 150 ms.
+
+Corrected F7 reduced stock input readiness by 295 ms (17.8%) against F3.2 and owner input by 323 ms. Every measured corrected stock run reports `reconnected: true` and `code/terminalFirst/prespawnAdopted`. The first `b7f7657299e` batch fell back because profile detection tried to mutate frozen configuration; it is not evidence of prespawn performance. `2d735dff9e3` fixed that defect before the successful measurements above.
 
 Completed comparison artifacts:
 
@@ -66,7 +72,14 @@ Completed comparison artifacts:
 - F3.2 stock: `.build/terminal-first/perf/20261031T124451-stock-warm/summary.json`.
 - F3.2 owner: `.build/terminal-first/perf/20261031T124702-owner-warm/summary.json`.
 - F3.2 quit: `.build/terminal-first/perf/20261031T124909-stock-warm-quit/summary.json`.
-- F7 artifacts and before/after assessment: **PENDING — fill after the final packaged runs.**
+- F7 corrected stock: `.build/terminal-first/perf/20261031T130653-stock-warm/summary.json`.
+- F7 corrected owner: `.build/terminal-first/perf/20261031T130910-owner-warm/summary.json`.
+- F7 corrected quit: `.build/terminal-first/perf/20261031T131125-stock-warm-quit/summary.json`.
+- Final stock: `.build/terminal-first/perf/20261031T132204-stock-warm/summary.json`.
+- Final owner: `.build/terminal-first/perf/20261031T132433-owner-warm/summary.json`.
+- Final quit: `.build/terminal-first/perf/20261031T132702-stock-warm-quit/summary.json`.
+
+All ten final startup runs adopted prespawn, executed the unique input probe and started extension loading after shell presentation. Final stock input p90 was 1320 ms, owner p90 1288 ms, quit p90 215 ms. The extra 126 ms stock improvement over the earlier F7 batch includes approximately 90 ms before workbench startup; it is run-to-run variation, not attributed to the small restoration guard.
 
 ### Historical measurements
 
@@ -80,29 +93,34 @@ These older input rows accepted arbitrary output after a newline and can underst
 
 ## Verification and packaged smoke
 
-- The packaged build of `b7f7657299e` passed. Build log: `/tmp/vs-nosh-f7-build.log`.
-- Full client typechecking and targeted lint on 15 TypeScript files passed during F7 integration; these runs were captured in tool output, not disk logs. Layer validation passed (`/tmp/vs-nosh-f7-layers.log`). **PENDING — consolidate final validation after the profile-clone correction.**
-- The combined selected Electron run passed the other suites but exposed an incomplete reconnect test fixture. Registering its real `ITerminalService` fixed the deferred style-service error; the focused reconnect rerun passed 3 tests (two regressions plus the harness check) with no disposable leaks. That successful rerun was captured in tool output, not a disk log; `/tmp/vs-nosh-f7-all-tests.log` is the earlier combined run and must not be described as fully passing.
+- The final packaged build of `c4dd2dea51d` passed, including 547 generated Node compile-cache entries. Build log: `.build/terminal-first/validation/vs-nosh-final-build.log`.
+- The frozen-profile correction passed 19 focused tests, full client typechecking and targeted lint. The subsequent startup-restoration guard passed the 90-test selected Electron run. Layer validation passed during F7 integration (`.build/terminal-first/validation/vs-nosh-f7-layers.log`), and all 18 CLI/performance harness tests passed.
+- An earlier combined Electron run exposed an incomplete reconnect fixture. Registering its real `ITerminalService` fixed the deferred style-service error; the focused rerun passed both regressions plus the harness check without disposable leaks. `.build/terminal-first/validation/vs-nosh-f7-all-tests.log` is that earlier failing run, not the successful final validation.
 - `scripts/upstream-check.sh` passes: 71 documented patches, 79 changed upstream files, zero warnings. The earlier `gridview.ts` and `editorCommands.ts` manifest gaps are resolved.
 
-Packaged smoke results: **PENDING — fill each row from observed behavior.**
+Core lifecycle smoke was observed on `2d735dff9e3`; final trusted startup on `c4dd2dea51d` stays in shell mode with no dialog and enters the editor only after `e README.md`. Evidence is in `.build/terminal-first/smoke/core-smoke-2d735dff9e3.json`, `final-trusted.json`, `alternate-smoke-2d735dff9e3.json` and the screenshots alongside them. Temporary test profiles and scripts are removed after validation.
 
 | Check | Result |
 | --- | --- |
-| Fresh stock and owner launches: exactly one session shell; actual input probe succeeds | PENDING |
-| Main prespawn publication and renderer adoption appear in marks; fallback remains usable | PENDING |
-| Reload Window preserves the live shell PID and nonce | PENDING |
-| Quit with two sessions, relaunch: tabs/layouts restored with fresh shell PIDs | PENDING |
-| Initial `PATH` and `which git` agree with the intended login-shell environment | PENDING |
-| `e README.md` from the first prompt reaches the owning editor | PENDING |
-| Cmd+Q with `sleep 100` running exits without a dialog or surviving child | PENDING |
-| Untrusted folder gets a shell; entering the editor applies trust | PENDING |
+| Fresh stock and owner launches: exactly one session shell; actual input probe succeeds | Passed; corrected five-run batches complete |
+| Renderer reports `reconnected: true` and `prespawnAdopted`; fallback remains usable | Passed; successful adoption plus empty-window/custom-cwd ordinary creation |
+| Reload Window preserves the live shell PID and nonce | Passed for both session shells and the floating shell; scrollback remained visible |
+| Quit with two sessions, relaunch: tabs/layouts restored with fresh shell PIDs | Passed; session order and README/Source Control tiles restored; all three PIDs/nonces changed |
+| Initial `PATH` and `which git` agree with the intended login-shell environment | Passed against `/bin/zsh -ilc`, excluding the added VS NOSH CLI directory; both resolve `/usr/bin/git`. Direct Terminal.app comparison was blocked by macOS Automation (`-1743`) |
+| `e README.md` and `e --wait` reach the owning editor | Passed; both status files contain `0`; `--wait` completed only after the requested editor closed |
+| Source Control tile shows repository changes | Passed |
+| Cmd+Q with `sleep 100` running exits without a dialog or surviving child | Passed in 208 ms; process tree exited |
+| Empty-window launch, pty-host crash recovery and custom-cwd fallback | Passed; crash replacement executed a command and retained one session |
+| Untrusted folder stays in shell until editor entry | Passed on final build: no startup modal, command executes; deliberate editor entry shows the trust prompt, which was not accepted |
+| Workspace-file terminal override uses ordinary creation | Passed on final build: no prespawn adoption, one shell, correct cwd and configured `NOSH_ALT_OVERRIDE=workspace-value` |
+
+The untrusted-folder smoke found automatic Explorer restoration queuing editor entry during `starting`; `c4dd2dea51d` fixes that race. The initial folder-level environment-override check correctly rejected prespawn, but the existing managed-workspace conversion dropped the folder setting before ordinary terminal creation. That is a pre-F7 migration limitation, not a passed environment-fidelity check. The separate final `.code-workspace` override case preserves the environment setting correctly. Both final alternate checks are recorded in `.build/terminal-first/smoke/alternate-smoke-c4dd2dea51d.json`; the corrected untrusted launch stays in shell until deliberate editor entry.
 
 ## Remaining performance work and limits
 
-The under-500 ms target is still unproven and was not met by the completed pre-F7 rows. **PENDING — replace this sentence with the final measured gap after F7.** Do not mark that target complete merely because all planned code changes landed.
+The final stock input median is 1239 ms, 739 ms above the 500 ms threshold. The planned implementation and validation work improves startup but does not achieve that target. The controlled F7 comparison reduced stock input by 295 ms; final measurements retain the gain. Further progress needs work on the earlier process/window/renderer path, beyond the completed F steps.
 
-The earlier F2 timeline spent about 630 ms before the workbench started: main initialization, window/preload and loading the renderer bundle. New marks separate main service initialization and window stages. Both examined profiles had renderer cache files, but upstream `didUseCachedData` only estimates cache use from the commit/configuration; it does not prove a V8 cache hit. No speculative cache or service-initialization rewrite was made. Backup/workspace initialization remains a prerequisite for restore. The apparent second default-profile resolution does not repeat full profile discovery and did not justify another upstream change.
+The earlier F2 timeline spent about 630 ms before the workbench started, across main startup, window/preload and renderer bundle loading. New marks show the main service-initialization wait itself is only about 10–17 ms and loads backup/workspace state needed for restoration, so it remains. Both examined profiles had renderer cache files, but upstream `didUseCachedData` only estimates cache use from the commit/configuration; it does not prove a V8 cache hit. No speculative cache rewrite was made. The apparent second default-profile resolution does not repeat full profile discovery and did not justify another upstream change.
 
 A three-run cold-cache measurement was attempted but exited with status 1 immediately because passwordless sudo for `purge` is unavailable on this host. No purge occurred and no cold measurements were taken; this check did not pass. The owner profile is a copied test profile, not a modification to the everyday profile.
 
