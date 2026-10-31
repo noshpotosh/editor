@@ -3,7 +3,7 @@
 # Licensed under the MIT License. See License.txt in the project root for license information.
 #
 # Measures packaged VS NOSH launches: process start to shell presented, first prompt output, and an
-# input echo round trip, plus quit time. Each run launches the app with upstream's
+# input command round trip, plus quit time. Each run launches the app with upstream's
 # --prof-duration-markers (the app exits itself about 15 s after the workbench is ready) and the
 # fork writes its marks beside the markers file. Results land in .build/terminal-first/perf/<timestamp>.
 #
@@ -38,6 +38,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 if [[ "$PROFILE" != stock && "$PROFILE" != owner ]]; then printf 'profile must be stock or owner\n' >&2; exit 2; fi
+if [[ ! "$RUNS" =~ ^[1-9][0-9]*$ ]]; then printf 'runs must be a positive integer\n' >&2; exit 2; fi
 if [[ $BUILD -eq 1 ]]; then "$ROOT/scripts/terminal-first-app.sh" --build-only; fi
 if [[ ! -x "$APP" ]]; then printf 'Packaged app missing; run scripts/terminal-first-app.sh --build-only first.\n' >&2; exit 1; fi
 STAMP="$(cat "$ROOT/.build/terminal-first/packaged-build-complete" 2>/dev/null || printf unknown)"
@@ -67,11 +68,25 @@ mkdir -p "$RUN_DIR"
 LABEL="${LABEL:-${HEAD_STAMP:0:11} $PROFILE $KIND}"
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time*1000'; }
 launch() {
-	# $1 = markers file; extra args follow. Runs in the foreground until the app exits.
+	# Invoke in a subshell so exec makes $! the app's PID, not an intermediate shell.
+	# $1 = markers file; extra args follow.
 	local markers="$1"; shift
-	env -u VSCODE_DEV -u ELECTRON_RUN_AS_NODE "$APP" \
+	exec env -u VSCODE_DEV -u ELECTRON_RUN_AS_NODE "$APP" \
 		--user-data-dir "$USER_DATA" --extensions-dir "$EXTENSIONS" --shared-data-dir "$SHARED" \
 		--prof-duration-markers-file "$markers" "$@" "$FOLDER"
+}
+run_startup() {
+	local markers="$1" log="$2"; shift 2
+	(launch "$markers" "$@") >"$log" 2>&1 &
+	local startup_pid=$!
+	for ((t = 0; t < 90; t++)); do if ! kill -0 "$startup_pid" 2>/dev/null; then break; fi; sleep 1; done
+	if kill -0 "$startup_pid" 2>/dev/null; then
+		printf 'Startup exceeded 90 seconds; terminating only perf process %s. See %s\n' "$startup_pid" "$log" >&2
+		kill -KILL "$startup_pid" 2>/dev/null || true
+		wait "$startup_pid" 2>/dev/null || true
+		return 124
+	fi
+	wait "$startup_pid"
 }
 STARTUP_ARGS=()
 for marker in code/didStartMain-code/terminalFirst/presented code/didStartMain-code/terminalFirst/prompt code/didStartMain-code/terminalFirst/input ellapsed; do
@@ -81,7 +96,10 @@ done
 # A rebuilt app has no V8 code cache yet; one discarded run creates it.
 if [[ $BUILD -eq 1 || ! -d "$USER_DATA/CachedData" ]]; then
 	printf 'Warm-up run (not recorded)...\n' >&2
-	launch "$RUN_DIR/warmup.tsv" "${STARTUP_ARGS[@]}" >/dev/null 2>&1 || true
+	if ! run_startup "$RUN_DIR/warmup.tsv" "$RUN_DIR/warmup.log" "${STARTUP_ARGS[@]}"; then
+		printf 'Warm-up failed; no measurements recorded.\n' >&2
+		exit 1
+	fi
 fi
 
 for ((i = 1; i <= RUNS; i++)); do
@@ -90,23 +108,47 @@ for ((i = 1; i <= RUNS; i++)); do
 		# Without duration markers the app stays open; wait for the fork's prompt dump, then quit it.
 		rm -f "$RUN_DIR/run-$i.tsv.terminalFirst.json"
 		now_ms > "$RUN_DIR/run-$i.launch"
-		launch "$RUN_DIR/run-$i.tsv" >"$RUN_DIR/run-$i.log" 2>&1 &
+		(launch "$RUN_DIR/run-$i.tsv") >"$RUN_DIR/run-$i.log" 2>&1 &
 		pid=$!
-		for ((t = 0; t < 600; t++)); do [[ -f "$RUN_DIR/run-$i.tsv.terminalFirst.json" ]] && break; sleep 0.1; done
+		ready=0
+		for ((t = 0; t < 600; t++)); do
+			if [[ -f "$RUN_DIR/run-$i.tsv.terminalFirst.json" ]] && grep -q '"code/terminalFirst/prompt"' "$RUN_DIR/run-$i.tsv.terminalFirst.json"; then ready=1; break; fi
+			if ! kill -0 "$pid" 2>/dev/null; then break; fi
+			sleep 0.1
+		done
+		if [[ $ready -eq 0 ]]; then
+			printf 'run %d: app did not produce a prompt; quit timing is invalid.\n' "$i" >&2
+			kill -KILL "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			exit 1
+		fi
 		sleep 1
-		quit_start="$(now_ms)"
-		osascript -e 'quit app "VS NOSH"' >/dev/null 2>&1 || kill -TERM "$pid"
+		# NSRunningApplication sends a normal quit request to this exact launch, leaving other VS NOSH windows alone.
+		# Start the clock after JXA/AppKit initialization so interpreter startup does not count against the app.
+		if ! quit_start="$(osascript -l JavaScript -e 'function run(argv) { ObjC.import("AppKit"); var application = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(argv[0])); var started = Date.now(); if (!application.terminate) { throw new Error("Could not request application quit"); } return started; }' "$pid" 2>/dev/null)"; then
+			printf 'run %d: could not request a normal quit; timing is invalid.\n' "$i" >&2
+			kill -KILL "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			exit 1
+		fi
+		for ((t = 0; t < 750; t++)); do if ! kill -0 "$pid" 2>/dev/null; then break; fi; sleep 0.02; done
+		if kill -0 "$pid" 2>/dev/null; then
+			printf 'run %d: quit exceeded 15 seconds; timing is invalid.\n' "$i" >&2
+			kill -KILL "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			exit 1
+		fi
 		wait "$pid" 2>/dev/null || true
 		echo $(( $(now_ms) - quit_start )) > "$RUN_DIR/run-$i.quit"
 		printf 'run %d: quit %s ms\n' "$i" "$(cat "$RUN_DIR/run-$i.quit")" >&2
 	else
 		now_ms > "$RUN_DIR/run-$i.launch"
-		launch "$RUN_DIR/run-$i.tsv" "${STARTUP_ARGS[@]}" >"$RUN_DIR/run-$i.log" 2>&1 || printf 'run %d: app exited with %s\n' "$i" "$?" >&2
+		run_startup "$RUN_DIR/run-$i.tsv" "$RUN_DIR/run-$i.log" "${STARTUP_ARGS[@]}" || printf 'run %d: app exited with %s\n' "$i" "$?" >&2
 		printf 'run %d: %s\n' "$i" "$(tr '\t' ' ' < "$RUN_DIR/run-$i.tsv" 2>/dev/null || printf 'no markers file')" >&2
 	fi
 done
 
-EXPECT='launch->presented,launch->prompt'
+EXPECT='launch->presented,launch->prompt,launch->input'
 if [[ $QUIT -eq 1 ]]; then EXPECT=quit; fi
 node "$ROOT/scripts/terminal-first-perf.mjs" aggregate "$RUN_DIR" --label "$LABEL" --history "$PERF_ROOT/history.tsv" --expect "$EXPECT" ${BASELINE:+--baseline "$BASELINE"} | tee "$RUN_DIR/summary.md"
 printf 'Results: %s\n' "$RUN_DIR" >&2

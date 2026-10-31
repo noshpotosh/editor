@@ -121,6 +121,7 @@ suite('Terminal First', () => {
 				shellLaunchConfig,
 				onTitleChanged: Event.None,
 				onData: data.event,
+				onProcessReplayComplete: Event.None,
 				processReady: Promise.resolve(),
 				sendText: async text => { sent.push(text); didSend.fire(); },
 				attachToElement: () => { },
@@ -188,7 +189,7 @@ suite('Terminal First', () => {
 		instantiationService.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
 		const environment = { filesToOpenOrCreate, workspaceStorageHome: URI.file('/managed'), args };
 		instantiationService.stub(IWorkbenchEnvironmentService, upcastPartial<IWorkbenchEnvironmentService>(environment));
-		instantiationService.stub(ITimerService, upcastPartial<ITimerService>({ setPerformanceMarks: (_source, marks) => { published.push(marks); didPublish.fire(); }, getPerformanceMarks: () => [] }));
+		instantiationService.stub(ITimerService, upcastPartial<ITimerService>({ setPerformanceMarks: (_source, marks) => { published.push(marks); didPublish.fire(); }, getPerformanceMarks: () => [], whenReady: async () => true, startupMetrics: upcastPartial<ITimerService['startupMetrics']>({ didUseCachedData: true }) }));
 		instantiationService.stub(IFileService, 'writeFile', async (resource: URI, _contents: VSBuffer) => { written.push(resource.path); didWrite.fire(); return undefined; });
 		instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('new.ts'));
 		instantiationService.stub(IWorkspaceEditingService, upcastPartial<IWorkspaceEditingService>({}));
@@ -769,17 +770,22 @@ suite('Terminal First', () => {
 		}, { prompt: 1, input: 0, sent: [], written: [], published: ['code/terminalFirst/presented', 'code/terminalFirst/prompt'] });
 	});
 
-	test('a perf run echoes one newline after the prompt and writes the marks beside the markers file', async () => {
+	test('a perf run waits for the decoded input probe and writes the marks beside the markers file', async () => {
 		const state = fixture(undefined, { 'prof-duration-markers': ['code/didStartMain-code/terminalFirst/input'], 'prof-duration-markers-file': '/perf/run-1.tsv' });
 		await state.service.initialize();
-		const newlineSent = Event.toPromise(state.didSend);
+		const probeSent = Event.toPromise(state.didSend);
 		state.emitData(state.active!, 'prompt> ');
-		await newlineSent;
+		await probeSent;
+		const probe = state.sent[0];
+		const token = [...probe.matchAll(/\\(?<octal>[0-7]{3})/g)].map(match => String.fromCharCode(parseInt(match.groups!.octal, 8))).join('');
+		state.emitData(state.active!, probe);
+		state.emitData(state.active!, 'unrelated startup output');
 		const beforeEcho = countMarks('input');
 		const reportWritten = Event.toPromise(state.didWrite);
-		state.emitData(state.active!, '\r\nprompt> ');
+		state.emitData(state.active!, token.slice(0, 5));
+		state.emitData(state.active!, token.slice(5));
 		await reportWritten;
-		deepStrictEqual({ sent: state.sent, beforeEcho, input: countMarks('input'), written: [...new Set(state.written)] }, { sent: ['\n'], beforeEcho: 0, input: 1, written: ['/perf/run-1.tsv.terminalFirst.json'] });
+		deepStrictEqual({ probes: state.sent.length, encoded: probe.startsWith('printf '), beforeEcho, input: countMarks('input'), written: [...new Set(state.written)] }, { probes: 1, encoded: true, beforeEcho: 0, input: 1, written: ['/perf/run-1.tsv.terminalFirst.json'] });
 	});
 
 	test('stored sessions show on the strip before the editor part is ready', async () => {
