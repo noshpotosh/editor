@@ -43,6 +43,8 @@ import { IStartupPerfArgs } from '../../browser/startupTimings.js';
 import { clearMarks, getMarks, PerformanceMark } from '../../../../../base/common/performance.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
 import { TERMINAL_FIRST_PRESPAWN_OWNER } from '../../../../../platform/terminalFirst/common/terminalFirstEnvironment.js';
+import { PanelPart } from '../../../../browser/parts/panel/panelPart.js';
+import { viewContainerHosts } from '../../../../services/views/browser/viewContainerHost.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -228,6 +230,33 @@ suite('Terminal First', () => {
 		strictEqual(state.mainContainer.classList.contains('terminal-first-starting'), true);
 		await pending;
 		deepStrictEqual([state.mainContainer.classList.contains('terminal-first-starting'), state.mainContainer.classList.contains('terminal-first-shell'), state.maximized], [false, true, true]);
+	});
+
+	test('startup view restoration cannot queue editor entry behind shell initialization', async () => {
+		const state = fixture();
+		const instantiationService = workbenchInstantiationService(undefined, store);
+		instantiationService.stub(IViewDescriptorService, upcastPartial<IViewDescriptorService>({ getDefaultViewContainer: () => undefined }));
+		const part = store.add(instantiationService.createInstance(PanelPart));
+		const opened: string[] = [];
+		store.add(viewContainerHosts.registerResolver(id => ({
+			isEnabled: () => true,
+			get: () => undefined,
+			open: async () => { opened.push(id); if (id !== 'terminal') { await state.service.showEditor(false); } return undefined; },
+			close: async () => { },
+		})));
+		const initializing = state.service.initialize();
+		strictEqual(terminalFirstPolicy.mode, 'starting');
+		const restoring = part.openPaneComposite('workbench.view.explorer');
+		await part.openPaneComposite('terminal');
+		await Promise.all([initializing, restoring]);
+		deepStrictEqual([state.service.sessions[0].mode, opened], ['shell', ['terminal']]);
+		await part.openPaneComposite('workbench.view.explorer');
+		deepStrictEqual(opened, ['terminal']);
+
+		await state.service.showEditor(false);
+		await part.openPaneComposite('workbench.view.explorer');
+		await part.openPaneComposite('terminal');
+		deepStrictEqual([state.service.sessions[0].mode, opened], ['editor', ['terminal', 'workbench.view.explorer']]);
 	});
 
 	test('startup failure reveals the workbench for recovery', async () => {
@@ -457,7 +486,7 @@ suite('Terminal First', () => {
 	test('starts explicit file launches in an editor session with its shell', async () => {
 		const state = fixture([{ fileUri: URI.file('/project/file.ts') }]);
 		await state.service.initialize();
-		deepStrictEqual([state.created.length, state.hidden.get(Parts.PANEL_PART)], [1, true]);
+		deepStrictEqual([state.created.length, state.hidden.get(Parts.PANEL_PART), state.service.sessions[0].mode, terminalFirstPolicy.mode], [1, true, 'editor', 'editor']);
 	});
 
 	test('switches surfaces repeatedly without closing buffers or replacing the shell', async () => {

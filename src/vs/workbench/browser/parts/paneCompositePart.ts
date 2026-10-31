@@ -504,7 +504,8 @@ export abstract class AbstractPaneCompositePart extends CompositePart<PaneCompos
 	}
 
 	async openPaneComposite(id?: string, focus?: boolean): Promise<PaneComposite | undefined> {
-		if ((terminalFirstPolicy.shell && id !== 'terminal') || (terminalFirstEnabled && terminalFirstPolicy.mode === 'editor' && id === 'terminal')) { return undefined; }
+		// Startup restoration must not queue a view tile that switches the new shell into editor mode.
+		if (terminalFirstEnabled && ((terminalFirstPolicy.mode !== 'editor' && id !== 'terminal') || (terminalFirstPolicy.mode === 'editor' && id === 'terminal'))) { return undefined; }
 		const host = id ? viewContainerHosts.get(id) : undefined;
 		if (host) { return host.open(focus); }
 		if (typeof id === 'string' && this.getPaneComposite(id)) {
