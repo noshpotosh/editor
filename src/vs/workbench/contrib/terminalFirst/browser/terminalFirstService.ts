@@ -31,7 +31,7 @@ import { ILogService } from '../../../../platform/log/common/log.js';
 import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { TerminalCapability } from '../../../../platform/terminal/common/capabilities/capabilities.js';
-import { TerminalExitReason, TerminalLocation } from '../../../../platform/terminal/common/terminal.js';
+import { ILocalPtyService, TerminalExitReason, TerminalLocation } from '../../../../platform/terminal/common/terminal.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { whenEditorClosed } from '../../../browser/editor.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -61,6 +61,7 @@ import { isAbsolute, join } from '../../../../base/common/path.js';
 import { viewContainerDisplayName } from './tileCatalog.js';
 import { TerminalFirstStartupTimings } from './startupTimings.js';
 import { terminalFirstStartup } from '../../../services/terminalFirst/common/terminalFirstStartup.js';
+import { terminalFirstShellEnvironment, TERMINAL_FIRST_PRESPAWN_OWNER } from '../../../../platform/terminalFirst/common/terminalFirstEnvironment.js';
 
 export { ITerminalFirstService } from '../../../services/terminalFirst/common/terminalFirst.js';
 
@@ -109,6 +110,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private readonly startupTimings: TerminalFirstStartupTimings;
 	private readonly sessionList: Session[] = [];
 	private active: Session | undefined;
+	private initialSessionId: string | undefined;
+	private prespawnAdoption: 'pending' | 'open' | 'closed' = 'pending';
 	private initialized = false;
 	private trustRequested = false;
 	private changingSession = false;
@@ -182,6 +185,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@IViewDescriptorService private readonly viewDescriptors: IViewDescriptorService,
 		@IPathService private readonly pathService: IPathService,
+		@ILocalPtyService private readonly localPtyService: ILocalPtyService,
 	) {
 		super();
 		this.startupTimings = this._register(instantiationService.createInstance(TerminalFirstStartupTimings));
@@ -208,7 +212,10 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		this._register(storageService.onWillSaveState(() => this.saveSessions()));
 		this._register(terminalService.onAnyInstanceTitleChange(() => this.changed.fire()));
 		this._register(editorService.onDidEditorsChange(() => this.changed.fire()));
-		this._register(terminalService.onDidCreateInstance(terminal => this.adoptReconnected(terminal)));
+		this._register(terminalService.onDidCreateInstance(terminal => queueMicrotask(() => {
+			// Groups insert the instance and subscribe to disposal after the creation event returns.
+			if (!this._store.isDisposed) { this.adoptReconnected(terminal); }
+		})));
 
 		this._register(terminalService.onDidDisposeInstance(terminal => {
 			const owner = this.sessionList.find(session => session.floatingTerminal === terminal);
@@ -252,6 +259,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	private async initializeSessions(): Promise<void> {
 		mark('code/terminalFirst/start');
 		const stored = this.storageService.getObject<StoredSessions>(TerminalFirstService.STORAGE_KEY, StorageScope.WORKSPACE);
+		this.initialSessionId = stored?.active;
 		this.managedWorkspace = stored?.managedWorkspace ? URI.parse(stored.managedWorkspace) : undefined;
 		// Stored sessions show on the title bar at once; their shells attach as they reconnect.
 		for (const session of stored?.sessions ?? []) {
@@ -259,6 +267,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			const spaces = session.spaces?.length ? session.spaces : defaultSpaces();
 			this.sessionList.push({ ...session, spaces, activeSpace: spaces.some(space => space.id === session.activeSpace) ? session.activeSpace! : spaces[0].id });
 		}
+		this.prespawnAdoption = 'open';
 		this.changed.fire();
 		// The editor part becomes ready while the workbench renders; by the time this continues, the
 		// grid exists and the parts have restored their visibility, so layout calls below stick.
@@ -270,9 +279,9 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		mark('code/terminalFirst/workspace');
 		await this.whenTerminalsReconnected();
 		mark('code/terminalFirst/connected');
-		for (const terminal of this.terminalService.instances) { this.adoptReconnected(terminal); }
+		for (const terminal of [...this.terminalService.instances]) { this.adoptReconnected(terminal); }
 		for (const terminal of this.terminalGroupService.instances) {
-			if (!this.sessionList.some(session => session.terminal === terminal)) { this.addSession(terminal); }
+			if (!terminal.isDisposed && !this.sessionList.some(session => session.terminal === terminal)) { this.addSession(terminal); }
 		}
 		const explicitFiles = this.environmentService.filesToOpenOrCreate?.length || this.environmentService.filesToDiff?.length || this.environmentService.filesToMerge?.length;
 		this.layoutService.setPartHidden(true, Parts.SIDEBAR_PART);
@@ -280,6 +289,7 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			// Prepare the container before creating even the first session on a fresh profile.
 			await this.terminalGroupService.showPanel(false);
 		}
+		this.prespawnAdoption = 'closed';
 		if (!this.sessionList.length) { this.addSession(await this.createTerminal()); }
 		this.active = this.sessionList.find(session => session.id === stored?.active) ?? this.sessionList.find(session => session.terminal === this.terminalGroupService.activeInstance) ?? this.sessionList[0];
 		this.editorSessions?.activate(this.activeLayoutKey(this.active));
@@ -309,13 +319,43 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 
 	/** Binds a reconnected terminal to the stored session that owns its nonce; after startup, unclaimed reconnected shells become sessions. */
 	private adoptReconnected(terminal: ITerminalInstance): void {
-		const nonce = terminal.shellIntegrationNonce;
+		if (terminal.isDisposed || this.sessionList.some(session => session.terminal === terminal)) { return; }
+		const attached = terminal.shellLaunchConfig.attachPersistentProcess;
+		const nonce = attached?.shellIntegrationNonce ?? terminal.shellIntegrationNonce;
 		if (TerminalFirstLaunch.isDetached(terminal)) {
 			const owner = this.sessionList.find(session => session.floatingNonce === nonce && !session.floatingTerminal);
 			if (owner) { owner.floatingTerminal = terminal; }
 			return;
 		}
-		const owner = this.sessionList.find(session => session.nonce === nonce && !session.terminal);
+		let owner = this.sessionList.find(session => session.nonce === nonce && !session.terminal);
+		if (attached?.reconnectionProperties?.ownerId === TERMINAL_FIRST_PRESPAWN_OWNER) {
+			// Creation events can precede storage restoration and the final reconnect nonce.
+			// Adoption closes before awaiting a fallback spawn, so late arrivals cannot duplicate it.
+			if (this.prespawnAdoption === 'pending') { return; }
+			if (!owner) {
+				owner = this.sessionList.find(session => session.id === this.initialSessionId) ?? this.sessionList[0];
+				if (this.prespawnAdoption === 'closed' || owner?.terminal || (owner?.cwd && !isEqual(URI.parse(owner.cwd), URI.file(attached.cwd)))) {
+					terminal.dispose();
+					// Disposal before xterm attaches has no renderer-owned process to stop yet.
+					void this.localPtyService.shutdown(attached.id, true).catch(error => this.logService.trace('[terminalFirst] Discarding unclaimed shell', error));
+					return;
+				}
+				if (owner) {
+					owner.nonce = nonce;
+				} else {
+					owner = this.addSession(terminal);
+					owner.id = nonce;
+					owner.nonce = nonce;
+				}
+			}
+			// This is an ordinary session shell after adoption. Upstream associates reconnection
+			// owners with task persistence, which must not change this shell's reload behavior.
+			delete attached.reconnectionProperties;
+			if (terminal.shellLaunchConfig.reconnectionProperties?.ownerId === TERMINAL_FIRST_PRESPAWN_OWNER) {
+				delete terminal.shellLaunchConfig.reconnectionProperties;
+			}
+			mark('code/terminalFirst/prespawnAdopted');
+		}
 		if (owner) {
 			owner.terminal = terminal;
 			this.changed.fire();
@@ -354,11 +394,8 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 	}
 
 	private shellEnvironment(): Record<string, string> {
-		return {
-			PATH: `${joinPath(FileAccess.asFileUri(''), '../extensions/terminal-first/bin').fsPath}:\${env:PATH}`,
-			TERMINAL_FIRST_NODE: '${execPath}',
-			TERMINAL_FIRST_CLI_POINTER: joinPath(this.profiles.currentProfile.globalStorageHome, 'vscode.terminal-first', `window-${mainWindow.vscodeWindowId}.json`).fsPath,
-		};
+		return terminalFirstShellEnvironment(joinPath(FileAccess.asFileUri(''), '../extensions/terminal-first/bin').fsPath,
+			this.profiles.currentProfile.globalStorageHome, mainWindow.vscodeWindowId, '${execPath}', '${env:PATH}');
 	}
 
 	private addSession(terminal: ITerminalInstance): Session {

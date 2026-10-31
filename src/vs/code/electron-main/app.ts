@@ -156,6 +156,7 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 import { IProtocolMainService } from '../../platform/protocol/electron-main/protocol.js';
 import { createRemoteResourceRequestHandler } from '../../platform/protocol/electron-main/remoteResourceProtocol.js';
 import { logNodeCompileCacheStatus, markNodeCompileCacheReady, waitForNodeCompileCacheReady } from '../../base/node/nodeCompileCache.js';
+import { TerminalFirstShellPrespawn } from '../../platform/terminalFirst/electron-main/terminalFirstShellPrespawn.js';
 import { terminalFirstEnabled } from '../../platform/terminalFirst/common/terminalFirst.js';
 
 type OSProxyConfigEvent = {
@@ -1328,6 +1329,9 @@ export class CodeApplication extends Disposable {
 		// Workspaces
 		const workspacesManagementMainService = new WorkspacesManagementMainService(this.environmentMainService, this.logService, this.userDataProfilesMainService, backupMainService, dialogMainService);
 		services.set(IWorkspacesManagementMainService, workspacesManagementMainService);
+		if (terminalFirstEnabled) {
+			this._register(new TerminalFirstShellPrespawn(ptyHostService, this.lifecycleMainService, workspacesManagementMainService, this.configurationService, this.productService, this.logService));
+		}
 		services.set(IWorkspacesService, new SyncDescriptor(WorkspacesMainService, undefined, false /* proxied to other processes */));
 		services.set(IWorkspacesHistoryMainService, new SyncDescriptor(WorkspacesHistoryMainService, undefined, false));
 

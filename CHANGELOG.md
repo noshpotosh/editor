@@ -4,6 +4,8 @@ Changes of the fork on top of upstream VS Code. Upstream release notes are at ht
 
 ## Unreleased (upstream base 1.144.0)
 
+- Eligible local single-folder launches pre-spawn their shell while the window loads, preserving session identity and saved directories, with cancellation and normal-launch fallbacks for late work or unsupported settings. Reload keeps live shells, including after upgrading from a build that saved terminal buffers.
+
 - Extensions start after the shell is on screen (`terminalFirst.startup.deferExtensionHost`), chat, notebook, and agent-host setup that the shell does not need is created after restore, and native Vim is ready at once instead of after an extension scan.
 - Quit is quicker: buffers are no longer persisted on quit (`terminal.integrated.persistentSessionReviveProcess` defaults to `never`; restored sessions get fresh shells, Reload Window still reattaches), and the extension host gets one second to deactivate. The first shell is no longer respawned when git publishes its environment (`terminal.integrated.environmentChangesRelaunch` defaults to false).
 - `e file` and `e dir` reach the window with `curl` instead of starting a Node process; `e` waits up to ten seconds for a window that is still starting its extension host.

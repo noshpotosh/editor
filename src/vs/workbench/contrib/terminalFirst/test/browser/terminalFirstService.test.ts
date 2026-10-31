@@ -34,7 +34,7 @@ import { TestConfigurationService } from '../../../../../platform/configuration/
 import { terminalFirstPolicy } from '../../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { TerminalFirstService } from '../../browser/terminalFirstService.js';
 import { createTerminalFirstTerminalPolicy, TerminalFirstLaunch } from '../../browser/terminalPolicy.js';
-import { IShellLaunchConfig, TerminalLocation } from '../../../../../platform/terminal/common/terminal.js';
+import { ILocalPtyService, IShellLaunchConfig, TerminalLocation } from '../../../../../platform/terminal/common/terminal.js';
 import { runWithFakedTimers } from '../../../../../base/test/common/timeTravelScheduler.js';
 import { terminalFirstStartup } from '../../../../services/terminalFirst/common/terminalFirstStartup.js';
 import { EditorPartSessions } from '../../browser/editorPartSessions.js';
@@ -42,6 +42,7 @@ import { ITimerService } from '../../../../services/timer/browser/timerService.j
 import { IStartupPerfArgs } from '../../browser/startupTimings.js';
 import { clearMarks, getMarks, PerformanceMark } from '../../../../../base/common/performance.js';
 import { VSBuffer } from '../../../../../base/common/buffer.js';
+import { TERMINAL_FIRST_PRESPAWN_OWNER } from '../../../../../platform/terminalFirst/common/terminalFirstEnvironment.js';
 
 suite('Terminal First', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -51,7 +52,7 @@ suite('Terminal First', () => {
 	const countMarks = (name: string) => getMarks().filter(entry => entry.name === `code/terminalFirst/${name}`).length;
 
 	/** Creates real controller behavior with terminal and layout boundaries replaced by small fakes. */
-	function fixture(filesToOpenOrCreate?: IPath[], args?: IStartupPerfArgs, options?: { connected?: boolean; editorPartReady?: Promise<void> }) {
+	function fixture(filesToOpenOrCreate?: IPath[], args?: IStartupPerfArgs, options?: { connected?: boolean; editorPartReady?: Promise<void>; panelReady?: Promise<void>; creationReady?: Promise<void> }) {
 		const instantiationService = workbenchInstantiationService(undefined, store);
 		const activeChanged = store.add(new Emitter<void>());
 		const closed = store.add(new Emitter<IEditorCloseEvent>());
@@ -72,6 +73,11 @@ suite('Terminal First', () => {
 		let owns: (key: string, groupId: number) => boolean = () => true;
 		let spaceName: string | undefined = 'Review';
 		const disposedIds: number[] = [];
+		const shutdownIds: number[] = [];
+		const panelShown = store.add(new Emitter<void>());
+		const creationStarted = store.add(new Emitter<void>());
+		const panelReady = options?.panelReady;
+		const creationReady = options?.creationReady;
 		let active: ITerminalInstance | undefined;
 		let maximized = false;
 		const hidden = new Map<Parts, boolean>();
@@ -110,15 +116,17 @@ suite('Terminal First', () => {
 		}
 		const editors = store.add(new Editors());
 		const policy = createTerminalFirstTerminalPolicy();
-		const addTerminal = (options?: ICreateTerminalOptions, reconnected?: { nonce: string }) => {
+		const addTerminal = (options?: ICreateTerminalOptions, reconnected?: { nonce: string; prespawnCwd?: string }) => {
 			const id = allTerminals.length + 1;
-			const shellLaunchConfig: IShellLaunchConfig = reconnected ? { attachPersistentProcess: upcastPartial<NonNullable<IShellLaunchConfig['attachPersistentProcess']>>({ id, shellIntegrationNonce: reconnected.nonce }) } : {};
+			const shellLaunchConfig: IShellLaunchConfig = reconnected ? { attachPersistentProcess: upcastPartial<NonNullable<IShellLaunchConfig['attachPersistentProcess']>>({ id, shellIntegrationNonce: reconnected.nonce, cwd: reconnected.prespawnCwd, reconnectionProperties: reconnected.prespawnCwd ? { ownerId: TERMINAL_FIRST_PRESPAWN_OWNER } : undefined }) } : {};
 			policy.prepareLaunchConfig(shellLaunchConfig, options);
 			const floating = shellLaunchConfig.hideFromUser === true;
 			const data = store.add(new Emitter<string>());
 			const terminal = upcastPartial<ITerminalInstance>({
 				instanceId: id,
 				shellLaunchConfig,
+				get isDisposed() { return disposedIds.includes(id); },
+				initialCwd: typeof options?.cwd === 'string' ? options.cwd : undefined,
 				onTitleChanged: Event.None,
 				onData: data.event,
 				onProcessReplayComplete: Event.None,
@@ -156,13 +164,13 @@ suite('Terminal First', () => {
 			instances: allTerminals,
 			onDidDisposeInstance: disposed.event,
 			onAnyInstanceTitleChange: Event.None,
-			createTerminal: async options => { if (failCreation) { throw new Error('launch failed'); } const terminal = addTerminal(options); created.push(terminal); return terminal; },
+			createTerminal: async options => { creationStarted.fire(); await creationReady; if (failCreation) { throw new Error('launch failed'); } const terminal = addTerminal(options); created.push(terminal); return terminal; },
 			setActiveInstance: terminal => { active = terminal; },
 		}));
 		instantiationService.stub(ITerminalGroupService, upcastPartial<ITerminalGroupService>({
 			instances: terminals,
 			get activeInstance() { return active && terminals.includes(active) ? active : undefined; },
-			showPanel: async () => { hidden.set(Parts.PANEL_PART, false); },
+			showPanel: async () => { panelShown.fire(); await panelReady; hidden.set(Parts.PANEL_PART, false); },
 		}));
 		instantiationService.stub(IWorkbenchLayoutService, upcastPartial<IWorkbenchLayoutService>({
 			whenRestored: Promise.resolve(),
@@ -200,8 +208,9 @@ suite('Terminal First', () => {
 		instantiationService.get(IStorageService).store('terminalFirst.sessions', { managedWorkspace: managed.toString(), sessions: [] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
 		instantiationService.stub(IDialogService, dialog);
 		instantiationService.stub(IConfigurationService, config);
+		instantiationService.stub(ILocalPtyService, upcastPartial<ILocalPtyService>({ shutdown: async id => { shutdownIds.push(id); } }));
 		const service = store.add(instantiationService.createInstance(TerminalFirstService));
-		return { instantiationService, service, mainContainer, disposedIds, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; }, published, sent, written, didPublish: didPublish.event, didSend: didSend.event, didWrite: didWrite.event, emitData: (terminal: ITerminalInstance, text: string) => dataEmitters.get(terminal)!.fire(text), reconnect: (nonce: string) => { const terminal = addTerminal({ location: TerminalLocation.Panel }, { nonce }); instanceCreated.fire(terminal); return terminal; }, setConnected: () => { connectionState = TerminalConnectionState.Connected; connectionChanged.fire(); } };
+		return { instantiationService, service, mainContainer, disposedIds, shutdownIds, panelShown: panelShown.event, creationStarted: creationStarted.event, cancelEditorClose: (value = true) => { cancelEditorClose = value; }, dialog, config, activated, closedKeys, restoredKeys, setOwns: (value: typeof owns) => { owns = value; }, setSpaceName: (value: string | undefined) => { spaceName = value; }, setPresetPick: (value: string | undefined) => { presetPick = value; }, presetPicks, storage: instantiationService.get(IStorageService), failCreation: () => { failCreation = true; }, get editorFocusCount() { return editorFocusCount; }, editors, addTerminal, terminals, created, hidden, commands, opened, focused, closed, workspace, get active() { return active; }, get maximized() { return maximized; }, published, sent, written, didPublish: didPublish.event, didSend: didSend.event, didWrite: didWrite.event, emitData: (terminal: ITerminalInstance, text: string) => dataEmitters.get(terminal)!.fire(text), instanceCreated: instanceCreated.event, emitCreated: (terminal: ITerminalInstance) => instanceCreated.fire(terminal), reconnect: (nonce: string, prespawnCwd?: string) => { const terminal = addTerminal({ location: TerminalLocation.Panel }, { nonce, prespawnCwd }); instanceCreated.fire(terminal); return terminal; }, setConnected: () => { connectionState = TerminalConnectionState.Connected; connectionChanged.fire(); } };
 	}
 
 	test('presents the shell before extension registration completes', async () => {
@@ -810,7 +819,91 @@ suite('Terminal First', () => {
 		await pending;
 		// A reconnected shell that no stored session claims becomes a session of its own.
 		state.reconnect('stray');
+		await Promise.resolve();
 		deepStrictEqual({ created: state.created.length, sessions: state.service.sessions.map(session => session.title) }, { created: 0, sessions: ['Shell 1', 'Shell 2'] });
+	});
+
+	test('a prespawn arriving before initialization becomes the only session shell', async () => {
+		const state = fixture();
+		const shell = state.reconnect('prespawn', '/project');
+		await state.service.initialize();
+		deepStrictEqual({ created: state.created.length, ids: state.service.sessions.map(session => session.id), marker: shell.shellLaunchConfig.attachPersistentProcess?.reconnectionProperties }, { created: 0, ids: ['prespawn'], marker: undefined });
+	});
+
+	test('prespawn binds to the saved active session and preserves session order and layouts', async () => {
+		const state = fixture();
+		state.storage.store('terminalFirst.sessions', { active: 'beta', managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [
+			{ id: 'alpha', nonce: 'old-alpha', title: 'Alpha', mode: 'shell' },
+			{ id: 'beta', nonce: 'old-beta', title: 'Beta', mode: 'shell', cwd: 'file:///project', spaces: [{ id: 'review', name: 'Review' }], activeSpace: 'review' },
+		] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		state.reconnect('prespawn', '/project');
+		await state.service.initialize();
+		deepStrictEqual({ created: state.created.length, ids: state.service.sessions.map(session => session.id), active: state.service.sessions.find(session => session.active)?.id, layout: state.activated.at(-1), nonce: state.active?.shellIntegrationNonce }, { created: 0, ids: ['alpha', 'beta'], active: 'beta', layout: 'beta#review', nonce: 'prespawn' });
+	});
+
+	test('a saved working directory takes precedence over the speculative workspace shell', async () => {
+		const state = fixture();
+		state.storage.store('terminalFirst.sessions', { active: 'alpha', managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [
+			{ id: 'alpha', nonce: 'old', title: 'Alpha', mode: 'shell', cwd: 'file:///project/nested' },
+		] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		const shell = state.reconnect('prespawn', '/project');
+		await state.service.initialize();
+		deepStrictEqual({ disposed: shell.isDisposed, shutdownIds: state.shutdownIds, created: state.created.length, cwd: state.active?.initialCwd, ids: state.service.sessions.map(session => session.id) }, { disposed: true, shutdownIds: [shell.instanceId], created: 1, cwd: '/project/nested', ids: ['alpha'] });
+	});
+
+	test('late speculation is discarded after the ordinary startup shell exists', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const active = state.active;
+		const shell = state.reconnect('late-prespawn', '/project');
+		await Promise.resolve();
+		deepStrictEqual({ disposed: shell.isDisposed, created: state.created.length, sessions: state.service.sessions.length, id: state.service.sessions[0].id }, { disposed: true, created: 1, sessions: 1, id: active!.shellIntegrationNonce });
+	});
+
+	test('late prespawn disposal waits until the creating group has inserted its instance', async () => {
+		const state = fixture();
+		await state.service.initialize();
+		const shell = state.addTerminal({ location: TerminalLocation.Panel }, { nonce: 'late', prespawnCwd: '/project' });
+		state.terminals.splice(state.terminals.indexOf(shell), 1);
+		state.emitCreated(shell);
+		const disposedBeforeInsert = shell.isDisposed;
+		state.terminals.push(shell);
+		await Promise.resolve();
+		deepStrictEqual({ disposedBeforeInsert, retained: state.terminals.includes(shell), disposed: shell.isDisposed, shutdownIds: state.shutdownIds }, { disposedBeforeInsert: false, retained: false, disposed: true, shutdownIds: [shell.instanceId] });
+	});
+
+	test('a nonce-matched live prespawn reattaches on reload even after changing directory', async () => {
+		const state = fixture();
+		state.storage.store('terminalFirst.sessions', { active: 'alpha', managedWorkspace: 'file:///managed/vs-nosh.code-workspace', sessions: [
+			{ id: 'alpha', nonce: 'live', title: 'Alpha', mode: 'shell', cwd: 'file:///project/nested' },
+		] }, StorageScope.WORKSPACE, StorageTarget.MACHINE);
+		const shell = state.reconnect('live', '/project');
+		await state.service.initialize();
+		deepStrictEqual({ disposed: shell.isDisposed, created: state.created.length, ids: state.service.sessions.map(session => session.id), marker: shell.shellLaunchConfig.attachPersistentProcess?.reconnectionProperties }, { disposed: false, created: 0, ids: ['alpha'], marker: undefined });
+	});
+
+	test('prespawn arriving while the panel opens is adopted before fallback creation', async () => {
+		const panel = new DeferredPromise<void>();
+		const state = fixture(undefined, undefined, { panelReady: panel.p });
+		const panelOpening = Event.toPromise(state.panelShown);
+		const initializing = state.service.initialize();
+		await panelOpening;
+		state.reconnect('prespawn', '/project');
+		await panel.complete();
+		await initializing;
+		deepStrictEqual({ created: state.created.length, ids: state.service.sessions.map(session => session.id) }, { created: 0, ids: ['prespawn'] });
+	});
+
+	test('prespawn arriving during fallback creation is terminated without adding a session', async () => {
+		const creation = new DeferredPromise<void>();
+		const state = fixture(undefined, undefined, { creationReady: creation.p });
+		const creating = Event.toPromise(state.creationStarted);
+		const initializing = state.service.initialize();
+		await creating;
+		const shell = state.reconnect('late', '/project');
+		await creation.complete();
+		await initializing;
+		deepStrictEqual({ disposed: shell.isDisposed, shutdownIds: state.shutdownIds, created: state.created.length, sessions: state.service.sessions.length }, { disposed: true, shutdownIds: [shell.instanceId], created: 1, sessions: 1 });
 	});
 
 	test('the shell starts when persisted terminals do not reconnect within the budget', () => runWithFakedTimers({ useFakeTimers: true }, async () => {

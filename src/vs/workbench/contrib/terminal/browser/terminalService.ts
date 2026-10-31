@@ -58,6 +58,7 @@ import { GroupIdentifier } from '../../../common/editor.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { hasKey, isString } from '../../../../base/common/types.js';
 import { TerminalPolicy } from './terminalPolicy.js';
+import { terminalFirstEnabled } from '../../../../platform/terminalFirst/common/terminalFirst.js';
 
 interface IBackgroundTerminal {
 	instance: ITerminalInstance;
@@ -318,6 +319,8 @@ export class TerminalService extends Disposable implements ITerminalService {
 			reconnectedPromise = Promise.resolve();
 		}
 		reconnectedPromise.then(async () => {
+			// The shell controller adopts instances at Connected; replay remains independent.
+			if (terminalFirstEnabled) { await this._reconnectedTerminalGroups; }
 			this._setConnected();
 			mark('code/terminal/didReconnect');
 			mark('code/terminal/willReplay');
@@ -998,7 +1001,8 @@ export class TerminalService extends Disposable implements ITerminalService {
 		// local terminal in a remote workspace as profile won't be used in those cases and these
 		// terminals need to be launched before remote connections are established.
 		const isLocalInRemoteTerminal = this._remoteAgentService.getConnection() && URI.isUri(options?.cwd) && options?.cwd.scheme === Schemas.file;
-		if (this._terminalProfileService.availableProfiles.length === 0) {
+		const isAttachedTerminal = terminalFirstEnabled && !!(options?.config as IShellLaunchConfig | undefined)?.attachPersistentProcess;
+		if (this._terminalProfileService.availableProfiles.length === 0 && !isAttachedTerminal) {
 			const isPtyTerminal = options?.config && hasKey(options.config, { customPtyImplementation: true });
 			if (!isPtyTerminal && !isLocalInRemoteTerminal) {
 				if (this._connectionState === TerminalConnectionState.Connecting) {

@@ -114,7 +114,7 @@ for (const patch of manifest.patches) {
 	}
 	const lines = readFileSync(file, 'utf8').split('\n');
 	const imports = lines.map((line, index) => ({ line, index })).filter(({ line }) => line.startsWith('import '));
-	const gate = imports.find(({ line }) => line.includes('terminalFirst/common/terminalFirst'));
+	const gate = imports.find(({ line }) => /terminalFirst\/common\/terminalFirst(?:Policy|Product)?\.js['"]/.test(line));
 	if (gate && imports[imports.length - 1].index !== gate.index) {
 		problems.push(`${patch.path}: the terminalFirst import must be the last import (line ${gate.index + 1})`);
 	}

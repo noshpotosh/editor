@@ -332,6 +332,11 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 	async getTerminalLayoutInfo(): Promise<ITerminalsLayoutInfo | undefined> {
 		const workspaceId = this._getWorkspaceId();
 		const layoutArgs: IGetTerminalLayoutInfoArgs = { workspaceId };
+		if (terminalFirstEnabled && this._configurationService.getValue(TerminalSettingId.PersistentSessionReviveProcess) === 'never') {
+			// Discard pre-upgrade disk state, while leaving the pty host's live layout intact for reload.
+			this._storageService.remove(TerminalStorageKeys.TerminalBufferState, StorageScope.WORKSPACE);
+			this._storageService.remove(TerminalStorageKeys.TerminalLayoutInfo, StorageScope.WORKSPACE);
+		}
 
 		// Revive processes if needed
 		const serializedState = this._storageService.get(TerminalStorageKeys.TerminalBufferState, StorageScope.WORKSPACE);
@@ -372,7 +377,8 @@ export class LocalTerminalBackend extends BaseTerminalBackend implements ITermin
 			}
 		}
 
-		return this._proxy.getTerminalLayoutInfo(layoutArgs);
+		// The main-side prespawn coordinator must see the initial read even if the direct channel is ready.
+		return (terminalFirstEnabled ? this._localPtyService : this._proxy).getTerminalLayoutInfo(layoutArgs);
 	}
 
 	private async _resolveEnvironmentForRevive(variableResolver: terminalEnvironment.VariableResolver | undefined, shellLaunchConfig: IShellLaunchConfig): Promise<{ env: IProcessEnvironment; environmentVariableCollections: ReturnType<typeof serializeEnvironmentVariableCollections> | undefined }> {

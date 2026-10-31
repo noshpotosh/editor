@@ -22,6 +22,7 @@ import { detectAvailableProfiles } from './terminalProfiles.js';
 import * as performance from '../../../base/common/performance.js';
 import { getSystemShell } from '../../../base/node/shell.js';
 import { StopWatch } from '../../../base/common/stopwatch.js';
+import { terminalFirstPrespawn } from '../../terminalFirst/common/terminalFirstPrespawn.js';
 import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirst.js';
 
 enum Constants {
@@ -338,6 +339,7 @@ export class PtyHostService extends Disposable implements IPtyHostService {
 		return this._proxy.setTerminalLayoutInfo(args);
 	}
 	async getTerminalLayoutInfo(args: IGetTerminalLayoutInfoArgs): Promise<ITerminalsLayoutInfo | undefined> {
+		if (terminalFirstEnabled) { await terminalFirstPrespawn.beforeGetLayout(args.workspaceId); }
 		// This is optional as we want reconnect requests to go through only if the pty host exists.
 		// Revive is handled specially as reviveTerminalProcesses is guaranteed to be called before
 		// the request for layout info.
