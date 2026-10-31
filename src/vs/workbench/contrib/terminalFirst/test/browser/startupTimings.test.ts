@@ -29,6 +29,7 @@ suite('Terminal First startup marks', () => {
 		const didWrite = store.add(new Emitter<string>());
 		const timerReady = new DeferredPromise<boolean>();
 		const sent: string[] = [];
+		const sendOptions: [boolean, boolean | undefined][] = [];
 		const written: string[] = [];
 		let writes = 0;
 		const terminal = upcastPartial<ITerminalInstance>({
@@ -36,7 +37,7 @@ suite('Terminal First startup marks', () => {
 			onData: data.event,
 			onProcessReplayComplete: replayComplete.event,
 			processReady: Promise.resolve(),
-			sendText: async text => { sent.push(text); didSend.fire(); },
+			sendText: async (text, shouldExecute, forceBracketedPasteMode) => { sent.push(text); sendOptions.push([shouldExecute, forceBracketedPasteMode]); didSend.fire(); },
 		});
 		const environment = upcastPartial<IWorkbenchEnvironmentService & { args: IStartupPerfArgs }>({
 			args: { 'prof-duration-markers': input ? ['code/didStartMain-code/terminalFirst/input'] : [], 'prof-duration-markers-file': '/perf/test.tsv' }
@@ -58,7 +59,7 @@ suite('Terminal First startup marks', () => {
 			} }),
 			store.add(new NullLogService()),
 		));
-		return { timing, terminal, data, replayComplete, didSend, didWrite, timerReady, sent, written, get writes() { return writes; } };
+		return { timing, terminal, data, replayComplete, didSend, didWrite, timerReady, sent, sendOptions, written, get writes() { return writes; } };
 	}
 
 	/** Decodes the printf payload so the fake pty can return the result rather than echoing the command. */
@@ -87,10 +88,10 @@ suite('Terminal First startup marks', () => {
 		const beforeResponse = countMarks('input');
 		const token = response(state.sent[0]);
 		const report = Event.toPromise(Event.filter(state.didWrite.event, text => text.includes('"code/terminalFirst/input"')));
-		state.data.fire(token.slice(0, 10));
-		state.data.fire(token.slice(10) + 'x'.repeat(1000));
+		state.data.fire(token.slice(0, 5));
+		state.data.fire(token.slice(5) + 'x'.repeat(1000));
 		await report;
-		deepStrictEqual({ beforeResponse, input: countMarks('input'), decoded: token.startsWith('vs-nosh-input-'), sends: state.sent.length }, { beforeResponse: 0, input: 1, decoded: true, sends: 1 });
+		deepStrictEqual({ beforeResponse, input: countMarks('input'), decoded: /^\[[0-9a-f]{8}\]$/.test(token), sendOptions: state.sendOptions, pastedNewline: state.sent[0].includes('\n') }, { beforeResponse: 0, input: 1, decoded: true, sendOptions: [[true, true]], pastedNewline: false });
 	});
 
 	test('a replayed shell retries dropped input after replay completes', async () => {
@@ -107,7 +108,7 @@ suite('Terminal First startup marks', () => {
 		const report = Event.toPromise(Event.filter(state.didWrite.event, text => text.includes('"code/terminalFirst/input"')));
 		state.data.fire(response(state.sent[1]));
 		await report;
-		deepStrictEqual({ beforeResponse, input: countMarks('input'), sends: state.sent.length, sameProbe: state.sent[0] === state.sent[1] }, { beforeResponse: 0, input: 1, sends: 2, sameProbe: true });
+		deepStrictEqual({ beforeResponse, input: countMarks('input'), sendOptions: state.sendOptions, sameProbe: state.sent[0] === state.sent[1] }, { beforeResponse: 0, input: 1, sendOptions: [[true, true], [true, true]], sameProbe: true });
 	});
 
 	test('reports serialize writes and refresh the cache estimate once available', async () => {

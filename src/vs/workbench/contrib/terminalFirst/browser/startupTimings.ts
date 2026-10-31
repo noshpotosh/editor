@@ -127,10 +127,10 @@ export class TerminalFirstStartupTimings extends Disposable {
 		try {
 			await terminal.processReady;
 			if (probe.isDisposed) { return; }
-			const token = `vs-nosh-input-${generateUuid()}`;
+			const token = `[${generateUuid().slice(0, 8)}]`;
 			// The shell must execute printf: neither the echoed command nor unrelated startup/replay data contains the response.
 			const encoded = [...token].map(character => `\\${character.charCodeAt(0).toString(8).padStart(3, '0')}`).join('');
-			const command = `printf '${encoded}\\n'\n`;
+			const command = `printf '${encoded}\\n'`;
 			let output = '';
 			let received = false;
 			const response = new Promise<void>((resolve, reject) => {
@@ -142,10 +142,11 @@ export class TerminalFirstStartupTimings extends Disposable {
 				if (this.reconnected) {
 					// LocalPty discards input during replay. Retry once after replay so that output cannot masquerade as an echo.
 					probe.add(Event.once(terminal.onProcessReplayComplete)(() => {
-						if (!received) { void terminal.sendText(command, false).catch(reject); }
+						if (!received) { void terminal.sendText(command, true, true).catch(reject); }
 					}));
-					}
-				void terminal.sendText(command, false).catch(reject);
+				}
+				// Paste as one edit when supported; execute after the closing bracket so shell plugins do not process every character.
+				void terminal.sendText(command, true, true).catch(reject);
 			});
 			await response;
 			if (probe.isDisposed) { return; }
