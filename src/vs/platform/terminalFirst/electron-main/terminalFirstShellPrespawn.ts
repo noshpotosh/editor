@@ -7,6 +7,7 @@ import { promises as fs } from 'fs';
 import { Disposable } from '../../../base/common/lifecycle.js';
 import { parse, ParseError } from '../../../base/common/json.js';
 import { FileAccess, Schemas } from '../../../base/common/network.js';
+import { deepClone } from '../../../base/common/objects.js';
 import { basename, parse as parsePath } from '../../../base/common/path.js';
 import { IProcessEnvironment, OperatingSystem } from '../../../base/common/platform.js';
 import { mark } from '../../../base/common/performance.js';
@@ -204,7 +205,8 @@ export class TerminalFirstShellPrespawn extends Disposable {
 			}
 			// Defaults come from the registry; user settings come from this window's selected profile.
 			const defaults = this.configurationService.inspect<Record<string, unknown>>(TerminalSettingId.ProfilesMacOs).defaultValue;
-			const profiles = await detectAvailableProfiles({ ...defaults, ...settings.profiles }, settings.defaultProfile ?? null, false, this.configurationService, baseEnvironment, undefined, this.logService);
+			// Detection normalizes nested profile objects in place; inspected configuration is deeply frozen.
+			const profiles = await detectAvailableProfiles(deepClone({ ...defaults, ...settings.profiles }), settings.defaultProfile ?? null, false, this.configurationService, baseEnvironment, undefined, this.logService);
 			let profile = settings.defaultProfile ? profiles.find(profile => profile.profileName === settings.defaultProfile) : undefined;
 			if (settings.defaultProfile && !profile) {
 				return;

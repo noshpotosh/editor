@@ -4,16 +4,87 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { promises as fs } from 'fs';
+import { tmpdir } from 'os';
 import { DeferredPromise } from '../../../../base/common/async.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
+import { deepFreeze } from '../../../../base/common/objects.js';
+import { join } from '../../../../base/common/path.js';
 import { URI } from '../../../../base/common/uri.js';
+import { upcastPartial } from '../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
+import { IConfigurationOverrides, IConfigurationValue } from '../../../configuration/common/configuration.js';
+import { TestConfigurationService } from '../../../configuration/test/common/testConfigurationService.js';
+import { ILifecycleMainService } from '../../../lifecycle/electron-main/lifecycleMainService.js';
+import { NullLogService } from '../../../log/common/log.js';
+import { IProductService } from '../../../product/common/productService.js';
 import { ISetTerminalLayoutInfoArgs } from '../../../terminal/common/terminalProcess.js';
-import { IPtyService } from '../../../terminal/common/terminal.js';
-import { TerminalFirstPrespawnRequest } from '../../common/terminalFirstPrespawn.js';
-import { canPrespawnTerminalFirstProfile, canPrespawnTerminalFirstWorkspace, hasTerminalFirstPrespawnOverrides, startTerminalFirstPrespawn, terminalFirstPrespawnLaunch, terminalFirstPrespawnSettings } from '../../electron-main/terminalFirstShellPrespawn.js';
+import { IPtyService, TerminalSettingId } from '../../../terminal/common/terminal.js';
+import { INativeWindowConfiguration } from '../../../window/common/window.js';
+import { ICodeWindow, LoadReason } from '../../../window/electron-main/window.js';
+import { ISingleFolderWorkspaceIdentifier } from '../../../workspace/common/workspace.js';
+import { IWorkspacesManagementMainService } from '../../../workspaces/electron-main/workspacesManagementMainService.js';
+import { terminalFirstPrespawn, TerminalFirstPrespawnRequest } from '../../common/terminalFirstPrespawn.js';
+import { canPrespawnTerminalFirstProfile, canPrespawnTerminalFirstWorkspace, hasTerminalFirstPrespawnOverrides, startTerminalFirstPrespawn, terminalFirstPrespawnLaunch, terminalFirstPrespawnSettings, TerminalFirstShellPrespawn } from '../../electron-main/terminalFirstShellPrespawn.js';
+
+class PrespawnConfigurationService extends TestConfigurationService {
+	override inspect<T>(key: string, overrides?: IConfigurationOverrides): IConfigurationValue<T> {
+		const inspected = super.inspect<T>(key, overrides);
+		return { ...inspected, defaultValue: inspected.userValue };
+	}
+}
 
 suite('Terminal first shell prespawn', () => {
-	ensureNoDisposablesAreLeakedInTestSuite();
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
+
+	test('initial window preparation publishes a shell from deeply frozen inspected profiles', async () => {
+		const directory = await fs.mkdtemp(join(tmpdir(), 'vs-nosh-prespawn-'));
+		try {
+			const settingsResource = URI.file(join(directory, 'settings.json'));
+			await fs.writeFile(settingsResource.fsPath, JSON.stringify({ [TerminalSettingId.DefaultProfileMacOs]: 'Test Shell' }));
+			const workspace: ISingleFolderWorkspaceIdentifier = { id: directory, uri: URI.file(directory) };
+			const profiles = deepFreeze({ 'Test Shell': { path: process.execPath } });
+			const configuration = new PrespawnConfigurationService({ [TerminalSettingId.ProfilesMacOs]: profiles });
+			const published = new DeferredPromise<void>();
+			const calls: string[] = [];
+			const executables: (string | undefined)[] = [];
+			const pty = upcastPartial<IPtyService>({
+				...ptyFixture(calls),
+				getEnvironment: async () => ({ PATH: '/usr/bin:/bin' }),
+				createProcess: async config => { calls.push('create'); executables.push(config.executable); return 42; },
+				setTerminalLayoutInfo: async () => { calls.push('publish'); await published.complete(); },
+			});
+			const loading = store.add(new Emitter<{ window: ICodeWindow; workspace: ISingleFolderWorkspaceIdentifier; reason: LoadReason }>());
+			const logService = new class extends NullLogService {
+				override trace(message: string, ...args: unknown[]): void {
+					if (message === '[terminalFirst] Speculative shell fell back to renderer launch') {
+						void published.error(args[0] instanceof Error ? args[0] : new Error(String(args[0])));
+					}
+				}
+			};
+			store.add(new TerminalFirstShellPrespawn(pty,
+				upcastPartial<ILifecycleMainService>({ onWillLoadWindow: loading.event, onBeforeCloseWindow: Event.None }),
+				upcastPartial<IWorkspacesManagementMainService>({}), configuration,
+				upcastPartial<IProductService>({ version: '1.0' }), logService));
+			loading.fire({
+				reason: LoadReason.INITIAL, workspace,
+				window: upcastPartial<ICodeWindow>({
+					id: 7,
+					config: upcastPartial<INativeWindowConfiguration>({
+						workspace, execPath: process.execPath,
+						profiles: { home: workspace.uri, all: [], profile: upcastPartial<INativeWindowConfiguration['profiles']['profile']>({ settingsResource, globalStorageHome: workspace.uri }) },
+					}),
+				}),
+			});
+			await published.p;
+			await terminalFirstPrespawn.beforeGetLayout(workspace.id);
+			assert.deepStrictEqual({ calls, executables, profiles }, {
+				calls: ['create', 'start', 'detach', 'publish'], executables: [process.execPath], profiles: { 'Test Shell': { path: process.execPath } },
+			});
+		} finally {
+			await fs.rm(directory, { recursive: true, force: true });
+		}
+	});
 
 	test('renderer-only settings fall back without guessing', () => {
 		const cases = [

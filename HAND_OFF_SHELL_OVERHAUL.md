@@ -1,89 +1,125 @@
-# Hand-off: shell startup and quit performance (Workstream F)
+# Shell startup and quit performance: completion record (Workstream F)
 
-> **For a cold agent.** This document is the state of Workstream F ("startup and quit performance") in the VS NOSH fork on 2026-10-30, written when the previous agent's usage was about to run out. Read `IMP_PLAN.md` ("How to work in this repo", then "Workstream F") and `docs/specs/07-workbench-branding-distribution.md` ("Startup performance") first. Everything below is verified against the tree unless marked *unverified*.
+> Updated 2026-10-31 on branch `terminal-first`. The implementation through F7 is committed and the packaged build of `b7f7657299e` passed. Final F7 measurements and the packaged smoke checklist are **pending below**. Its first packaged run fell back because upstream profile detection mutated frozen configuration objects; a deep-clone fix and regression are being prepared, so that run is not evidence of prespawn performance. The most recent completed stock measurement is 1660 ms launch→input, so the under-500 ms target has not been achieved. Read Workstream F in `IMP_PLAN.md` and Startup performance in `docs/specs/07-workbench-branding-distribution.md` for the design and requirements.
 
-## Goal and owner decisions
+## Owner decisions retained
 
-The owner uses VS NOSH as the everyday terminal too: launch, run a command (often `claude`), quit. Target (spec 07, S7.25): median launch→input under 500 ms on a warm packaged launch of the stock profile, measured from process start through an input echo round trip. Decisions already made (do not re-ask): fresh shells after Cmd+Q (`persistentSessionReviveProcess: never`), Copilot dropped from the packaged build, the login-shell probe never gates the shell, the extension host starts after the shell is presented (bounded at 2 s after `Restored`).
+The owner uses VS NOSH as the everyday terminal: launch, run a command, quit. The target is median launch→input under 500 ms on a warm packaged stock-profile launch, measured from process start through an executed command response. Decisions already made: fresh shells after Cmd+Q (`persistentSessionReviveProcess: never`), Copilot excluded from the package, the login-shell environment probe never gates the shell, and the extension host starts after presentation with a two-second fallback after `Restored`. These decisions do not need confirmation again.
 
-## How to measure (do this before and after every change)
+`product.json` retains upstream's required `defaultChatAgent` metadata and an empty `builtInExtensionsEnabledWithAutoUpdates` array. Removing the metadata caused a module-scope onboarding assertion to abort the workbench; omitting the array broke extension scanning. Keeping those required values does not bundle Copilot or configure automatic installation. The launcher builds with `VSCODE_SKIP_COPILOT=1`.
 
-```sh
-./scripts/terminal-first-app.sh --build-only        # ~4 min; stamps the commit; rebuilds when sources moved
-./scripts/terminal-first-perf.sh --runs 5 --profile stock --reset-profile --baseline <previous summary.json> --label "<step> stock warm"
-./scripts/terminal-first-perf.sh --runs 5 --profile owner --reset-profile --baseline <previous summary.json> --label "<step> owner warm"
-./scripts/terminal-first-perf.sh --runs 5 --profile stock --quit --label "<step> stock quit"
-```
+## Completed implementation
 
-Results land in `.build/terminal-first/perf/<timestamp>-<profile>-<mode>/` (`summary.md`, `summary.json`, per-run `run-N.tsv.terminalFirst.json` with every mark as epoch ms plus the 20 slowest contribution constructors) and a row is appended to `.build/terminal-first/perf/history.tsv`. Paste medians into the results table in spec 07. Run measurements on a quiet machine: do not compile, type-check, or run unit tests while they run (they use only the packaged app, so editing files is fine). The build reads the tree, so do not edit sources while a build runs. Inside the app, **Developer: Terminal First Startup Marks** shows the same data.
-
-Latest summaries to use as baselines: `.build/terminal-first/perf/20261030T173231-stock-warm/summary.json` (F2 stock) and `.build/terminal-first/perf/20261030T173505-owner-warm/summary.json` (F2 owner).
-
-## Numbers so far (medians, ms; stock profile, warm)
-
-| Build | launch→presented | launch→prompt | launch→input | prompt−presented | quit |
-| --- | --- | --- | --- | --- | --- |
-| F0 baseline `f702d86cacc` | 1317 | 1488 | 1494 | 171 | 221 |
-| F3.1 + F1 `ef7f9dcb5e0` | 1112 | 1317 | 1323 | 207 | 234 |
-| F2 `b53e117c3a5` | 1159 | 1394 | 1412 | 244 | (not run) |
-
-F2 is within noise of F1 on this machine; it removes a 10 s worst case rather than median time. Owner-profile rows are in spec 07.
-
-Where the time goes (F2 run, ms after `code/didStartMain`; `didStartMain` itself is ~145 ms after process launch): 247 `willOpenNewWindow`, 395 `willLoadWorkbenchMain`, 627 `didLoadWorkbenchMain` (230 ms loading the workbench bundle), 658 `willStartWorkbench`, 783 `terminalFirst/start`, 831 `connected`, 871 `willLoadExtensions`, 908 `created`, 962 `presented`, 1013 `didLoadExtensions`, 1040 `terminal/willConnectPtyHost`, 1053 `didConnectPtyHost`, 1249 `prompt`, 1267 `input`. The two gaps worth attacking next are `created`→`willConnectPtyHost` (130 ms: xterm's lazy import, the container barrier, profile and process setup) and `didConnectPtyHost`→`prompt` (195 ms: pty spawn plus zsh startup, only hideable by pre-spawning, F7). Everything before 783 is upstream window and bundle load.
-
-## What has landed (all on branch `terminal-first`)
-
-| Commit | Step | What |
+| Commit | Step | Result |
 | --- | --- | --- |
-| df173ab32a5 | checkpoint | The owner's uncommitted spaces/tiles WIP, committed so F steps are clean |
-| 1874092efb7 | F0 | Marks `code/terminalFirst/prompt` and `input`, published to `ITimerService` under source `terminalFirst`; JSON dump beside `--prof-duration-markers-file`; **Developer: Terminal First Startup Marks**; `scripts/terminal-first-perf.sh` + `.mjs` (+ `.test.mjs`); launcher commit stamp, `--build-only`, `--no-build-check`; `product.json` `quality: "stable"` |
-| 58afc904a81 | F0 | `build/lib/nodeCompileCache.ts` accepts the `-<uid>` suffix Node adds to portable cache tags (the build failed without it) |
-| b4c3828969a | F0.5 | `terminal.integrated.allowInUntrustedWorkspace: true` default: a fresh profile never got a prompt because the first shell waited behind the modal trust dialog |
-| c163428a476, f702d86cacc | F0 | Harness `set -e` fixes; dump written at `presented` too |
-| 65e3cc46110 | F3.1 | `localTerminalBackend.ts`: no `Restored` wait before connecting to the (already warmed) pty host |
-| ef7f9dcb5e0 | F1 | Controller at `BlockRestore`; waits for `editorGroupsService.whenReady`, the managed workspace, and `connectionState === Connected` (1.5 s budget) instead of `whenRestored` and every replay; stored sessions shown on the title bar before any shell; title bar never hidden by `terminal-first-starting`; late reconnects adopted by nonce (`adoptReconnected`); hidden layouts restore after `terminalFirstStartup.whenPresented()` (new seam `src/vs/workbench/services/terminalFirst/common/terminalFirstStartup.ts`) |
-| b53e117c3a5 | F2 | Login-shell probe off the shell path: `ptyHostService.getProfiles` uses `process.env`, `localTerminalBackend.createProcess` passes `{}` as executable env, `terminalProcessManager` skips the shell-env merge; default `terminal.integrated.inheritEnv: false` |
+| `1874092efb7`, `58afc904a81`, `c163428a476`, `f702d86cacc` | F0 | Prompt/input marks, marks command and JSON dumps, packaged perf harness, launcher build stamp, `quality: stable`, and compile-cache validator support for Node's UID suffix |
+| `b4c3828969a` | F0.5 | Shell permitted in an untrusted folder; entering the editor still follows workspace trust |
+| `65e3cc46110` | F3.1 | Direct pty connection no longer waits for `Restored` |
+| `ef7f9dcb5e0` | F1 | Controller at `BlockRestore`, editor-part readiness instead of complete layout restoration, bounded reconnect wait, visible title bar, hidden layouts deferred until presentation |
+| `b53e117c3a5` | F2 | Login-shell probe removed from profile detection, process creation and variable-resolution dependencies; `inheritEnv: false` |
+| `a6dda647780` | F4–F6 | Contribution/extension-host deferral, immediate native Vim, coalesced strip renders, fresh-shell defaults, Copilot packaging exclusion, shorter quit waits and the `e` curl path |
+| `87b7cd66ea7` | F4–F6 validation fixes | Restored required product metadata, corrected input/quit measurement, added upstream startup diagnostics, and documented the pre-existing upstream edits |
+| `306af882f47` | Input probe | Short unique encoded `printf` response with bracketed paste; command echo and unrelated output cannot satisfy readiness |
+| `d38d8362725` | F3.2 and measured F4 list | Preload core xterm at `BlockRestore`, show the panel before creating the first fresh session, defer Codex status and chat pet context contributions |
+| `b7f7657299e` | F7 | Speculative main-process shell startup, coordinated adoption and fallback, shared environment construction, live-reload preservation and race regressions; PENDING corrective profile-clone commit and successful adoption measurement |
 
-## Committed as a6dda647780 but not yet built or measured (F4, F5, F6)
+### F3.2 and contribution deferral
 
-One commit for all three steps (the shared `terminalFirst.contribution.ts` made a clean per-step split impractical at the end of the session). They pass `npm run eslint`, `npm run typecheck-client`, `npm run valid-layers-check`, `node --test extensions/terminal-first/test/e.test.cjs extensions/terminal-first/test/cli.test.cjs`, and the unit suites listed under Verification below. **Your first job: build, measure, and revert whatever regresses.**
+`TerminalFirstContribution` starts `TerminalInstance.getXtermConstructor` during `BlockRestore`. The controller prepares the panel before creating even an empty profile's first session; previously the fresh-session branch created the terminal before `showPanel`. WebGL preload and broader profile-resolution changes were not justified by measurement.
 
-- **F4.1** `src/vs/platform/terminalFirst/common/startupPhaseOverrides.ts` (`deferStartupContribution`, identity outside VS NOSH) with a one-line call-out in `src/vs/workbench/common/contributions.ts` `registerWorkbenchContribution2`. The deferred list has one id so far (`workbench.contrib.agentHostChatDebug`, 28 ms in a renderer log). **Fill it from the `contributions` array in the perf dump** (slowest BlockRestore constructors; never defer BlockStartup content providers, editor resolvers, extension-point handlers, or the chat URL handlers). Test: `contrib/terminalFirst/test/browser/startupPhaseOverrides.test.ts` pins each id to its class's `ID`.
-- **F4.2** `terminalFirstStartup.whenExtensionHostMayStart(whenRestored)` (race of `presented` and `Restored` + 2 s; immediate when the controller did not ask), one-line call-out in `src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts`; setting `terminalFirst.startup.deferExtensionHost` (default true) read by `TerminalFirstService.initialize()` and passed to `terminalFirstStartup.begin()`.
-- **F4.4** `nativeVim.ts`: native engine marked ready at construction; the VSCodeVim hand-over check runs after `whenPresented()` and is skipped once the service is disposed. The Vim test fixture now stubs `IContextKeyService.getContext` (the mock returns null, which the pickers hit as soon as Vim is enabled).
-- **F4.5** `sessionStripPart.ts` coalesces renders per microtask (`scheduleRender`); test "a burst of session changes renders the strip once" in `sessionTabs.test.ts`.
-- **F5** Defaults in `terminalFirst.contribution.ts`: `persistentSessionReviveProcess: never`, `environmentChangesRelaunch: false`, `shellIntegration.environmentReporting: false`. Build: `build/gulpfile.vscode.ts` skips the Copilot compile and ripgrep-shim tasks when `VSCODE_SKIP_COPILOT=1` (the launcher sets it); `product.json` lost `defaultChatAgent` and `builtInExtensionsEnabledWithAutoUpdates`; `build/lib/extensions.ts` is back to upstream (its only fork hunk re-added Copilot SDK files). *Unverified:* a packaged build with these changes has not been run yet; if `vscode-darwin-arm64-min` fails, check that nothing else in `build/` expects `extensions/copilot`.
-- **F6** `extHostExtensionService.ts` deactivate race 1 s and `extensionHostStarter.ts` exit wait 1.5 s under the gate; `extensions/terminal-first/bin/e` sends plain file/directory requests with `curl --unix-socket` (no Node start), falls back to `cli.cjs` for options, `--goto`, and names outside `A-Za-z0-9/._~@+-`, waits up to 10 s for the pointer with a hint after 2 s; `extension.cjs` removes its pointer on deactivate and sweeps stale ones. Test `extensions/terminal-first/test/e.test.cjs`.
-- Docs for all of the above are already written: spec 07 S7.32–S7.38, `CHANGELOG.md`, `TERMINAL_FIRST.md`. `build/fork/upstream-patches.json` has entries for every upstream file touched; run `scripts/upstream-check.sh` after committing.
+The deferred contribution IDs are `workbench.contrib.agentHostChatDebug`, `workbench.contrib.codexStatusBarEntry`, and `workbench.contrib.chatPetContext`. The two additions each measured 1 ms in the first three corrected baseline dumps; they are small safe deferrals, not a claim of a large performance gain. Tests pin every ID to its exported class. Content providers, notebook working-copy handlers, editor resolvers, extension-point handlers and chat URL setup keep their original phases.
 
-Next: `./scripts/terminal-first-app.sh --build-only` (first build with `VSCODE_SKIP_COPILOT=1` actually honored; watch for anything in `build/` that still expects `extensions/copilot`), then the three measurement commands, then fill the F4 deferral list from the dump's `contributions` and measure again. **Revert any step whose stock-profile medians regress beyond noise (about ±40 ms on this machine).** Expected: F4.2 should move `willLoadExtensions` after `presented`; F5 should cut quit time and make the app ~395 MB smaller.
+### F7 ownership and fallback
 
-## What remains after that
+`platform/terminalFirst/electron-main/terminalFirstShellPrespawn.ts` listens for initial local windows and prepares a shell while the workbench loads. It reuses the ordinary backend environment and terminal environment builder, plus a shared CLI PATH/pointer helper. Main generates the nonce used by both shell integration and `TERMINAL_FIRST_SESSION`, then calls `createProcess` → `start` → `detachFromProcess(id, true)` → `setTerminalLayoutInfo`.
 
-1. **F3.2** Pre-import xterm (`TerminalInstance.getXtermConstructor(keybindingService, contextKeyService)`, public static) from `TerminalFirstContribution`'s constructor at `BlockRestore`, and optionally the webgl addon. Measure `created`→`willConnectPtyHost`. Also look at why `showPanel` before `ensureTerminal` did not remove the container barrier wait, and at the double default-profile resolution (`terminalInstance.ts` ctor and `resolveShellLaunchConfig`).
-2. **F7 pre-spawn** (decision rule met: prompt−presented is 207–244 ms ≥ 150 ms). Design is in the approved plan (`/Users/nosh/.claude/plans/i-m-still-interested-in-shimmering-turing.md`, section F7) and summarized in `IMP_PLAN.md`: a fork-owned `src/vs/platform/terminalFirst/electron-main/terminalFirstShellPrespawn.ts`, instantiated from the gated block at `app.ts` ~line 1310, listens to `ILifecycleMainService.onWillLoadWindow`, spawns the session shell through the main-side `IPtyService` (`createProcess` → `start` → `detachFromProcess(id, true)` → `setTerminalLayoutInfo`) with `shouldPersist`, `workspaceId = workspace.id`, nonce generated in main and set in `options.shellIntegration.nonce` and `TERMINAL_FIRST_SESSION`; the renderer adopts it through upstream's reconnect path and `adoptReconnected`. Requires `persistentSessionReviveProcess: never` (F5). Move the pointer/PATH env formula from `terminalFirstService.shellEnvironment()` into a shared pure helper so main and renderer agree.
-3. **Upstream startup** (not in the plan, found by measurement): ~630 ms pass before the workbench starts (main process 250 ms, window + preload 150 ms, workbench bundle load 230 ms). Check that the renderer V8 code cache is active (`Developer: Startup Performance` → `didUseCachedData`); consider what `app.ts` `initServices` awaits before `openFirstWindow`.
-4. **Manual smoke list** (never run in the app during this session; the perf runs exercise only fresh folder launches): see "Verification" in `IMP_PLAN.md` Workstream F. In particular: Reload Window reattaches shells; quit with two sessions and relaunch restores tabs with fresh shells; `echo $PATH` and `which git` in the first shell match Terminal.app (F2 changed the base environment); `e README.md` from the first prompt; Cmd+Q with `sleep 100` running; an untrusted folder launch gets a prompt and entering the editor asks for trust.
-5. Cold-start runs (`--cold` needs passwordless sudo for `purge`) were never taken.
+The renderer's first layout read always passes through the main coordinator, even if the direct pty channel is already connected. If publication has not begun, the renderer cancels speculation and uses normal creation without waiting for profile detection or shell startup. Late unpublished processes are terminated. If publication is underway, the read waits only for that layout write.
 
-## Open items from `scripts/upstream-check.sh`
+The renderer prefers the saved active session, preserving session IDs, order, spaces and layouts. A differing saved cwd wins over speculation. Rejected processes are explicitly shut down even when xterm has not attached. Creation-event adoption runs in a microtask so terminal groups have installed their disposal listeners; the post-connection sweep stays synchronous. Adoption closes before awaiting fallback creation, preventing duplicate sessions. The temporary owner marker is removed so ordinary shell persistence does not depend on task reconnection settings.
 
-The check reports two undocumented upstream edits that predate Workstream F and came in with the owner's checkpoint commit df173ab32a5: `src/vs/base/browser/ui/grid/gridview.ts` and `src/vs/workbench/browser/parts/editor/editorCommands.ts`. They belong to the tiles/spaces work, not to startup; add manifest entries for them (or move the changes into fork paths) when that work is finished. `docs/upstream/PATCHES.md` was regenerated at the end of this session.
+`Connected` now guarantees that restored terminal instances exist in the fork, without waiting for output replay. Attachments can create their instance before profile discovery finishes. With revival set to `never`, `LocalTerminalBackend` discards its old disk buffer/layout records while retaining the pty host's live layout for Reload Window.
 
-## Gotchas learned the hard way
+The ordinary path remains responsible for reloads, workspace switches, empty/remote/multiple-root windows, workspace terminal overrides, custom cwd, dynamic settings, profile env/name overrides and other unsupported settings. The product gate already restricts these fork behaviors to native macOS.
 
-- `scripts/terminal-first-app.sh` rebuilds whenever the tree differs from the stamp (`-dirty` counts); pass `--no-build-check` to launch a stale app on purpose. The perf script only warns.
-- The `--prof-duration-markers` launch exits the app ~15 s after the workbench is ready; the harness's `--quit` mode passes only `--prof-duration-markers-file` so the app stays open until `osascript` quits it.
-- Upstream's timer service snapshots renderer marks once, early; the fork publishes its own marks under source `terminalFirst` after `presented`, `prompt`, and `input`, so always read fork marks from the dump or the marks command, not from `Developer: Startup Performance`.
-- `terminalFirstStartup` is module state: tests that call `begin()` must `reset()` in teardown; `whenPresented()` resolves at once when nothing began.
-- Browser-layer code must not reference `INativeEnvironmentService`/`NativeParsedArgs` (layer check); `startupTimings.ts` reads `args` through a structural type.
-- `git stash pop` can collide with the perf script's `git status` at its start (`index.lock`); wait a few seconds after launching the harness.
-- `zsh` treats a bare `=====` as a filename expansion; quote it in `echo`.
+## Measurement record
 
-## Verification commands
+Every row below is a five-run median in milliseconds. Full p90s, per-run marks and contribution timings are in the listed summaries and spec 07. The `prompt` mark means first terminal output or already-rendered replay, not semantic recognition of a shell prompt. The `input` mark requires the shell to execute the probe command.
+
+### Current short-response probe
+
+| Build | Profile | launch→presented | launch→prompt | launch→input | prompt−presented | quit |
+| --- | --- | --- | --- | --- | --- | --- |
+| F4–F6 corrected `306af882f47` | stock | 1123 | 1322 | 1671 | 191 | 188 |
+| F4–F6 corrected `306af882f47` | owner | 1013 | 1209 | 1546 | 196 | |
+| F3.2 + measured F4 IDs `d38d8362725` | stock | 1128 | 1337 | 1660 | 209 | 191 |
+| F3.2 + measured F4 IDs `d38d8362725` | owner | 1139 | 1346 | 1695 | 203 | |
+| F7 `b7f7657299e` | stock | PENDING | PENDING | PENDING | PENDING | PENDING |
+| F7 `b7f7657299e` | owner | PENDING | PENDING | PENDING | PENDING | |
+
+F3.2's stock change is within the observed noise; the owner row was 149 ms slower at input. These rows do not establish an isolated gain for xterm preload or the two tiny contribution deferrals. F7's decision rule remained satisfied: first output lagged presentation by more than 150 ms.
+
+Completed comparison artifacts:
+
+- Corrected F4–F6 stock: `.build/terminal-first/perf/20261031T123557-stock-warm/summary.json`.
+- Corrected F4–F6 owner: `.build/terminal-first/perf/20261031T123807-owner-warm/summary.json`.
+- Corrected F4–F6 quit: `.build/terminal-first/perf/20261031T123225-stock-warm-quit/summary.json`.
+- F3.2 stock: `.build/terminal-first/perf/20261031T124451-stock-warm/summary.json`.
+- F3.2 owner: `.build/terminal-first/perf/20261031T124702-owner-warm/summary.json`.
+- F3.2 quit: `.build/terminal-first/perf/20261031T124909-stock-warm-quit/summary.json`.
+- F7 artifacts and before/after assessment: **PENDING — fill after the final packaged runs.**
+
+### Historical measurements
+
+| Build | Profile | launch→presented | launch→prompt | launch→input | prompt−presented | quit |
+| --- | --- | --- | --- | --- | --- | --- |
+| F0 `f702d86cacc` | stock | 1317 | 1488 | 1494 | 171 | 221 |
+| F3.1 + F1 `ef7f9dcb5e0` | stock | 1112 | 1317 | 1323 | 207 | 234 |
+| F2 `b53e117c3a5` | stock | 1159 | 1394 | 1412 | 244 | |
+
+These older input rows accepted arbitrary output after a newline and can understate actual readiness. They are not directly comparable with the current executed-response probe. The first corrected long, unbracketed probe also exercised zsh editing hooks and was superseded by `306af882f47`; its stock/owner input medians of 1840/1864 ms are diagnostic only. Quit timing now targets the measured PID and starts immediately before requesting termination, excluding automation startup.
+
+## Verification and packaged smoke
+
+- The packaged build of `b7f7657299e` passed. Build log: `/tmp/vs-nosh-f7-build.log`.
+- Full client typechecking and targeted lint on 15 TypeScript files passed during F7 integration; these runs were captured in tool output, not disk logs. Layer validation passed (`/tmp/vs-nosh-f7-layers.log`). **PENDING — consolidate final validation after the profile-clone correction.**
+- The combined selected Electron run passed the other suites but exposed an incomplete reconnect test fixture. Registering its real `ITerminalService` fixed the deferred style-service error; the focused reconnect rerun passed 3 tests (two regressions plus the harness check) with no disposable leaks. That successful rerun was captured in tool output, not a disk log; `/tmp/vs-nosh-f7-all-tests.log` is the earlier combined run and must not be described as fully passing.
+- `scripts/upstream-check.sh` passes: 71 documented patches, 79 changed upstream files, zero warnings. The earlier `gridview.ts` and `editorCommands.ts` manifest gaps are resolved.
+
+Packaged smoke results: **PENDING — fill each row from observed behavior.**
+
+| Check | Result |
+| --- | --- |
+| Fresh stock and owner launches: exactly one session shell; actual input probe succeeds | PENDING |
+| Main prespawn publication and renderer adoption appear in marks; fallback remains usable | PENDING |
+| Reload Window preserves the live shell PID and nonce | PENDING |
+| Quit with two sessions, relaunch: tabs/layouts restored with fresh shell PIDs | PENDING |
+| Initial `PATH` and `which git` agree with the intended login-shell environment | PENDING |
+| `e README.md` from the first prompt reaches the owning editor | PENDING |
+| Cmd+Q with `sleep 100` running exits without a dialog or surviving child | PENDING |
+| Untrusted folder gets a shell; entering the editor applies trust | PENDING |
+
+## Remaining performance work and limits
+
+The under-500 ms target is still unproven and was not met by the completed pre-F7 rows. **PENDING — replace this sentence with the final measured gap after F7.** Do not mark that target complete merely because all planned code changes landed.
+
+The earlier F2 timeline spent about 630 ms before the workbench started: main initialization, window/preload and loading the renderer bundle. New marks separate main service initialization and window stages. Both examined profiles had renderer cache files, but upstream `didUseCachedData` only estimates cache use from the commit/configuration; it does not prove a V8 cache hit. No speculative cache or service-initialization rewrite was made. Backup/workspace initialization remains a prerequisite for restore. The apparent second default-profile resolution does not repeat full profile discovery and did not justify another upstream change.
+
+A three-run cold-cache measurement was attempted but exited with status 1 immediately because passwordless sudo for `purge` is unavailable on this host. No purge occurred and no cold measurements were taken; this check did not pass. The owner profile is a copied test profile, not a modification to the everyday profile.
+
+## Reproduce measurements and checks
+
+Run on a quiet machine. Do not compile, typecheck, run tests or drive another app during perf runs. Do not edit source during packaging. Keep stock and owner profiles separate and compare the same probe version.
 
 ```sh
-./scripts/test.sh --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test --run vs/workbench/contrib/terminalFirst/test/browser/startupTimings.test --run vs/workbench/contrib/terminalFirst/test/browser/editorPartSessions.test --run vs/workbench/contrib/terminalFirst/test/browser/sessionTabs.test --run vs/workbench/contrib/terminalFirst/test/browser/nativeVim.test --run vs/workbench/contrib/terminalFirst/test/browser/startupPhaseOverrides.test --run vs/workbench/services/terminalFirst/test/common/terminalFirstStartup.test --run vs/workbench/contrib/terminal/test/electron-browser/localTerminalBackend.test --run vs/workbench/contrib/terminal/test/browser/terminalProcessManager.test --run vs/workbench/test/browser/contributions.test
+./scripts/terminal-first-app.sh --build-only
+./scripts/terminal-first-perf.sh --runs 5 --profile stock --reset-profile --baseline .build/terminal-first/perf/20261031T124451-stock-warm/summary.json --label "F7 stock warm"
+./scripts/terminal-first-perf.sh --runs 5 --profile owner --reset-profile --baseline .build/terminal-first/perf/20261031T124702-owner-warm/summary.json --label "F7 owner warm"
+./scripts/terminal-first-perf.sh --runs 5 --profile stock --quit --label "F7 stock quit"
+./scripts/test.sh --run vs/platform/terminalFirst/test/common/terminalFirstPrespawn.test --run vs/platform/terminalFirst/test/electron-main/terminalFirstShellPrespawn.test --run vs/workbench/contrib/terminalFirst/test/browser/terminalReconnectStartup.test --run vs/workbench/contrib/terminalFirst/test/browser/terminalFirstService.test --run vs/workbench/contrib/terminalFirst/test/electron-browser/localTerminalPrespawn.test
 node --test extensions/terminal-first/test/e.test.cjs extensions/terminal-first/test/cli.test.cjs scripts/terminal-first-perf.test.mjs
-npm run eslint -- <changed files> && npm run typecheck-client && npm run valid-layers-check && scripts/upstream-check.sh
+scripts/upstream-check.sh
 ```
+
+Results are under `.build/terminal-first/perf/<timestamp>-<profile>-<mode>/`: `summary.md`, `summary.json`, and per-run `.terminalFirst.json` dumps. `history.tsv` records each aggregate. The marks command exposes the same renderer diagnostics. Run targeted lint, typechecking and layer validation when changes warrant them; reuse the completed checks when their inputs have not changed.
+
+The launcher rebuilds when its source stamp differs; `--no-build-check` deliberately permits a stale app. Perf runs use the packaged app and warn about a stale stamp. The input-profiler run auto-exits after recording; quit mode leaves it alive until the harness requests termination. `terminalFirstStartup` is module state, so tests that call `begin()` must reset it in teardown.
