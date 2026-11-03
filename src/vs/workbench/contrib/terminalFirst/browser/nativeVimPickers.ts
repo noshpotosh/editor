@@ -25,7 +25,7 @@ export class NativeVimPickers extends Disposable {
 		super();
 		this._register(quick.onShow(() => { this.normal = false; this.pending = ''; this.originalPrompt = undefined; }));
 		this._register(quick.onHide(() => { this.normal = false; this.pending = ''; vim.cancel(); }));
-		this._register(addDisposableListener(mainWindow, EventType.FOCUS_IN, () => { this.pending = ''; vim.cancel(); }));
+		this._register(addDisposableListener(mainWindow, EventType.FOCUS_IN, () => { this.pending = ''; vim.cancel('focus'); }));
 		this._register(addDisposableListener(mainWindow, EventType.KEY_DOWN, event => this.keydown(event), true));
 	}
 	private keydown(event: KeyboardEvent): void {

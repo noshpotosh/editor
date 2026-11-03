@@ -40,6 +40,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 	private clipboardPending = false;
 	private compositionBefore: string | undefined;
 	private clipboardGeneration = 0;
+	private leaderBlurred = false;
 	private readonly queuedKeys: string[] = [];
 	private readonly originalCursorStyle;
 
@@ -104,8 +105,18 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		this.node.setAttribute('role', 'status'); this.node.setAttribute('aria-live', 'polite');
 		editor.addOverlayWidget(this); this._register(toDisposable(() => editor.removeOverlayWidget(this)));
 		this._register(vim.onDidChange(() => this.render()));
-		this._register(editor.onDidFocusEditorText(() => { this.engine.reset(); this.render(); }));
-		this._register(editor.onDidBlurEditorText(() => { this.clipboardGeneration++; this.clipboardPending = false; this.queuedKeys.length = 0; this.engine.reset(); vim.cancel(); this.render(); }));
+		this._register(editor.onDidFocusEditorText(() => {
+			// Only the editor that lent focus to the leader retains its mode on the return trip.
+			if (!this.leaderBlurred || !vim.preserveModeOnFocus) { this.engine.reset(); }
+			this.leaderBlurred = false;
+			this.render();
+		}));
+		this._register(editor.onDidBlurEditorText(() => {
+			this.clipboardGeneration++; this.clipboardPending = false; this.queuedKeys.length = 0;
+			this.leaderBlurred = vim.preserveModeOnFocus;
+			if (!this.leaderBlurred) { this.engine.reset(); }
+			vim.cancel('focus'); this.render();
+		}));
 		this._register(editor.onDidChangeModel(() => { this.cachedVersion = -1; this.clipboardGeneration++; this.clipboardPending = false; this.queuedKeys.length = 0; this.compositionBefore = undefined; this.engine.reset(); this.transaction.clear(); this.render(); }));
 		this._register(editor.onDidChangeModelContent(event => { if (event.isFlush || event.isUndoing || event.isRedoing) { this.engine.reset(); this.transaction.clear(); this.visualPosition = undefined; this.render(); return; } if (!this.updating && this.engine.mode !== 'insert' && this.engine.mode !== 'replace') { this.engine.reset(); } }));
 		this._register(editor.onDidChangeCursorSelection(event => {
@@ -114,6 +125,7 @@ export class NativeVimContribution extends Disposable implements IEditorContribu
 		this._register(editor.onKeyDown(event => {
 			if (!this.active || event.browserEvent.isComposing || event.browserEvent.keyCode === 229 || event.metaKey || event.altKey) { return; }
 			const key = event.browserEvent.key;
+			if (['Shift', 'Control', 'Alt', 'Meta'].includes(key)) { return; }
 			// Let the leader and directional pane shortcuts (including user overrides) reach
 			// the workbench before Vim consumes an unknown Control key or a remap.
 			if (event.ctrlKey && !event.shiftKey && (key === ' ' || ['h', 'j', 'k', 'l'].includes(key.toLowerCase()))

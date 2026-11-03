@@ -10,11 +10,13 @@ export const INativeVimService = createDecorator<INativeVimService>('nativeVimSe
 export interface INativeVimService {
 	readonly _serviceBrand: undefined;
 	readonly enabled: boolean;
+	/** The leader is borrowing or returning the focused editor's keyboard focus. */
+	readonly preserveModeOnFocus: boolean;
 	readonly shared: VimSharedState;
 	readonly onDidChange: Event<void>;
 	readonly hint: string;
 	key(key: string, mode: VimMode, allowRemaps?: boolean): boolean;
-	cancel(): void;
+	cancel(reason?: 'focus'): void;
 	readClipboard(): Promise<string>;
 	execute(command: string, argument?: string): void;
 }

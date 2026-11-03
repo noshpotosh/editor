@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
-import { stub } from 'sinon';
+import { spy, stub } from 'sinon';
 import { Selection } from '../../../../common/core/selection.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { IKeyboardEvent, StandardKeyboardEvent } from '../../../../../base/browser/keyboardEvent.js';
@@ -20,22 +20,64 @@ import { VimSharedState } from '../../common/nativeVim.js';
 
 suite('Native Vim editor integration', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
-	function setup(text: string, readOnly = false, hasTextFocus = true, keyDown?: Event<IKeyboardEvent>) {
+	function setup(text: string, readOnly = false, hasTextFocus = true, keyDown?: Event<IKeyboardEvent>, focusEvents?: { focus: Event<void>; blur: Event<void> }) {
 		const services = createCodeEditorServices(store);
-		services.stub(INativeVimService, {
-			enabled: true, shared: new VimSharedState(), onDidChange: Event.None, hint: '',
+		const vim = {
+			enabled: true, preserveModeOnFocus: false, shared: new VimSharedState(), onDidChange: Event.None, hint: '',
 			key: () => false, cancel: () => { }, execute: () => { }, readClipboard: async () => 'clipboard',
-		});
+		};
+		services.stub(INativeVimService, vim);
 		const model = store.add(instantiateTextModel(services, text));
 		const editor = store.add(instantiateTestCodeEditor(services, model, { readOnly, hasTextFocus }));
 		if (keyDown) {
 			const listener = stub(editor, 'onKeyDown').callsFake(keyDown);
 			store.add(toDisposable(() => listener.restore()));
 		}
+		if (focusEvents) {
+			const focus = stub(editor, 'onDidFocusEditorText').callsFake(focusEvents.focus);
+			const blur = stub(editor, 'onDidBlurEditorText').callsFake(focusEvents.blur);
+			store.add(toDisposable(() => { focus.restore(); blur.restore(); }));
+		}
 		const contribution = store.add(editor.registerAndInstantiateContribution(NativeVimContribution.ID, NativeVimContribution));
 		const keys = (sequence: string[]) => { for (const key of sequence) { if (!contribution.handle(key)) { editor.trigger('keyboard', 'type', { text: key }); } } };
-		return { editor, model, contribution, keys, services };
+		return { editor, model, contribution, keys, services, vim };
 	}
+	test('borrowing focus for the leader and returning it preserves Insert and Visual modes and selection', () => {
+		const snapshots = [];
+		for (const mode of ['insert', 'visual'] as const) {
+			const focus = store.add(new Emitter<void>());
+			const blur = store.add(new Emitter<void>());
+			const f = setup('one two', false, true, undefined, { focus: focus.event, blur: blur.event });
+			f.keys(mode === 'insert' ? ['i'] : ['v', 'l']);
+			const selection = f.editor.getSelection();
+			f.vim.preserveModeOnFocus = true;
+			blur.fire(); focus.fire();
+			f.vim.preserveModeOnFocus = false;
+			const preserved = { mode: f.contribution.engine.mode, sameSelection: f.editor.getSelection()!.equalsSelection(selection!) };
+			// A subsequent pane switch has the ordinary reset behavior, even after a preserved return.
+			blur.fire(); focus.fire();
+			snapshots.push({ ...preserved, modeAfterPaneSwitch: f.contribution.engine.mode });
+		}
+		assert.deepStrictEqual(snapshots, [
+			{ mode: 'insert', sameSelection: true, modeAfterPaneSwitch: 'normal' },
+			{ mode: 'visual', sameSelection: true, modeAfterPaneSwitch: 'normal' },
+		]);
+	});
+	test('an abandoned leader return and focus in a different editor reset that editor mode', () => {
+		const focus = store.add(new Emitter<void>());
+		const blur = store.add(new Emitter<void>());
+		const f = setup('one two', false, true, undefined, { focus: focus.event, blur: blur.event });
+		f.keys(['i']);
+		f.vim.preserveModeOnFocus = true;
+		blur.fire();
+		f.vim.preserveModeOnFocus = false;
+		focus.fire();
+		const afterOutsideFocus = f.contribution.engine.mode;
+		f.keys(['i']);
+		f.vim.preserveModeOnFocus = true;
+		focus.fire(); // A different editor has not lent its focus to this leader.
+		assert.deepStrictEqual([afterOutsideFocus, f.contribution.engine.mode], ['normal', 'normal']);
+	});
 	test('resolved Ctrl+H/J/K/L and Ctrl+Space bypass Vim in every mode, including user overrides', () => {
 		const keyDown = store.add(new Emitter<IKeyboardEvent>());
 		const { services, contribution } = setup('abc', false, true, keyDown.event);
@@ -56,6 +98,27 @@ suite('Native Vim editor integration', () => {
 			}
 		}
 		assert.deepStrictEqual({ handled, prevented }, { handled: [], prevented: Array(15).fill(false) });
+	});
+	test('modifier-only key presses do not reach Vim or report errors in Normal and Visual modes', () => {
+		const keyDown = store.add(new Emitter<IKeyboardEvent>());
+		const { contribution } = setup('abc', false, true, keyDown.event);
+		const handle = spy(contribution, 'handle');
+		store.add(toDisposable(() => handle.restore()));
+		const snapshots = [];
+		for (const mode of ['normal', 'visual'] as const) {
+			contribution.engine.reset();
+			if (mode === 'visual') { contribution.engine.key('v'); }
+			const prevented = ['Shift', 'Control', 'Alt', 'Meta'].map(key => {
+				const event = new KeyboardEvent('keydown', { key, shiftKey: key === 'Shift', ctrlKey: key === 'Control', altKey: key === 'Alt', metaKey: key === 'Meta', cancelable: true });
+				keyDown.fire(new StandardKeyboardEvent(event));
+				return event.defaultPrevented;
+			});
+			snapshots.push({ mode: contribution.engine.mode, error: contribution.engine.error, prevented });
+		}
+		assert.deepStrictEqual({ handled: handle.callCount, snapshots }, { handled: 0, snapshots: [
+			{ mode: 'normal', error: '', prevented: [false, false, false, false] },
+			{ mode: 'visual', error: '', prevented: [false, false, false, false] },
+		] });
 	});
 	test('Tab and Shift+Tab reach remaps as distinct keys', () => {
 		const keyDown = store.add(new Emitter<IKeyboardEvent>());

@@ -18,7 +18,7 @@ suite('Jump List Model', () => {
 		const instantiation = workbenchInstantiationService(undefined, store);
 		const model = instantiation.createInstance(JumpListModel);
 		model.load(URI.file('/project'));
-		return { instantiation, model, paths: () => model.entries.map(item => item.path) };
+		return { instantiation, model, paths: () => model.entries.map(item => item.resource.path) };
 	}
 
 	test('unique additions, delete/put ordering, undo and redo persist immediately', () => {
@@ -70,6 +70,46 @@ suite('Jump List Model', () => {
 			results.push(f.paths());
 		}
 		deepStrictEqual(results, [[], [], ['/project/a', '/missing']]);
+	});
+
+	test('positions persist through reordering, delete/put and undo/redo; adding again updates the same slot', () => {
+		const f = fixture();
+		const resource = URI.file('/project/a');
+		const original = { resource, lineNumber: 42, column: 7 };
+		const updated = { resource, lineNumber: 90, column: 3 };
+		f.model.add(resource, { lineNumber: 42, column: 7 });
+		f.model.add(URI.file('/project/b'), { lineNumber: 10, column: 1 });
+		f.model.move(0, 1);
+		f.model.remove(1);
+		f.model.put(0, true);
+		f.model.load(URI.file('/project'));
+		const restored = f.model.entries[0];
+		f.model.add(resource, { lineNumber: 90, column: 3 });
+		const changed = f.model.entries[0];
+		f.model.load(URI.file('/project'));
+		f.model.undo();
+		const undone = f.model.entries[0];
+		f.model.redo();
+		const reloaded = f.instantiation.createInstance(JumpListModel);
+		reloaded.load(URI.file('/project'));
+		deepStrictEqual([restored, changed, undone, reloaded.entries[0], reloaded.entries.length], [original, updated, original, updated, 2]);
+	});
+
+	test('legacy bookmarks survive saving and invalid stored positions are ignored', () => {
+		const f = fixture();
+		const key = `terminalFirst.jumpList.v1.${f.instantiation.get(IUriIdentityService).extUri.getComparisonKey(URI.file('/project'))}`;
+		f.instantiation.get(IStorageService).store(key, { version: 1, entries: [
+			'file:///project/legacy',
+			{ resource: 'file:///project/invalid', lineNumber: -1, column: 3 },
+			{ resource: 'file:///project/column', lineNumber: 12, column: 1.5 },
+		] }, StorageScope.PROFILE, StorageTarget.MACHINE);
+		f.model.load(URI.file('/project'));
+		f.model.add(URI.file('/project/new'), { lineNumber: 25, column: 2 });
+		const reloaded = f.instantiation.createInstance(JumpListModel);
+		reloaded.load(URI.file('/project'));
+		deepStrictEqual(reloaded.entries.map(({ resource, lineNumber, column }) => [resource.path, lineNumber, column]), [
+			['/project/legacy', undefined, undefined], ['/project/invalid', undefined, undefined], ['/project/column', 12, undefined], ['/project/new', 25, 2],
+		]);
 	});
 
 	test('nearest Git marker handles nested roots and worktrees; no marker falls back to session directory', async () => {

@@ -23,6 +23,8 @@ import { SCAN_CODE_STR_TO_EVENT_KEY_CODE } from '../../../base/common/keyCodes.j
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { logBrowserOpen } from '../common/browserViewTelemetry.js';
 import { URI } from '../../../base/common/uri.js';
+import { TerminalFirstBrowserKeyRouter } from '../../terminalFirst/common/terminalFirstBrowserKeys.js';
+import { terminalFirstEnabled } from '../../terminalFirst/common/terminalFirst.js';
 
 enum NewPageLocation {
 	Foreground = 'foreground',
@@ -36,6 +38,7 @@ enum NewPageLocation {
  */
 export class BrowserView extends Disposable {
 	private readonly _view: WebContentsView;
+	private readonly _terminalFirstKeys = new TerminalFirstBrowserKeyRouter(terminalFirstEnabled);
 	private readonly _faviconRequestCache = new Map<string, Promise<string>>();
 	presentation = BrowserViewPresentation.Listed;
 
@@ -445,6 +448,7 @@ export class BrowserView extends Disposable {
 		});
 
 		webContents.on('did-navigate', () => {
+			this._terminalFirstKeys.reset();
 			// Chromium resets the zoom factor to its per-origin default (100%) when
 			// navigating to a new document. Re-apply our stored zoom to override it.
 			this._consoleLogs.length = 0; // Clear console logs on navigation since they are per-page
@@ -467,6 +471,7 @@ export class BrowserView extends Disposable {
 		});
 
 		webContents.on('blur', () => {
+			this._terminalFirstKeys.reset();
 			this._onDidChangeFocus.fire({ focused: false });
 		});
 
@@ -484,6 +489,11 @@ export class BrowserView extends Disposable {
 
 		// If the page won't be able to handle events, forward key down events directly.
 		webContents.on('before-input-event', (event, input) => {
+			if (this._terminalFirstKeys.forward(input, {
+				preventDefault: () => event.preventDefault(),
+				focusWorkbench: () => this._currentWindow?.win?.webContents.focus(),
+				dispatch: keyEvent => this._onDidKeyCommand.fire(keyEvent),
+			})) { return; }
 			if (input.type !== 'keyDown') {
 				return;
 			}

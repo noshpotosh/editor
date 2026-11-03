@@ -31,6 +31,7 @@ import { viewContainerHosts } from '../../../services/views/browser/viewContaine
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { getSelectionKeyboardEvent, IListService } from '../../../../platform/list/browser/listService.js';
 import { viewContainerDisplayName, viewContainerIcon } from './tileCatalog.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 
 /** Container IDs of the built-in tool tiles; also maps tool tiles persisted before view tiles. */
 export const tileViewIds = { explorer: 'workbench.view.explorer', scm: 'workbench.view.scm' } as const;
@@ -165,11 +166,13 @@ export class ViewTileInput extends EditorInput {
 		readonly sessionId: string,
 		@IViewDescriptorService private readonly descriptors: IViewDescriptorService,
 		@IViewTileComposites private readonly composites: ViewTileComposites,
+		@IExtensionService private readonly extensions: IExtensionService,
 	) {
 		super();
 		this.resource = URI.from({ scheme: 'terminal-first-tile', authority: 'view', path: `/${sessionId}/${encodeURIComponent(containerId)}` });
 		composites.retain(containerId);
 		this._register(descriptors.onDidChangeViewContainers(() => this.trackContainer()));
+		this._register(extensions.onDidChangeExtensions(() => this._onDidChangeLabel.fire()));
 		this.trackContainer();
 	}
 
@@ -184,13 +187,18 @@ export class ViewTileInput extends EditorInput {
 
 	/** Extension containers register after editors restore, so the label follows registration. */
 	private trackContainer(): void {
-		this.containerInfo.value = this.model?.onDidChangeContainerInfo(() => this._onDidChangeLabel.fire());
+		const model = this.model;
+		this.containerInfo.value = model && combinedDisposable(
+			model.onDidChangeContainerInfo(() => this._onDidChangeLabel.fire()),
+			model.onDidChangeAllViewDescriptors(() => this._onDidChangeLabel.fire()),
+			model.onDidChangeActiveViewDescriptors(() => this._onDidChangeLabel.fire()),
+		);
 		this._onDidChangeLabel.fire();
 	}
 
 	override getName(): string {
 		const container = this.container;
-		return container ? viewContainerDisplayName(container, this.model) : localize('viewTile', "View");
+		return container ? viewContainerDisplayName(container, this.model, { descriptors: this.descriptors, extensions: this.extensions }) : localize('viewTile', "View");
 	}
 	override getIcon(): ThemeIcon | undefined {
 		const container = this.container;
@@ -248,7 +256,7 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		@IStorageService storage: IStorageService,
 		@IInstantiationService private readonly instantiation: IInstantiationService,
 		@IViewTileComposites private readonly composites: ViewTileComposites,
-		@IViewDescriptorService descriptors: IViewDescriptorService,
+		@IViewDescriptorService private readonly descriptors: IViewDescriptorService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IEditorGroupsService private readonly groups: IEditorGroupsService,
 		@IListService private readonly listService: IListService,
@@ -256,7 +264,11 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		super(ViewTileEditor.ID, group, telemetry, theme, storage);
 		this._register(layoutService.onDidChangePartVisibility(() => this.updateVisibility()));
 		this._register(groups.onDidChangeActiveGroup(() => this.updateVisibility()));
-		this._register(descriptors.onDidChangeViewContainers(() => this.updateVisibility()));
+		this._register(descriptors.onDidChangeViewContainers(({ removed }) => {
+			this.updateVisibility();
+			// Generated-container cleanup marks permanent removal after firing this event.
+			if (removed.length) { queueMicrotask(() => { if (!this._store.isDisposed) { this.updateVisibility(); } }); }
+		}));
 		this._register(descriptors.onDidChangeContainerLocation(() => this.updateVisibility()));
 	}
 
@@ -286,6 +298,14 @@ export class ViewTileEditor extends EditorPane implements IViewTileOwner {
 		const visible = this.isVisible() && this.groups.mainPart.groups.includes(this.group) && this.layoutService.isVisible(Parts.EDITOR_PART, this.window);
 		if (!visible) { this.releaseComposite(); return; }
 		if (this.composite || !(this.input instanceof ViewTileInput) || !this.element) { return; }
+		if (this.descriptors.isViewContainerRemovedPermanently(this.input.containerId)) {
+			const input = this.input;
+			// Retained groups are outside the current grid; close stale inputs only once their space is visible.
+			queueMicrotask(() => {
+				if (this.input === input && this.isVisible() && this.groups.mainPart.groups.includes(this.group)) { input.dispose(); }
+			});
+			return;
+		}
 		const containerId = this.input.containerId;
 		const entry = this.composites.acquire(containerId, this);
 		if (!entry) {

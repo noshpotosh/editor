@@ -7,7 +7,9 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
-import { IViewContainerModel, IViewDescriptorService, ViewContainer, ViewContainerLocation } from '../../../common/views.js';
+import { ExtensionIdentifier } from '../../../../platform/extensions/common/extensions.js';
+import { ICustomViewDescriptor, IViewContainerModel, IViewDescriptor, IViewDescriptorService, ViewContainer, ViewContainerLocation } from '../../../common/views.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
 import { TERMINAL_VIEW_ID } from '../../terminal/common/terminal.js';
 
@@ -32,7 +34,8 @@ export type TileCatalogTarget =
 	| { readonly kind: 'terminal' }
 	| { readonly kind: 'web'; readonly app: string }
 	| { readonly kind: 'container'; readonly id: string }
-	| { readonly kind: 'view'; readonly id: string };
+	| { readonly kind: 'view'; readonly id: string }
+	| { readonly kind: 'views'; readonly ids: readonly string[] };
 
 export interface ITileCatalogEntry {
 	readonly group: TileGroup;
@@ -66,8 +69,12 @@ const toolDescriptions: Record<string, string> = {
 	'workbench.view.extensions': localize('describeExtensions', "Browse and manage extensions"),
 };
 
-/** A readable name for a view container: its model title, its descriptor title, its first active view, then its ID. */
-export function viewContainerDisplayName(container: ViewContainer, model: IViewContainerModel | undefined): string {
+/** A readable name for a view container, including moved extension views that share one tile. */
+export function viewContainerDisplayName(container: ViewContainer, model: IViewContainerModel | undefined, services?: Pick<ITileCatalogServices, 'descriptors' | 'extensions'>): string {
+	if (services && model && isGeneratedContainer(container)) {
+		const sharedExtension = sharedExtensionGroup(model.allViewDescriptors, services.descriptors);
+		if (sharedExtension) { return extensionGroupLabel(sharedExtension, services); }
+	}
 	// A container generated for a single moved view is named after that view, not after the container it came from.
 	const single = model?.activeViewDescriptors.length === 1 ? model.activeViewDescriptors[0] : undefined;
 	if (single && isGeneratedContainer(container)) {
@@ -97,12 +104,16 @@ export function viewContainerIcon(container: ViewContainer, model: IViewContaine
 export interface ITileCatalogServices {
 	readonly descriptors: IViewDescriptorService;
 	readonly composites: IPaneCompositePartService;
+	readonly extensions: Pick<IExtensionService, 'extensions'>;
 	/** Web app tiles, in display order. */
 	readonly webApps: readonly { readonly id: string; readonly label: string; readonly configuredUrl: string | undefined }[];
 }
 
 /** Builds the New Tile picker rows. `viewsOnly` keeps only Tools and Extensions. */
-export function buildTileCatalog({ descriptors, composites, webApps }: ITileCatalogServices, viewsOnly = false): ITileCatalogEntry[] {
+export function buildTileCatalog({ descriptors, composites, extensions: extensionService, webApps }: ITileCatalogServices, viewsOnly = false): ITileCatalogEntry[] {
+	const nameServices = { descriptors, extensions: extensionService };
+	const groupedViews = extensionViewGroups(descriptors, true).filter(group => group.views.length > 1);
+	const availableContainers: ViewContainer[] = [];
 	const entries: ITileCatalogEntry[] = [];
 	if (!viewsOnly) {
 		entries.push(
@@ -120,14 +131,16 @@ export function buildTileCatalog({ descriptors, composites, webApps }: ITileCata
 			if (container.id === TERMINAL_VIEW_ID || !model.activeViewDescriptors.length || (container.hideIfEmpty && !model.visibleViewDescriptors.length)) {
 				continue;
 			}
-			const builtIn = !container.extensionId;
-			const label = viewContainerDisplayName(container, model);
+			availableContainers.push(container);
+			const sharedExtension = isGeneratedContainer(container) && sharedExtensionGroup(model.allViewDescriptors, descriptors);
+			const builtIn = !container.extensionId && !sharedExtension;
+			const label = viewContainerDisplayName(container, model, nameServices);
 			const icon = viewContainerIcon(container, model);
 			const list = builtIn ? tools : extensions;
 			list.push({
 				group: builtIn ? TileGroup.Tools : TileGroup.Extensions,
 				label,
-				description: toolDescriptions[container.id] ?? (builtIn ? localize('describeBuiltInView', "View") : localize('describeExtensionView', "Extension view")),
+				description: sharedExtension ? describeGroupedViews(sharedExtension.views) : toolDescriptions[container.id] ?? (builtIn ? localize('describeBuiltInView', "View") : localize('describeExtensionView', "Extension view")),
 				icon,
 				command: toolCommands[container.id],
 				target: { kind: 'container', id: container.id },
@@ -145,6 +158,22 @@ export function buildTileCatalog({ descriptors, composites, webApps }: ITileCata
 			}
 		}
 	}
+	for (const group of groupedViews) {
+		const ids = new Set(group.views.map(view => view.id));
+		// A whole-container row already opens this exact group. Dormant unrelated views still count.
+		if (availableContainers.some(container => {
+			const views = descriptors.getViewContainerModel(container).allViewDescriptors;
+			return views.length === ids.size && views.every(view => ids.has(view.id));
+		})) { continue; }
+		const icon = group.views[0].containerIcon;
+		extensions.push({
+			group: TileGroup.Extensions,
+			label: extensionGroupLabel(group, nameServices),
+			description: describeGroupedViews(group.views),
+			icon: ThemeIcon.isThemeIcon(icon) ? icon : URI.isUri(icon) ? { dark: icon } : viewContainerIcon(group.container, descriptors.getViewContainerModel(group.container)),
+			target: { kind: 'views', ids: [...ids] },
+		});
+	}
 	tools.sort((a, b) => rank(containerIdOf(a), toolOrder) - rank(containerIdOf(b), toolOrder));
 	entries.push(...tools);
 	if (!viewsOnly) {
@@ -154,6 +183,65 @@ export function buildTileCatalog({ descriptors, composites, webApps }: ITileCata
 	}
 	entries.push(...extensions);
 	return entries;
+}
+
+interface IExtensionViewGroup {
+	readonly extensionId: ExtensionIdentifier;
+	readonly container: ViewContainer;
+	readonly views: IViewDescriptor[];
+}
+
+function describeGroupedViews(views: readonly IViewDescriptor[]): string {
+	return localize('describeGroupedViews', "Views in one tile: {0}", views.map(view => view.name.value).join(', '));
+}
+
+function extensionGroupOf(view: IViewDescriptor, descriptors: IViewDescriptorService): IExtensionViewGroup | undefined {
+	const extensionId = (view as Partial<ICustomViewDescriptor>).extensionId;
+	const container = extensionId && descriptors.getDefaultContainerById(view.id);
+	return extensionId && container && container.id !== TERMINAL_VIEW_ID ? { extensionId, container, views: [view] } : undefined;
+}
+
+/** Groups follow their original contribution container even after individual views have moved. */
+function extensionViewGroups(descriptors: IViewDescriptorService, activeOnly: boolean): IExtensionViewGroup[] {
+	const groups = new Map<string, IExtensionViewGroup>();
+	for (const location of tiledLocations) {
+		for (const container of descriptors.getViewContainersByLocation(location)) {
+			if (container.id === TERMINAL_VIEW_ID) { continue; }
+			const model = descriptors.getViewContainerModel(container);
+			for (const view of activeOnly ? model.activeViewDescriptors : model.allViewDescriptors) {
+				if (!view.canMoveView) { continue; }
+				const group = extensionGroupOf(view, descriptors);
+				if (!group) { continue; }
+				const key = JSON.stringify([ExtensionIdentifier.toKey(group.extensionId), group.container.id]);
+				const existing = groups.get(key);
+				if (existing) { existing.views.push(view); } else { groups.set(key, group); }
+			}
+		}
+	}
+	for (const group of groups.values()) {
+		group.views.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+	}
+	return [...groups.values()];
+}
+
+/** Only a container wholly owned by one original extension group gets the extension's name. */
+function sharedExtensionGroup(views: readonly IViewDescriptor[], descriptors: IViewDescriptorService): IExtensionViewGroup | undefined {
+	if (views.length < 2) { return undefined; }
+	const group = extensionGroupOf(views[0], descriptors);
+	if (!group || !views.every(view => {
+		const candidate = extensionGroupOf(view, descriptors);
+		return candidate && ExtensionIdentifier.equals(candidate.extensionId, group.extensionId) && candidate.container.id === group.container.id;
+	})) { return undefined; }
+	return { ...group, views: [...views] };
+}
+
+function extensionGroupLabel(group: IExtensionViewGroup, { descriptors, extensions }: Pick<ITileCatalogServices, 'descriptors' | 'extensions'>): string {
+	const extension = extensions.extensions.find(extension => ExtensionIdentifier.equals(extension.identifier, group.extensionId));
+	const name = extension?.displayName || extension?.name || group.extensionId.value;
+	const sameExtension = extensionViewGroups(descriptors, false).filter(candidate => candidate.views.length > 1 && ExtensionIdentifier.equals(candidate.extensionId, group.extensionId));
+	if (sameExtension.length < 2) { return name; }
+	const containerTitle = typeof group.container.title === 'string' ? group.container.title : group.container.title.value;
+	return localize('extensionViewsInContainer', "{0} › {1}", name, containerTitle || group.container.id);
 }
 
 function containerIdOf(entry: ITileCatalogEntry): string {

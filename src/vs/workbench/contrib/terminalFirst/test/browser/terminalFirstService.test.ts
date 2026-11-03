@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual, rejects, strictEqual } from 'assert';
+import { ICodeEditor } from '../../../../../editor/browser/editorBrowser.js';
+import { Position } from '../../../../../editor/common/core/position.js';
 import { DeferredPromise } from '../../../../../base/common/async.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
@@ -310,6 +312,33 @@ suite('Terminal First', () => {
 		await state.service.addToJumpList();
 		await state.service.toggleFloatingJumpList();
 		strictEqual(state.service.floatingJumpListVisible, true);
+	});
+
+	test('jump list captures the cursor and restores it through slots and the floating list', async () => {
+		const state = fixture();
+		document.body.appendChild(state.mainContainer);
+		store.add(toDisposable(() => state.mainContainer.remove()));
+		state.instantiationService.stub(IFileService, 'exists', async (resource: URI) => !resource.path.endsWith('/.git'));
+		await state.service.initialize();
+		await state.service.showEditor();
+		state.editors.activeEditor = store.add(new TestEditorInput(URI.file('/project/file.ts'), 'test'));
+		let position = new Position(42, 7);
+		state.editors.activeTextEditorControl = upcastPartial<ICodeEditor>({ getEditorType: () => 'vs.editor.ICodeEditor', getPosition: () => position });
+		const opened: ITextResourceEditorInput[] = [];
+		state.instantiationService.stub(IEditorService, 'openEditor', async (input: ITextResourceEditorInput) => {
+			opened.push(input);
+			return upcastPartial<IEditorPane>({});
+		});
+		await state.service.addToJumpList();
+		position = new Position(80, 2);
+		await state.service.jumpToSlot(1);
+		await state.service.toggleFloatingJumpList();
+		const label = state.mainContainer.querySelector('.jump-list-row')?.textContent?.includes('file.ts:42');
+		document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+		await state.service.hideFloatingJumpList();
+		deepStrictEqual({ selections: opened.map(input => input.options?.selection), label, visible: state.service.floatingJumpListVisible }, {
+			selections: [{ startLineNumber: 42, startColumn: 7 }, { startLineNumber: 42, startColumn: 7 }], label: true, visible: false,
+		});
 	});
 
 	test('jump list shares a Git project across sessions, persists, and excludes other overlays', async () => {

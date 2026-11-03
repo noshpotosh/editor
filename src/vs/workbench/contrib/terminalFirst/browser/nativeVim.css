@@ -16,10 +16,12 @@
 	max-width: min(480px, 80vw);
 	max-height: 60vh;
 	overflow: auto;
-	pointer-events: none;
+	overscroll-behavior: contain;
+	scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
 	font-size: var(--vscode-fontSize-body1);
 }
 .native-vim-leader[hidden] { display: none; }
+.native-vim-leader.pending { opacity: 0; pointer-events: none; }
 .native-vim-leader .native-vim-leader-keys {
 	justify-self: start;
 	padding: 0 var(--vscode-spacing-size40);

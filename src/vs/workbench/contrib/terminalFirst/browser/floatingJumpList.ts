@@ -21,7 +21,7 @@ import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser
 import { TerminalFirstJumpListFocusedContext } from '../../../services/terminalFirst/common/terminalFirstPolicy.js';
 import { FilePreview, FilePreviewTarget } from './filePreview.js';
 import { layoutFloatingOverlay } from './floatingOverlay.js';
-import { JumpListModel } from './jumpListModel.js';
+import { JumpListEntry, JumpListModel } from './jumpListModel.js';
 
 /** Native file rows with a small, explicit Vim editing vocabulary. */
 export class FloatingJumpList extends Disposable {
@@ -29,7 +29,7 @@ export class FloatingJumpList extends Disposable {
 	private readonly heading: HTMLElement;
 	private readonly message: HTMLElement;
 	private readonly listContainer: HTMLElement;
-	private readonly list: WorkbenchList<URI>;
+	private readonly list: WorkbenchList<JumpListEntry>;
 	private readonly preview: FilePreview;
 	private previewTarget: FilePreviewTarget | undefined;
 	private readonly focusedContext;
@@ -42,7 +42,7 @@ export class FloatingJumpList extends Disposable {
 	constructor(
 		private readonly model: JumpListModel,
 		private readonly hide: (focus: boolean) => void,
-		private readonly open: (resource: URI) => Promise<boolean>,
+		private readonly open: (entry: JumpListEntry) => Promise<boolean>,
 		@IInstantiationService instantiation: IInstantiationService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IEditorGroupsService groups: IEditorGroupsService,
@@ -63,22 +63,22 @@ export class FloatingJumpList extends Disposable {
 		const body = append(this.element, $('.jump-list-body'));
 		this.listContainer = append(body, $('.jump-list-rows.show-file-icons'));
 		const labels = this._register(instantiation.createInstance(ResourceLabels, DEFAULT_LABELS_CONTAINER));
-		const renderer: IListRenderer<URI, { number: HTMLElement; label: IResourceLabel }> = {
+		const renderer: IListRenderer<JumpListEntry, { number: HTMLElement; label: IResourceLabel }> = {
 			templateId: 'jumpFile',
 			renderTemplate: container => {
 				container.classList.add('jump-list-row');
 				const number = append(container, $('span.jump-list-number'));
 				return { number, label: labels.create(container) };
 			},
-			renderElement: (resource, index, template) => {
+			renderElement: (entry, index, template) => {
 				template.number.textContent = String(index + 1);
-				template.label.setResource({ resource, name: this.label(resource) }, { fileKind: FileKind.FILE });
+				template.label.setResource({ resource: entry.resource, name: this.label(entry) }, { fileKind: FileKind.FILE });
 			},
 			disposeTemplate: template => template.label.dispose(),
 		};
-		this.list = this._register(instantiation.createInstance(WorkbenchList<URI>, 'FloatingJumpList', this.listContainer,
+		this.list = this._register(instantiation.createInstance(WorkbenchList<JumpListEntry>, 'FloatingJumpList', this.listContainer,
 			{ getHeight: () => 22, getTemplateId: () => 'jumpFile' }, [renderer], {
-				identityProvider: { getId: resource => this.identity.extUri.getComparisonKey(resource) },
+				identityProvider: { getId: entry => this.identity.extUri.getComparisonKey(entry.resource) },
 				accessibilityProvider: { getAriaLabel: resource => this.label(resource), getWidgetAriaLabel: () => localize('jumpFiles', "Jump List Files") },
 				multipleSelectionSupport: false, typeNavigationEnabled: false,
 			}));
@@ -130,9 +130,11 @@ export class FloatingJumpList extends Disposable {
 		this.focusedContext.reset();
 	}
 
-	private label(resource: URI): string {
-		return this.project && this.identity.extUri.isEqualOrParent(resource, this.project)
+	private label(entry: JumpListEntry): string {
+		const resource = entry.resource;
+		const path = this.project && this.identity.extUri.isEqualOrParent(resource, this.project)
 			? this.identity.extUri.relativePath(this.project, resource) || resource.fsPath : resource.fsPath;
+		return entry.lineNumber ? `${path}:${entry.lineNumber}` : path;
 	}
 
 	private render(index: number): void {
@@ -151,8 +153,9 @@ export class FloatingJumpList extends Disposable {
 	}
 
 	/** Re-rendering keeps the same target for an unchanged row, so the preview is not reloaded. */
-	private updatePreview(resource: URI | undefined): void {
+	private updatePreview(entry: JumpListEntry | undefined): void {
 		if (!this.visible) { return; }
+		const resource = entry?.resource;
 		if (!resource) { this.previewTarget = undefined; }
 		else if (!this.previewTarget || !this.identity.extUri.isEqual(this.previewTarget.resource, resource)) { this.previewTarget = { resource }; }
 		void this.preview.update(this.previewTarget);
@@ -187,11 +190,11 @@ export class FloatingJumpList extends Disposable {
 		event.stopPropagation();
 	}
 
-	private async accept(resource: URI): Promise<void> {
+	private async accept(entry: JumpListEntry): Promise<void> {
 		if (this.opening || !this.visible) { return; }
 		const generation = this.generation;
 		this.opening = true;
-		try { await this.open(resource); }
+		try { await this.open(entry); }
 		catch (error) { if (this.visible && generation === this.generation) { this.message.textContent = error instanceof Error ? error.message : String(error); } }
 		finally { if (generation === this.generation) { this.opening = false; } }
 	}

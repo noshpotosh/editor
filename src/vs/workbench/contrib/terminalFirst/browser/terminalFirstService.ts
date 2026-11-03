@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getCodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { status } from '../../../../base/browser/ui/aria/aria.js';
 import { EditorResourceAccessor, EditorsOrder, SideBySideEditor } from '../../../common/editor.js';
 import { FloatingJumpList } from './floatingJumpList.js';
-import { JumpListModel } from './jumpListModel.js';
+import { JumpListEntry, JumpListModel } from './jumpListModel.js';
 import { raceTimeout, Sequencer } from '../../../../base/common/async.js';
 import { createTextBufferFactory } from '../../../../editor/common/model/textModel.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
@@ -477,10 +478,11 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		return this.transitions.queue(async () => {
 			if (this.active?.mode !== 'editor' || this.jumpListVisible) { return; }
 			const list = await this.loadJumpList();
-			const resource = list?.model.entries[slot - 1];
-			if (!resource) { status(localize('emptySlot', "Jump list slot {0} is empty.", slot)); return; }
+			const entry = list?.model.entries[slot - 1];
+			if (!entry) { status(localize('emptySlot', "Jump list slot {0} is empty.", slot)); return; }
+			const { resource } = entry;
 			if (!await this.fileService.exists(resource)) { throw new Error(localize('jumpFileMissing', "The file no longer exists: {0}", resource.fsPath)); }
-			await this.editorService.openEditor({ resource, options: { pinned: true } });
+			await this.editorService.openEditor({ resource, options: { pinned: true, selection: jumpListSelection(entry) } });
 		});
 	}
 
@@ -499,9 +501,10 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 		return this.transitions.queue(async () => {
 			const resource = this.activeFile();
 			if (this.active?.mode !== 'editor' || !resource || this.jumpListVisible || this.browserVisible || this.floatingVisible) { return; }
+			const position = getCodeEditor(this.editorService.activeTextEditorControl)?.getPosition() ?? undefined;
 			const list = await this.loadJumpList();
 			if (!list) { return; }
-			status(list.model.add(resource)
+			status(list.model.add(resource, position)
 				? localize('jumpListAdded', "Added {0} to the jump list.", resource.fsPath)
 				: localize('jumpListAlreadyAdded', "{0} is already in the jump list.", resource.fsPath));
 		});
@@ -517,13 +520,14 @@ export class TerminalFirstService extends Disposable implements ITerminalFirstSe
 			this.hideFloating();
 			this.jumpListHost ??= this._register(this.instantiationService.createInstance(FloatingJumpList, list.model,
 				(focus: boolean) => { void this.hideFloatingJumpList(focus).catch(error => this.logService.error(error)); },
-				(resource: URI) => {
+				(entry: JumpListEntry) => {
+					const { resource } = entry;
 					const owner = this.active;
 					const generation = this.jumpListGeneration;
 					return this.transitions.queue(async () => {
 						if (!this.jumpListVisible || generation !== this.jumpListGeneration || this.active !== owner || owner?.mode !== 'editor') { return false; }
 						if (!await this.fileService.exists(resource)) { throw new Error(localize('jumpFileMissing', "The file no longer exists: {0}", resource.fsPath)); }
-						const editor = await this.editorService.openEditor({ resource, options: { pinned: true } });
+						const editor = await this.editorService.openEditor({ resource, options: { pinned: true, selection: jumpListSelection(entry) } });
 						if (!editor) { throw new Error(localize('jumpFileOpenFailed', "The file could not be opened.")); }
 						this.hideJumpList(true);
 						return true;
@@ -1020,4 +1024,9 @@ function parseGotoFragment(uri: URI): { resource: URI; selection?: ITextEditorSe
 		return { resource: uri };
 	}
 	return { resource: uri.with({ fragment: '' }), selection: { startLineNumber: Number(match.groups.line), startColumn: match.groups.column ? Number(match.groups.column) : 1 } };
+}
+
+/** Restores a saved cursor while leaving legacy file-only bookmarks without a selection. */
+function jumpListSelection(entry: JumpListEntry): ITextEditorSelection | undefined {
+	return entry.lineNumber ? { startLineNumber: entry.lineNumber, startColumn: entry.column ?? 1 } : undefined;
 }

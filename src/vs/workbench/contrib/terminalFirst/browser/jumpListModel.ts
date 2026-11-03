@@ -9,14 +9,21 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IUriIdentityService } from '../../../../platform/uriIdentity/common/uriIdentity.js';
 
+/** A project bookmark with the cursor position captured when it was added. */
+export interface JumpListEntry {
+	readonly resource: URI;
+	readonly lineNumber?: number;
+	readonly column?: number;
+}
+
 /** Ordered project bookmarks, independent of editor and terminal lifetimes. */
 export class JumpListModel {
-	private items: URI[] = [];
-	private removed: URI | undefined;
-	private undoStack: URI[][] = [];
-	private redoStack: URI[][] = [];
+	private items: JumpListEntry[] = [];
+	private removed: JumpListEntry | undefined;
+	private undoStack: JumpListEntry[][] = [];
+	private redoStack: JumpListEntry[][] = [];
 	private key = '';
-	get entries(): readonly URI[] { return this.items; }
+	get entries(): readonly JumpListEntry[] { return this.items; }
 
 	constructor(
 		@IStorageService private readonly storage: IStorageService,
@@ -38,7 +45,7 @@ export class JumpListModel {
 		const key = `terminalFirst.jumpList.v1.${this.identity.extUri.getComparisonKey(project)}`;
 		const stored = this.read(key);
 		// Reopening the same project's unchanged list keeps its undo history; a different project or an external change starts over.
-		if (key === this.key && stored.length === this.items.length && stored.every((item, index) => this.identity.extUri.isEqual(item, this.items[index]))) {
+		if (key === this.key && stored.length === this.items.length && stored.every((item, index) => this.identity.extUri.isEqual(item.resource, this.items[index].resource) && item.lineNumber === this.items[index].lineNumber && item.column === this.items[index].column)) {
 			return;
 		}
 		this.key = key;
@@ -48,27 +55,38 @@ export class JumpListModel {
 		this.redoStack = [];
 	}
 
-	private read(key: string): URI[] {
-		const items: URI[] = [];
+	private read(key: string): JumpListEntry[] {
+		const items: JumpListEntry[] = [];
 		try {
-			const stored = this.storage.getObject<{ version: number; entries: string[] }>(key, StorageScope.PROFILE);
+			const stored = this.storage.getObject<{ version: number; entries: (string | { resource: string; lineNumber?: number; column?: number })[] }>(key, StorageScope.PROFILE);
 			if (stored?.version !== 1 || !Array.isArray(stored.entries)) { return items; }
 			for (const value of stored.entries) {
-				if (typeof value !== 'string') { continue; }
+				if (typeof value !== 'string' && (!value || typeof value.resource !== 'string')) { continue; }
 				try {
-					const resource = URI.parse(value, true);
-					if (resource.scheme === 'file' && resource.path.startsWith('/') && !items.some(item => this.identity.extUri.isEqual(item, resource))) { items.push(resource); }
+					const resource = URI.parse(typeof value === 'string' ? value : value.resource, true);
+					if (resource.scheme === 'file' && resource.path.startsWith('/') && !items.some(item => this.identity.extUri.isEqual(item.resource, resource))) {
+						const lineNumber = typeof value !== 'string' && typeof value.lineNumber === 'number' && Number.isSafeInteger(value.lineNumber) && value.lineNumber > 0 ? value.lineNumber : undefined;
+						const column = lineNumber && typeof value !== 'string' && typeof value.column === 'number' && Number.isSafeInteger(value.column) && value.column > 0 ? value.column : undefined;
+						items.push({ resource, lineNumber, column });
+					}
 				} catch { /* Ignore malformed entries without losing valid bookmarks. */ }
 			}
 		} catch { /* A damaged saved list starts empty. */ }
 		return items;
 	}
 
-	indexOf(resource: URI): number { return this.items.findIndex(item => this.identity.extUri.isEqual(item, resource)); }
+	indexOf(resource: URI): number { return this.items.findIndex(item => this.identity.extUri.isEqual(item.resource, resource)); }
 
-	add(resource: URI): boolean {
-		if (resource.scheme !== 'file' || this.indexOf(resource) >= 0) { return false; }
-		this.change([...this.items, resource]);
+	add(resource: URI, position?: { lineNumber: number; column: number }): boolean {
+		if (resource.scheme !== 'file') { return false; }
+		const index = this.indexOf(resource);
+		const entry: JumpListEntry = { resource, lineNumber: position?.lineNumber, column: position?.column };
+		if (index >= 0) {
+			if (this.items[index].lineNumber === entry.lineNumber && this.items[index].column === entry.column) { return false; }
+			this.change(this.items.map((item, i) => i === index ? entry : item));
+		} else {
+			this.change([...this.items, entry]);
+		}
 		return true;
 	}
 
@@ -79,7 +97,7 @@ export class JumpListModel {
 	}
 
 	put(index: number, before: boolean): number {
-		if (!this.removed || this.indexOf(this.removed) >= 0) { return index; }
+		if (!this.removed || this.indexOf(this.removed.resource) >= 0) { return index; }
 		const items = [...this.items];
 		const target = Math.max(0, Math.min(items.length, index + (before ? 0 : 1)));
 		items.splice(target, 0, this.removed);
@@ -108,7 +126,7 @@ export class JumpListModel {
 		if (items) { this.undoStack.push(this.items); this.items = items; this.save(); }
 	}
 
-	private change(items: URI[]): void {
+	private change(items: JumpListEntry[]): void {
 		this.undoStack.push(this.items);
 		this.redoStack = [];
 		this.items = items;
@@ -116,6 +134,6 @@ export class JumpListModel {
 	}
 
 	private save(): void {
-		this.storage.store(this.key, { version: 1, entries: this.items.map(item => item.toString()) }, StorageScope.PROFILE, StorageTarget.MACHINE);
+		this.storage.store(this.key, { version: 1, entries: this.items.map(item => ({ resource: item.resource.toString(), lineNumber: item.lineNumber, column: item.column })) }, StorageScope.PROFILE, StorageTarget.MACHINE);
 	}
 }

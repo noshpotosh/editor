@@ -26,7 +26,8 @@ import { EditorPartHooks } from '../../../browser/parts/editor/editorPartHooks.j
 import { PaneComposite } from '../../../browser/panecomposite.js';
 import { EditorExtensions, EditorInputCapabilities, IEditorFactoryRegistry } from '../../../common/editor.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
-import { IViewDescriptorService } from '../../../common/views.js';
+import { IViewDescriptor, IViewDescriptorService, ViewContainer, ViewVisibilityState } from '../../../common/views.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { GroupDirection, GroupsArrangement, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { noRoomForTileMessage, tileFits, tileSplitDirection, tileSplitSizes } from '../common/tileLayout.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -131,6 +132,7 @@ export class TileService extends Disposable {
 		@IViewTileComposites private readonly composites: ViewTileComposites,
 		@IPaneCompositePartService private readonly paneComposites: IPaneCompositePartService,
 		@IKeybindingService private readonly keybindings: IKeybindingService,
+		@IExtensionService private readonly extensions: IExtensionService,
 	) {
 		super();
 		// Every view container except the shell surface opens as a tile, so the sidebar and panel never host views.
@@ -189,6 +191,65 @@ export class TileService extends Disposable {
 		return group;
 	}
 
+	/** Groups related extension views in one persisted container, keeping their existing providers and actions. */
+	async openViews(ids: readonly string[], direction?: GroupDirection, focus = true): Promise<IEditorGroup | undefined> {
+		const group = await this.operations.queue(async () => {
+			const views: IViewDescriptor[] = [];
+			const sources = new Set<ViewContainer>();
+			for (const id of new Set(ids)) {
+				const view = this.descriptors.getViewDescriptorById(id);
+				const source = this.descriptors.getViewContainerByViewId(id);
+				if (!view?.canMoveView || !source || source.id === TERMINAL_VIEW_ID) { return undefined; }
+				views.push(view);
+				sources.add(source);
+			}
+			if (!views.length || !this.descriptors.canMoveViews()) { return undefined; }
+			await this.sessions.showEditor(false);
+			if (!this.activeScope) { return undefined; }
+			// Reuse a tile that contains only requested views, including inactive ones. Never absorb unrelated views.
+			const candidates = [...sources].filter(source => this.descriptors.getViewContainerModel(source).allViewDescriptors.every(view => views.includes(view)));
+			let container: ViewContainer | undefined = candidates.find(source => this.findTool(source.id)) ?? candidates[0];
+			if (!container || !this.findTool(container.id)) {
+				this.unmaximize();
+				const source = this.part.activeGroup;
+				if ((this.part.count !== 1 || !source.isEmpty || direction !== undefined) && tileSplitDirection(this.part.getSize(source), direction) === undefined) {
+					if (focus) { this.notifications.info(noRoomForTileMessage()); }
+					return undefined;
+				}
+			}
+			if (!container) {
+				const location = this.descriptors.getViewLocationById(views[0].id);
+				if (location === null) { return undefined; }
+				this.descriptors.moveViewToLocation(views[0], location, 'terminalFirst.tile.group');
+				container = this.descriptors.getViewContainerByViewId(views[0].id) ?? undefined;
+			}
+			if (!container) { return undefined; }
+			// The descriptor service expects each move's views to share a source container.
+			for (const view of views) {
+				this.descriptors.moveViewsToContainer([view], container, ViewVisibilityState.Expand, 'terminalFirst.tile.group');
+			}
+			const model = this.descriptors.getViewContainerModel(container);
+			for (const [index, view] of views.entries()) {
+				const current = model.allViewDescriptors[index];
+				if (current && current.id !== view.id) { model.move(view.id, current.id); }
+			}
+			// Merging previously separate tiles removes their generated containers; close their now-empty tiles too.
+			for (const source of sources) {
+				if (source !== container && this.descriptors.isViewContainerRemovedPermanently(source.id)) {
+					const old = this.findTool(source.id);
+					if (old) { await this.close(old); }
+				}
+			}
+			return this.openTile({ container: container.id }, direction, focus);
+		});
+		// Revealing a view can route back through this service, so it must run outside the layout queue.
+		if (group) {
+			for (const id of new Set(ids)) { await this.views.openView(id, false); }
+			if (focus) { group.focus(); }
+		}
+		return group;
+	}
+
 	/** Layout changes act on the whole grid, so a maximized tile is restored first. */
 	private unmaximize(): void {
 		if (this.part.hasMaximizedGroup()) { this.part.toggleMaximizeGroup(); }
@@ -202,6 +263,7 @@ export class TileService extends Disposable {
 	async pick(direction?: GroupDirection, viewsOnly = false): Promise<void> {
 		const entries = buildTileCatalog({
 			descriptors: this.descriptors,
+			extensions: this.extensions,
 			composites: this.paneComposites,
 			webApps: Object.entries(webAppTiles).map(([id, app]) => ({ id, label: app.label, configuredUrl: parseWebAppUrl(this.configuration.getValue<string>(app.setting) ?? '') })),
 		}, viewsOnly);
@@ -229,6 +291,7 @@ export class TileService extends Disposable {
 			case 'web': await this.openWebApp(selection.target.app as WebAppTileId, direction); break;
 			case 'container': await this.open({ container: selection.target.id }, direction); break;
 			case 'view': await this.openView(selection.target.id, direction); break;
+			case 'views': await this.openViews(selection.target.ids, direction); break;
 		}
 	}
 
@@ -264,46 +327,48 @@ export class TileService extends Disposable {
 
 	/** Opens a tile beside the focused tile and resolves to it, or `undefined` when nothing opened. */
 	open(kind: TileKind, direction?: GroupDirection, focus = true): Promise<IEditorGroup | undefined> {
-		return this.operations.queue(async () => {
-			await this.sessions.showEditor(false);
-			const scope = this.activeScope;
-			if (!scope) { return undefined; }
+		return this.operations.queue(() => this.openTile(kind, direction, focus));
+	}
+
+	private async openTile(kind: TileKind, direction: GroupDirection | undefined, focus: boolean): Promise<IEditorGroup | undefined> {
+		await this.sessions.showEditor(false);
+		const scope = this.activeScope;
+		if (!scope) { return undefined; }
+		if (typeof kind === 'object') {
+			const existing = this.findTool(kind.container);
+			if (existing) { if (focus) { existing.focus(); } return existing; }
+		}
+		this.unmaximize();
+		const source = this.part.activeGroup;
+		let group = source;
+		if (this.part.count !== 1 || !source.isEmpty || direction !== undefined) {
+			const size = this.part.getSize(source);
+			const split = tileSplitDirection(size, direction);
+			if (split === undefined) {
+				// Background reveals (an extension, an auto-revealed panel) fail quietly.
+				if (focus) { this.notifications.info(noRoomForTileMessage()); }
+				return undefined;
+			}
+			group = this.part.addGroup(source, split);
+			this.part.setSize(group, tileSplitSizes(size, split));
+		}
+		const rollback = () => {
+			if (group !== source && group.isEmpty && this.part.groups.includes(group)) { this.part.removeGroup(group); }
+		};
+		try {
 			if (typeof kind === 'object') {
-				const existing = this.findTool(kind.container);
-				if (existing) { if (focus) { existing.focus(); } return existing; }
-			}
-			this.unmaximize();
-			const source = this.part.activeGroup;
-			let group = source;
-			if (this.part.count !== 1 || !source.isEmpty || direction !== undefined) {
-				const size = this.part.getSize(source);
-				const split = tileSplitDirection(size, direction);
-				if (split === undefined) {
-					// Background reveals (an extension, an auto-revealed panel) fail quietly.
-					if (focus) { this.notifications.info(noRoomForTileMessage()); }
-					return undefined;
-				}
-				group = this.part.addGroup(source, split);
-				this.part.setSize(group, tileSplitSizes(size, split));
-			}
-			const rollback = () => {
-				if (group !== source && group.isEmpty && this.part.groups.includes(group)) { this.part.removeGroup(group); }
-			};
-			try {
-				if (typeof kind === 'object') {
-					await this.editors.openEditor(this.instantiation.createInstance(ViewTileInput, kind.container, scope), { pinned: true, preserveFocus: !focus }, group);
-				} else if (kind === 'terminal' && !await this.sessions.openTerminalTile(group.id)) {
-					rollback();
-					return undefined;
-				}
-			} catch (error) {
+				await this.editors.openEditor(this.instantiation.createInstance(ViewTileInput, kind.container, scope), { pinned: true, preserveFocus: !focus }, group);
+			} else if (kind === 'terminal' && !await this.sessions.openTerminalTile(group.id)) {
 				rollback();
-				throw error;
+				return undefined;
 			}
-			if (!this.part.groups.includes(group)) { return undefined; }
-			if (focus) { group.focus(); }
-			return group;
-		});
+		} catch (error) {
+			rollback();
+			throw error;
+		}
+		if (!this.part.groups.includes(group)) { return undefined; }
+		if (focus) { group.focus(); }
+		return group;
 	}
 
 	/**

@@ -5,11 +5,11 @@
 
 import { deepStrictEqual, strictEqual } from 'assert';
 import { timeout } from '../../../../../base/common/async.js';
-import { DisposableStore } from '../../../../../base/common/lifecycle.js';
+import { DisposableStore, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { upcastPartial } from '../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
-import { IContext, IContextKeyService, IScopedContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContext, IContextKeyService, IScopedContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { TestInstantiationService } from '../../../../../platform/instantiation/test/common/instantiationServiceMock.js';
 import { INotificationService } from '../../../../../platform/notification/common/notification.js';
@@ -41,10 +41,13 @@ import { IEditorOptions, IResourceEditorInput } from '../../../../../platform/ed
 import { IQuickInputService, IQuickPickItem, IQuickPickSeparator } from '../../../../../platform/quickinput/common/quickInput.js';
 import { INativeVimService } from '../../../../../editor/contrib/nativeVim/common/nativeVimService.js';
 import { Event } from '../../../../../base/common/event.js';
+import { IExtensionService, NullExtensionService } from '../../../../services/extensions/common/extensions.js';
+import { IStorageService, StorageScope } from '../../../../../platform/storage/common/storage.js';
+import { TileCatalogTarget } from '../../browser/tileCatalog.js';
 
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { URI } from '../../../../../base/common/uri.js';
-import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
+import { ExtensionIdentifier, IExtensionDescription } from '../../../../../platform/extensions/common/extensions.js';
 import { IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
 suite('Terminal First Tiles', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
@@ -90,6 +93,7 @@ suite('Terminal First Tiles', () => {
 			}),
 		}));
 		instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
+		instantiation.stub(IExtensionService, new NullExtensionService());
 		instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
 		const composites = store.add(instantiation.createInstance(ViewTileComposites));
 		instantiation.stub(IViewTileComposites, composites);
@@ -139,9 +143,35 @@ suite('Terminal First Tiles', () => {
 	});
 
 	suite('TileService', () => {
+		const stashExtension = upcastPartial<IExtensionDescription>({ identifier: new ExtensionIdentifier('vendor.stashes'), name: 'stashes', displayName: 'Stashes' });
+
+		/** Two extension trees share an SCM-like container with unrelated views. */
+		function registerStashViews(descriptors: IViewDescriptorService, hiddenUnrelated = false) {
+			const views = Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry);
+			const containers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);
+			const container = containers.registerViewContainer({ id: 'test.stashes.scm', title: localize2('stashSource', "Source Control"), icon: Codicon.sourceControl, ctorDescriptor: new SyncDescriptor(class { }) }, ViewContainerLocation.Sidebar);
+			const unrelated = ['test.stashes.changes', 'test.stashes.repositories'];
+			const ids = ['test.stashes.tags', 'test.stashes.untagged'];
+			const registered = [
+				...unrelated.map(id => ({ id, name: localize2('unrelatedScm', "Changes"), ctorDescriptor: new SyncDescriptor(class { }), when: hiddenUnrelated ? ContextKeyExpr.false() : undefined, canMoveView: true })),
+				...ids.map((id, index) => ({ id, name: index ? localize2('untaggedStashes', "Untagged") : localize2('taggedStashes', "Tags"), ctorDescriptor: new SyncDescriptor(class { }), extensionId: stashExtension.identifier, canMoveView: true })),
+			];
+			views.registerViews(registered, container);
+			const pane = Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(EditorPaneDescriptor.create(ViewTileEditor, ViewTileEditor.ID, 'View Tile'), [new SyncDescriptor(ViewTileInput)]);
+			const cleanup = toDisposable(() => {
+				descriptors.reset();
+				views.deregisterViews(registered, container);
+				containers.deregisterViewContainer(container);
+				pane.dispose();
+			});
+			return { container, ids, unrelated, dispose: () => cleanup.dispose() };
+		}
+
 		/** Runs a scenario against a real 1080×800 editor grid with one active session. */
 		async function withTiles(run: (tiles: {
 			service: TileService;
+			descriptors: IViewDescriptorService;
+			instantiation: TestInstantiationService;
 			groups: IEditorGroupsService;
 			/** Grid order of named tiles with their sizes, plus the focused tile. */
 			shape(): { tiles: [string, number, number][]; active: string; maximized: boolean };
@@ -154,10 +184,12 @@ suite('Terminal First Tiles', () => {
 			web: { written: [string, unknown][]; prompts: number; opened: IResourceEditorInput[] };
 			/** Items shown by each quick pick, in order. */
 			picks: (IQuickPickItem | IQuickPickSeparator)[][];
+			selectPick(label: string): void;
 			/** Makes another space of the session active; view tiles are scoped to the active space. */
 			setSpace: (id: string) => void;
-		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean; jiraBoardUrl?: string; webAppAnswer?: string } = {}): Promise<void> {
+		}) => Promise<void>, options: { terminalOpens?: boolean; focusFollowsMouse?: boolean; jiraBoardUrl?: string; webAppAnswer?: string; extensions?: IExtensionDescription[] } = {}): Promise<void> {
 			const instantiation = workbenchInstantiationService(undefined, store);
+			instantiation.stub(IExtensionService, Object.assign(new NullExtensionService(), { extensions: options.extensions ?? [] }));
 			const contexts = instantiation.get(IContextKeyService);
 			instantiation.stub(IContextKeyService, 'getContext', () => upcastPartial<IContext>({ getValue: key => contexts.getContextKeyValue(key) }));
 			const configuration = new TestConfigurationService({ terminalFirst: { tiles: { resizeStep: 40, focusFollowsMouse: options.focusFollowsMouse ?? true }, jira: { boardUrl: options.jiraBoardUrl ?? '' } } });
@@ -166,7 +198,8 @@ suite('Terminal First Tiles', () => {
 			instantiation.stub(IConfigurationService, configuration);
 			instantiation.stub(IQuickInputService, 'input', async () => { web.prompts++; return options.webAppAnswer; });
 			const picks: (IQuickPickItem | IQuickPickSeparator)[][] = [];
-			instantiation.stub(IQuickInputService, 'pick', (async (items: (IQuickPickItem | IQuickPickSeparator)[]) => { picks.push(items); return undefined; }) as IQuickInputService['pick']);
+			let selectedPick: string | undefined;
+			instantiation.stub(IQuickInputService, 'pick', (async (items: (IQuickPickItem | IQuickPickSeparator)[]) => { picks.push(items); return items.find(item => item.type !== 'separator' && item.label === selectedPick); }) as IQuickInputService['pick']);
 			instantiation.stub(IPaneCompositePartService, 'getVisiblePaneCompositeIds', () => []);
 			const parts = await createEditorParts(instantiation, store.add(new DisposableStore()));
 			instantiation.stub(IEditorGroupsService, parts);
@@ -191,7 +224,8 @@ suite('Terminal First Tiles', () => {
 			instantiation.stub(IPaneCompositePartService, 'getPaneComposite', () => undefined);
 			// Views are active only when their context matches, which the mock context key service never does.
 			const viewContexts = store.add(instantiation.createInstance(ContextKeyService));
-			instantiation.stub(IViewDescriptorService, store.add(store.add(instantiation.createChild(new ServiceCollection([IContextKeyService, viewContexts]))).createInstance(ViewDescriptorService)));
+			const descriptors = store.add(store.add(instantiation.createChild(new ServiceCollection([IContextKeyService, viewContexts]))).createInstance(ViewDescriptorService));
+			instantiation.stub(IViewDescriptorService, descriptors);
 			instantiation.stub(IViewsService, new TestViewsService());
 			instantiation.stub(INativeVimService, upcastPartial<INativeVimService>({ enabled: false, onDidChange: Event.None }));
 			instantiation.stub(IContextMenuService, upcastPartial<IContextMenuService>({ onDidShowContextMenu: Event.None, onDidHideContextMenu: Event.None, showContextMenu: () => { } }));
@@ -200,7 +234,8 @@ suite('Terminal First Tiles', () => {
 			const names = new Map<number, string>([[parts.mainPart.activeGroup.id, 'a']]);
 			try {
 				await run({
-					service, groups: parts, notifications, web, picks,
+					service, descriptors, instantiation, groups: parts, notifications, web, picks,
+					selectPick: label => { selectedPick = label; },
 					setSpace: id => { spaceId = id; },
 					name: (group, label) => { if (group) { names.set(group.id, label); } },
 					layout: (width, height) => parts.testMainPart.layout(width, height, 0, 0),
@@ -366,6 +401,110 @@ suite('Terminal First Tiles', () => {
 				containers.deregisterViewContainer(container);
 			}
 		}));
+
+		test('extension views open in one named tile, preserve unrelated SCM views, and reuse the same group', () => withTiles(async ({ service, descriptors, groups, instantiation }) => {
+			const fixture = store.add(registerStashViews(descriptors));
+			try {
+				const source = await service.openView(fixture.container.id, GroupDirection.RIGHT);
+				const grouped = await service.openViews(fixture.ids, GroupDirection.DOWN);
+				const input = grouped?.activeEditor as ViewTileInput;
+				const container = descriptors.getViewContainerById(input.containerId)!;
+				const serializer = new ViewTileSerializer();
+				const restored = store.add(serializer.deserialize(instantiation, serializer.serialize(input))!);
+				const persisted = instantiation.get(IStorageService).getObject<{ viewLocations: Record<string, string> }>('views.customizations', StorageScope.PROFILE)!;
+				deepStrictEqual({
+					separateContainer: container !== fixture.container,
+					sourceViews: descriptors.getViewContainerModel(fixture.container).allViewDescriptors.map(view => view.id),
+					groupedViews: descriptors.getViewContainerModel(container).allViewDescriptors.map(view => view.id),
+					name: input.getName(), restoredName: restored.getName(), sameInput: restored.matches(input),
+					persisted: fixture.ids.every(id => persisted.viewLocations[id] === container.id),
+					reused: await service.openViews([...fixture.ids].reverse()) === grouped,
+					sourceRetained: source?.activeEditor instanceof ViewTileInput && !source.activeEditor.isDisposed(),
+					groups: groups.mainPart.count,
+				}, { separateContainer: true, sourceViews: fixture.unrelated, groupedViews: fixture.ids, name: 'Stashes', restoredName: 'Stashes', sameInput: true, persisted: true, reused: true, sourceRetained: true, groups: 3 });
+				descriptors.reset();
+				await Promise.resolve();
+				const reset = instantiation.get(IStorageService).getObject<{ viewLocations: Record<string, string> }>('views.customizations', StorageScope.PROFILE)!;
+				deepStrictEqual({ locations: fixture.ids.map(id => descriptors.getViewContainerByViewId(id)?.id), customLocations: reset.viewLocations, removed: descriptors.getViewContainerById(container.id) === null }, {
+					locations: [fixture.container.id, fixture.container.id], customLocations: {}, removed: true,
+				});
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
+
+		test('regrouping separate extension trees keeps one tile and removes the emptied source tile', () => withTiles(async ({ service, descriptors, groups }) => {
+			const fixture = store.add(registerStashViews(descriptors));
+			try {
+				const source = await service.openView(fixture.container.id, GroupDirection.RIGHT);
+				const first = await service.openView(fixture.ids[0], GroupDirection.DOWN);
+				const second = await service.openView(fixture.ids[1], GroupDirection.RIGHT);
+				const secondInput = second?.activeEditor as ViewTileInput;
+				const emptiedContainer = secondInput.containerId;
+				const grouped = await service.openViews(fixture.ids);
+				await Promise.resolve();
+				deepStrictEqual({
+					reusedFirst: grouped === first,
+					groups: groups.mainPart.count,
+					sourceRetained: groups.mainPart.groups.includes(source!),
+					secondRemoved: !groups.mainPart.groups.includes(second!),
+					secondInputDisposed: secondInput.isDisposed(),
+					emptyContainerRemoved: descriptors.getViewContainerById(emptiedContainer) === null,
+					name: grouped?.activeEditor?.getName(),
+					groupedTogether: fixture.ids.every(id => descriptors.getViewContainerByViewId(id)?.id === (grouped?.activeEditor as ViewTileInput).containerId),
+					sourceViews: descriptors.getViewContainerModel(fixture.container).allViewDescriptors.map(view => view.id),
+				}, { reusedFirst: true, groups: 3, sourceRetained: true, secondRemoved: true, secondInputDisposed: true, emptyContainerRemoved: true, name: 'Stashes', groupedTogether: true, sourceViews: fixture.unrelated });
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
+
+		test('grouping into an existing Untagged tile restores the requested Tags then Untagged order', () => withTiles(async ({ service, descriptors }) => {
+			const fixture = store.add(registerStashViews(descriptors));
+			try {
+				const existing = await service.openView(fixture.ids[1], GroupDirection.RIGHT);
+				const previousName = existing?.activeEditor?.getName();
+				const grouped = await service.openViews(fixture.ids);
+				const input = grouped?.activeEditor as ViewTileInput;
+				const container = descriptors.getViewContainerById(input.containerId)!;
+				deepStrictEqual({ reused: grouped === existing, previousName, name: input.getName(), order: descriptors.getViewContainerModel(container).allViewDescriptors.map(view => view.id) }, { reused: true, previousName: 'Untagged', name: 'Stashes', order: fixture.ids });
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
+
+		test('the extension catalog row opens the grouped views and becomes one reusable container row', () => withTiles(async ({ service, descriptors, groups, picks, selectPick }) => {
+			const fixture = store.add(registerStashViews(descriptors));
+			try {
+				selectPick('Stashes');
+				await service.pick(GroupDirection.RIGHT);
+				const grouped = groups.mainPart.activeGroup;
+				const input = grouped.activeEditor as ViewTileInput;
+				await service.pick();
+				const stashRows = picks.map(shown => shown.filter((item): item is IQuickPickItem & { target: TileCatalogTarget } => item.type !== 'separator' && item.label === 'Stashes'));
+				deepStrictEqual({
+					rows: stashRows.map(rows => rows.map(row => ({ target: row.target, description: row.description, icon: !!(row.iconClass || row.iconPath) }))),
+					tileName: input.getName(), reused: groups.mainPart.activeGroup === grouped, groups: groups.mainPart.count,
+				}, {
+					rows: [[{ target: { kind: 'views', ids: fixture.ids }, description: 'Views in one tile: Tags, Untagged', icon: true }], [{ target: { kind: 'container', id: input.containerId }, description: 'Views in one tile: Tags, Untagged', icon: true }]],
+					tileName: 'Stashes', reused: true, groups: 2,
+				});
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
+
+		test('grouping views leaves inactive unrelated views in their original container', () => withTiles(async ({ service, descriptors }) => {
+			const fixture = store.add(registerStashViews(descriptors, true));
+			try {
+				const grouped = await service.openViews(fixture.ids);
+				deepStrictEqual({ separate: (grouped?.activeEditor as ViewTileInput).containerId !== fixture.container.id, remaining: descriptors.getViewContainerModel(fixture.container).allViewDescriptors.map(view => view.id), activeRemaining: descriptors.getViewContainerModel(fixture.container).activeViewDescriptors.map(view => view.id) }, { separate: true, remaining: fixture.unrelated, activeRemaining: [] });
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
+
+		test('grouping without room leaves the original view locations and tile intact', () => withTiles(async ({ service, descriptors, groups, layout }) => {
+			const fixture = store.add(registerStashViews(descriptors));
+			try {
+				const source = await service.openView(fixture.container.id);
+				layout(300, 250);
+				const grouped = await service.openViews(fixture.ids, GroupDirection.RIGHT);
+				deepStrictEqual({ grouped, groups: groups.mainPart.count, source: groups.mainPart.activeGroup === source, locations: fixture.ids.map(id => descriptors.getViewContainerByViewId(id)?.id), views: descriptors.getViewContainerModel(fixture.container).allViewDescriptors.map(view => view.id) }, {
+					grouped: undefined, groups: 1, source: true, locations: [fixture.container.id, fixture.container.id], views: [...fixture.unrelated, ...fixture.ids],
+				});
+			} finally { fixture.dispose(); }
+		}, { extensions: [stashExtension] }));
 
 		test('a preset opens its tiles in order, sized from the split tile, and skips what cannot open', () => withTiles(async ({ service, shape, name, groups }) => {
 			const containers = Registry.as<IViewContainersRegistry>(ViewExtensions.ViewContainersRegistry);

@@ -41,7 +41,7 @@ suite('Floating Jump List', () => {
 		setup?.(instantiation);
 		const hidden: boolean[] = [];
 		const opened: string[] = [];
-		const host = store.add(instantiation.createInstance(FloatingJumpList, model, focus => { hidden.push(focus); host.hideList(); }, async resource => { opened.push(resource.path); throw new Error('Open failed'); }));
+		const host = store.add(instantiation.createInstance(FloatingJumpList, model, focus => { hidden.push(focus); host.hideList(); }, async resource => { opened.push(resource.resource.path); throw new Error('Open failed'); }));
 		const key = (key: string, options: KeyboardEventInit = {}) => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options }));
 		const settle = async () => { for (let i = 0; i < 8; i++) { await Promise.resolve(); } };
 		host.show(project, URI.file('/project/b'));
@@ -51,14 +51,14 @@ suite('Floating Jump List', () => {
 	test('initial selection, Vim navigation, delete/put and undo/redo', () => {
 		const f = fixture();
 		f.key('d'); f.key('d'); f.key('G'); f.key('p');
-		const moved = f.model.entries.map(item => item.path);
+		const moved = f.model.entries.map(item => item.resource.path);
 		f.key('u');
-		const undone = f.model.entries.map(item => item.path);
+		const undone = f.model.entries.map(item => item.resource.path);
 		f.key('r', { ctrlKey: true });
 		f.key('g'); f.key('g');
 		const selected = f.container.querySelector('.selected')?.getAttribute('aria-label');
 		f.key('q');
-		deepStrictEqual([moved, undone, f.model.entries.map(item => item.path), selected, f.hidden], [
+		deepStrictEqual([moved, undone, f.model.entries.map(item => item.resource.path), selected, f.hidden], [
 			['/project/a', '/project/c', '/project/b'], ['/project/a', '/project/c'], ['/project/a', '/project/c', '/project/b'], 'a', [true],
 		]);
 	});
@@ -66,9 +66,9 @@ suite('Floating Jump List', () => {
 	test('Shift+J/K move the focused entry and digits open slots', async () => {
 		const f = fixture();
 		f.key('J');
-		const movedDown = f.model.entries.map(item => item.path);
+		const movedDown = f.model.entries.map(item => item.resource.path);
 		f.key('K'); f.key('K');
-		const movedTop = f.model.entries.map(item => item.path);
+		const movedTop = f.model.entries.map(item => item.resource.path);
 		f.key('3');
 		await f.settle();
 		f.key('9');

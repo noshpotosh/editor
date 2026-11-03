@@ -29,7 +29,7 @@ Modal editing is a core part of the terminal-first workflow. VSCodeVim works, bu
 
 ## Behavior: leader menu
 
-- **S6.13** In Normal mode, the leader key (default Space) or `Ctrl+W` starts a sequence. After `hintDelay` ms (default 250), a hint panel lists the available continuations. Escape cancels. An incomplete sequence stays pending.
+- **S6.13** In Normal mode, the leader key (default Space) or `Ctrl+W` starts a sequence. After `hintDelay` ms (default 250), a hint panel lists the available continuations. Escape only cancels, preserving the current shell/editor surface. An incomplete sequence stays pending. The panel scrolls with the wheel or trackpad, Up/Down, Page Up/Page Down, and Home/End; scrolling never becomes an action key. A changed prefix resets the scroll position.
 
   | Group | Keys → command |
   | --- | --- |
@@ -118,7 +118,7 @@ Workbench navigation tests cover leader and Ctrl+W dispatch, pane-local buffer E
 
 ## Engine-independent leader and terminal copy mode
 
-`TerminalFirstLeaderService` owns the shared action table, pending sequence, capture listener, hints, help picker, and pane moves. Native Vim delegates its configured leader and Ctrl+W to it; remaps and document editing remain native Vim responsibilities. Ctrl+Space starts the same service with native Vim, VSCodeVim, or Vim disabled and supersedes manual Trigger Suggest on that chord. Shell tables contain only session/surface actions permitted by the policy; editor tables retain the existing groups and add `q`/Escape to return to shell. Leader `[` is available for the main or visible floating terminal.
+`TerminalFirstLeaderService` owns the shared action table, pending sequence, capture listener, hints, help picker, and pane moves. Native Vim delegates its configured leader and Ctrl+W to it; remaps and document editing remain native Vim responsibilities. Ctrl+Space starts the same service with native Vim, VSCodeVim, or Vim disabled and supersedes manual Trigger Suggest on that chord. Shell tables contain only session/surface actions permitted by the policy; editor tables retain the existing groups and add `q` to return to shell. Escape only dismisses the leader. Leader `[` is available for the main or visible floating terminal. Starting the leader transfers keyboard focus into the workbench immediately so rapid continuation keys also work from native browser content; dismissal restores the previous focus unless focus has moved elsewhere.
 
 VSCodeVim users can set `vim.normalModeKeyBindingsNonRecursive` to `[{ "before": ["<space>"], "commands": ["terminalFirst.leader"] }]`. Copy mode reuses `NativeVim` with a read-only terminal snapshot host. Counts, motions, search, and character/line visual selection remain shared grammar; prompt jumps and clipboard exit are terminal-specific. The COPY badge shows pending search text. Resize or trimmed-away cursor lines cancel safely.
 

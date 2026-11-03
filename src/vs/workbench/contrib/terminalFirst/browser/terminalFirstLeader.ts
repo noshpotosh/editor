@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { $, append, addDisposableListener, getWindow } from '../../../../base/browser/dom.js';
+import { $, append, addDisposableListener, getActiveElement, getWindow, isHTMLElement } from '../../../../base/browser/dom.js';
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
@@ -96,6 +96,8 @@ export const ITerminalFirstLeaderService = createDecorator<ITerminalFirstLeaderS
 export interface ITerminalFirstLeaderService {
 	readonly _serviceBrand: undefined;
 	readonly active: boolean;
+	/** Includes the temporary tile focus used by a repeating layout action. */
+	readonly ownsFocus: boolean;
 	readonly hint: string;
 	readonly onDidChange: Event<void>;
 	start(prefix?: string): void;
@@ -113,8 +115,13 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 	readonly onDidChange = this.changed.event;
 	private readonly hints = this._register(new RunOnceScheduler(() => this.render(), 250));
 	private readonly menu: HTMLElement;
+	private previousFocus: HTMLElement | undefined;
+	private generation = 0;
+	private repeating = 0;
+	private transferringFocus = false;
 	private readonly context;
 	get active(): boolean { return this.sequence !== undefined; }
+	get ownsFocus(): boolean { return this.transferringFocus || this.active && (getActiveElement() === this.menu || this.repeating > 0); }
 	private get actions(): readonly ModalAction[] {
 		const actions = [...(terminalFirstPolicy.shell ? shellActions : editorActions)];
 		if (!terminalFirstPolicy.shell) {
@@ -141,12 +148,20 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 		this.context = new RawContextKey<boolean>('terminalFirstLeaderActive', false).bindTo(contexts);
 		this.menu = append(layout.mainContainer, $('.native-vim-leader'));
 		this.menu.hidden = true;
-		this.menu.setAttribute('role', 'status');
+		this.menu.tabIndex = -1;
+		this.menu.setAttribute('role', 'region');
+		this.menu.setAttribute('aria-label', localize('leaderActions', "Leader Actions"));
 		this.menu.setAttribute('aria-live', 'polite');
 		this._register(toDisposable(() => { this.context.reset(); this.menu.remove(); }));
 		this._register(sessions.onDidChangeSessions(() => this.cancel()));
 		const window = getWindow(layout.mainContainer);
-		this._register(addDisposableListener(window, 'blur', () => this.cancel()));
+		this._register(addDisposableListener(window, 'blur', () => this.cancel(false)));
+		this._register(addDisposableListener(this.menu, 'blur', () => { if (!this.repeating) { this.cancel(false); } }));
+		this._register(addDisposableListener(window, 'pointerdown', event => {
+			if (this.active && event.target instanceof window.Node && !this.menu.contains(event.target)) { this.cancel(false); }
+		}, true));
+		// Allow the native scroll action while keeping the wheel away from the tile underneath.
+		this._register(addDisposableListener(this.menu, 'wheel', event => event.stopPropagation(), { passive: true }));
 		this._register(addDisposableListener(window, 'keydown', event => {
 			if (!this.active) { return; }
 			event.preventDefault(); event.stopImmediatePropagation();
@@ -156,32 +171,75 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 		}, true));
 	}
 	start(prefix = ''): void {
+		const previousFocus = this.active ? this.previousFocus : getActiveElement();
+		this.menu.classList.add('pending');
+		this.menu.hidden = false;
+		// Native browser tiles need a workbench focus target before the delayed hint appears.
+		// Focus first: editor blur and picker focus handlers cancel any previous Vim sequence.
+		this.focus(this.menu);
+		this.previousFocus = isHTMLElement(previousFocus) && previousFocus !== this.menu ? previousFocus : undefined;
+		this.generation++; this.repeating = 0;
 		this.sequence = prefix; this.context.set(true);
 		this.hints.schedule(this.configuration.getValue<number>('terminalFirst.vim.hintDelay') ?? 250);
 		this.changed.fire();
 	}
-	cancel(): void {
-		this.sequence = undefined; this.context.reset(); this.hints.cancel(); this.menu.hidden = true; this.hint = ''; this.changed.fire();
+	cancel(restoreFocus = true): void {
+		if (!this.active) { return; }
+		const previousFocus = restoreFocus && getActiveElement() === this.menu ? this.previousFocus : undefined;
+		this.sequence = undefined; this.previousFocus = undefined; this.generation++; this.repeating = 0;
+		this.context.reset(); this.hints.cancel(); this.menu.hidden = true; this.hint = '';
+		if (previousFocus?.isConnected) { this.focus(previousFocus); }
+		this.changed.fire();
+	}
+	private focus(target: HTMLElement): void {
+		this.transferringFocus = true;
+		try { target.focus({ preventScroll: true }); }
+		finally { this.transferringFocus = false; }
 	}
 	key(key: string): boolean {
 		if (!this.active) { return false; }
 		if (key === '<Esc>') {
-			const returnToShell = this.sequence === '' && !terminalFirstPolicy.shell;
 			this.cancel();
-			if (returnToShell) { void this.execute('terminalFirst.showShell').catch(error => this.notifications.error(error)); }
 			return true;
 		}
+		if (this.scroll(key)) { return true; }
 		this.sequence += key;
 		const action = this.actions.find(action => action.keys === this.sequence);
 		if (action?.repeat) {
 			this.sequence = this.sequence!.slice(0, -1);
 			this.render();
-			void this.execute(action.command).catch(error => this.notifications.error(error));
+			void this.repeat(action.command).catch(error => this.notifications.error(error));
 		} else if (this.sequence === '?' || action) {
 			const command = action?.command ?? 'help'; this.cancel();
 			void this.execute(command).catch(error => this.notifications.error(error));
 		} else if (this.actions.some(action => action.keys.startsWith(this.sequence!))) { this.render(); }
 		else { this.cancel(); }
+		return true;
+	}
+	private async repeat(command: string): Promise<void> {
+		const generation = this.generation;
+		this.repeating++;
+		try { await this.execute(command); }
+		finally {
+			if (generation === this.generation && !this._store.isDisposed) {
+				// Restoring a maximized tile briefly focuses that tile. Keep the resize submap open.
+				const focused = getActiveElement();
+				if (isHTMLElement(focused) && focused !== this.menu) { this.previousFocus = focused; }
+				this.menu.focus({ preventScroll: true });
+				this.repeating--;
+			}
+		}
+	}
+	private scroll(key: string): boolean {
+		if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(key)) { return false; }
+		if (this.menu.classList.contains('pending')) { this.render(); }
+		const row = this.menu.firstElementChild?.getBoundingClientRect().height ?? 0;
+		const gap = parseFloat(getWindow(this.menu).getComputedStyle(this.menu).rowGap) || 0;
+		const line = Math.max(1, row + gap);
+		const page = Math.max(line, this.menu.clientHeight - line);
+		if (key === 'Home') { this.menu.scrollTop = 0; }
+		else if (key === 'End') { this.menu.scrollTop = this.menu.scrollHeight; }
+		else { this.menu.scrollTop += (key === 'ArrowUp' ? -line : key === 'ArrowDown' ? line : key === 'PageUp' ? -page : page); }
 		return true;
 	}
 	private describeBinding(action: ModalAction): string {
@@ -193,11 +251,14 @@ export class TerminalFirstLeaderService extends Disposable implements ITerminalF
 	}
 	private render(): void {
 		if (!this.active) { return; }
+		this.hints.cancel();
 		const rows = this.actions.filter(action => action.keys.startsWith(this.sequence!)).map(action => [this.describeBinding(action), action.label]);
 		rows.push(['?', localize('helpLabel', "Search All Actions")]);
 		this.hint = rows.map(([keys, label]) => `${keys}  ${label}`).join('\n');
 		this.menu.replaceChildren(...rows.flatMap(([keys, label]) => [$('span.native-vim-leader-keys', undefined, keys), $('span.native-vim-leader-label', undefined, label)]));
-		this.menu.hidden = false; this.changed.fire();
+		this.menu.scrollTop = 0;
+		this.menu.classList.remove('pending');
+		this.changed.fire();
 	}
 	async execute(command: string): Promise<void> {
 		if (command === 'help') {

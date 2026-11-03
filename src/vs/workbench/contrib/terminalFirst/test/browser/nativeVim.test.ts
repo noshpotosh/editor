@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual, strictEqual } from 'assert';
+import { addDisposableListener } from '../../../../../base/browser/dom.js';
 import { DisposableStore, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { Event } from '../../../../../base/common/event.js';
 import { URI } from '../../../../../base/common/uri.js';
@@ -44,12 +45,13 @@ suite('Native Vim workbench navigation', () => {
 		terminalFirstPolicy.mode = 'editor';
 		store.add(toDisposable(() => { terminalFirstPolicy.mode = previousMode; }));
 		const commands: string[] = [];
+		const commandHandlers = new Map<string, () => void>();
 		const errors: string[] = [];
 		let help: readonly IQuickPickItem[] = [];
 		let chooseHelp: string | undefined;
 		instantiation.stub(ITerminalFirstService, upcastPartial<ITerminalFirstService>({ sessions: [], onDidChangeSessions: Event.None }));
 		instantiation.stub(IConfigurationService, new TestConfigurationService({ terminalFirst: { vim: { engine: 'native', leader, hintDelay: 250, remaps: [], leaderBindings } } }));
-		instantiation.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); return undefined; } }));
+		instantiation.stub(ICommandService, upcastPartial<ICommandService>({ executeCommand: async id => { commands.push(id); commandHandlers.get(id)?.(); return undefined; } }));
 		instantiation.stub(ICodeEditorService, upcastPartial<ICodeEditorService>({ getFocusedCodeEditor: () => upcastPartial<ICodeEditor>({ getModel: () => upcastPartial<ITextModel>({}) }) }));
 		instantiation.stub(IExtensionManagementService, upcastPartial<IExtensionManagementService>({ getInstalled: async () => [] }));
 		instantiation.stub(IWorkbenchExtensionEnablementService, upcastPartial<IWorkbenchExtensionEnablementService>({}));
@@ -65,8 +67,126 @@ suite('Native Vim workbench navigation', () => {
 		const vim = store.add(instantiation.createInstance(NativeVimService));
 		const keys = (sequence: string[], mode: 'normal' | 'insert' = 'normal') => sequence.map(key => vim.key(key, mode));
 		const settle = async () => { for (let i = 0; i < 8; i++) { await Promise.resolve(); } deepStrictEqual(errors, []); };
-		return { instantiation, vim, keys, commands, settle, leaderService: instantiation.get(ITerminalFirstLeaderService), get help() { return help; }, selectHelp: (description: string) => { chooseHelp = description; } };
+		return { instantiation, vim, keys, commands, commandHandlers, settle, leaderService: instantiation.get(ITerminalFirstLeaderService), get help() { return help; }, selectHelp: (description: string) => { chooseHelp = description; } };
 	}
+	function focusTarget(): HTMLInputElement {
+		const input = document.createElement('input');
+		document.body.appendChild(input);
+		store.add(toDisposable(() => input.remove()));
+		input.focus();
+		return input;
+	}
+	function leaderMenu(): HTMLElement {
+		const menu = document.querySelector<HTMLElement>('.native-vim-leader');
+		if (!menu) { throw new Error('Expected the leader menu'); }
+		return menu;
+	}
+	function pressMenuKey(key: string): KeyboardEvent {
+		const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+		leaderMenu().dispatchEvent(event);
+		return event;
+	}
+
+	test('numeric Ex commands reveal the destination and clamp to the document', async () => {
+		const f = fixture();
+		const moved: { lineNumber: number; column: number }[] = [];
+		const revealed: { lineNumber: number; column: number }[] = [];
+		f.instantiation.stub(ICodeEditorService, 'getFocusedCodeEditor', () => upcastPartial<ICodeEditor>({
+				getModel: () => upcastPartial<ITextModel>({ getLineCount: () => 200 }),
+				setPosition: position => { moved.push(position); },
+				revealPositionInCenterIfOutsideViewport: position => { revealed.push(position); },
+			}));
+		for (const line of ['120', '999', '0']) { f.vim.execute('ex', line); }
+		await f.settle();
+		const expected = [{ lineNumber: 120, column: 1 }, { lineNumber: 200, column: 1 }, { lineNumber: 1, column: 1 }];
+		deepStrictEqual({ moved, revealed }, { moved: expected, revealed: expected });
+	});
+
+	test('Space then Escape dismisses the root menu, restores editor focus and consumes Escape', async () => {
+		const f = fixture();
+		const editor = focusTarget();
+		let bubbled = false;
+		store.add(addDisposableListener(document.body, 'keydown', () => { bubbled = true; }));
+		f.keys([' ']);
+		const capturedBeforeHint = document.activeElement === leaderMenu() && leaderMenu().classList.contains('pending');
+		const escape = pressMenuKey('Escape');
+		await f.settle();
+		deepStrictEqual({ capturedBeforeHint, consumed: escape.defaultPrevented, bubbled, commands: f.commands, active: f.leaderService.active, hidden: leaderMenu().hidden, editorFocused: document.activeElement === editor, mode: terminalFirstPolicy.mode }, {
+			capturedBeforeHint: true, consumed: true, bubbled: false, commands: [], active: false, hidden: true, editorFocused: true, mode: 'editor',
+		});
+		f.keys([' ', 'q']);
+		await f.settle();
+		deepStrictEqual(f.commands, ['terminalFirst.showShell']);
+	});
+
+	test('delayed focus cancellation preserves the menu while explicit cancellation still closes it', async () => {
+		const f = fixture();
+		const editor = focusTarget();
+		f.keys([' ', 'w']);
+		await Promise.resolve();
+		f.vim.cancel('focus');
+		const preserved = f.leaderService.active && f.vim.hint === f.leaderService.hint && !!f.vim.hint;
+		f.vim.cancel();
+		deepStrictEqual({ preserved, active: f.leaderService.active, hint: f.vim.hint, editorFocused: document.activeElement === editor }, { preserved: true, active: false, hint: '', editorFocused: true });
+	});
+
+	test('leader commands run with the previous focus and retain their chosen destination', async () => {
+		const f = fixture();
+		const destination = focusTarget();
+		const editor = focusTarget();
+		let commandStartedInEditor = false;
+		f.commandHandlers.set('workbench.action.quickOpen', () => { commandStartedInEditor = document.activeElement === editor; destination.focus(); });
+		f.keys([' ']);
+		pressMenuKey('f'); pressMenuKey('f');
+		await f.settle();
+		deepStrictEqual({ commandStartedInEditor, destinationFocused: document.activeElement === destination, active: f.leaderService.active }, { commandStartedInEditor: true, destinationFocused: true, active: false });
+	});
+
+	test('menu navigation scrolls without consuming letter bindings or leaking wheel events', async () => {
+		const f = fixture();
+		focusTarget();
+		f.keys([' ']);
+		const menu = leaderMenu();
+		menu.style.maxHeight = '100px';
+		menu.style.width = '400px';
+		const offsets: number[] = [];
+		const consumed = ['ArrowDown', 'PageDown', 'ArrowUp', 'PageUp', 'End', 'Home'].map(key => {
+			const event = pressMenuKey(key); offsets.push(menu.scrollTop); return event.defaultPrevented;
+		});
+		let wheelBubbled = false;
+		store.add(addDisposableListener(document.body, 'wheel', () => { wheelBubbled = true; }));
+		const wheel = new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true });
+		menu.dispatchEvent(wheel);
+		deepStrictEqual({ consumed, scrollable: menu.scrollHeight > menu.clientHeight, scrolled: [offsets[0] > 0, offsets[1] > offsets[0], offsets[2] < offsets[1], offsets[3] < offsets[2], offsets[4] > offsets[1], offsets[5] === 0], active: f.leaderService.active, wheelBubbled, nativeWheelAllowed: !wheel.defaultPrevented }, {
+			consumed: [true, true, true, true, true, true], scrollable: true, scrolled: [true, true, true, true, true, true], active: true, wheelBubbled: false, nativeWheelAllowed: true,
+		});
+		pressMenuKey('f'); pressMenuKey('f');
+		await f.settle();
+		deepStrictEqual(f.commands, ['workbench.action.quickOpen']);
+	});
+
+	test('repeated resize survives tile focus while unmaximizing and Escape returns to that tile', async () => {
+		const f = fixture();
+		const tile = focusTarget();
+		f.commandHandlers.set('terminalFirst.tile.resizeLeft', () => tile.focus());
+		f.keys([' ', 'w', 'r']);
+		pressMenuKey('h');
+		await f.settle();
+		const firstRetainedFocus = document.activeElement === leaderMenu() && f.leaderService.active;
+		pressMenuKey('h');
+		await f.settle();
+		pressMenuKey('Escape');
+		deepStrictEqual({ firstRetainedFocus, commands: f.commands, active: f.leaderService.active, tileFocused: document.activeElement === tile }, { firstRetainedFocus: true, commands: ['terminalFirst.tile.resizeLeft', 'terminalFirst.tile.resizeLeft'], active: false, tileFocused: true });
+	});
+
+	test('cancelling a pending resize does not reopen the menu or steal subsequent focus', async () => {
+		const f = fixture();
+		const tile = focusTarget();
+		f.keys([' ', 'w', 'r', 'h', '<Esc>']);
+		const destination = focusTarget();
+		await f.settle();
+		deepStrictEqual({ active: f.leaderService.active, hidden: leaderMenu().hidden, destinationFocused: document.activeElement === destination, tileFocused: document.activeElement === tile }, { active: false, hidden: true, destinationFocused: true, tileFocused: false });
+	});
 
 	test('additional leader bindings preserve existing commands and menu prefixes', async () => {
 		const f = fixture(' ', undefined, [

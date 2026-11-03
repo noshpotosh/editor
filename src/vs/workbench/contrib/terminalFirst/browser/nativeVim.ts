@@ -123,7 +123,12 @@ export class NativeVimService extends Disposable implements INativeVimService {
 	}
 	readClipboard(): Promise<string> { return this.clipboard.readText(); }
 	get enabled(): boolean { return this.ready; }
-	cancel(): void { this.leader.cancel(); this.remapBuffer = []; this.hint = ''; this.changed.fire(); }
+	get preserveModeOnFocus(): boolean { return this.leader.ownsFocus; }
+	cancel(reason?: 'focus'): void {
+		// Editor blur can be delivered after the leader has taken focus. It must not cancel its own menu.
+		if (reason !== 'focus' || !this.leader.ownsFocus) { this.leader.cancel(); }
+		this.remapBuffer = []; this.hint = this.leader.hint; this.changed.fire();
+	}
 	key(key: string, mode: VimMode, allowRemaps = true): boolean {
 		if (this.expanding) { return false; }
 		if (this.leader.active) { return this.leader.key(key); }
@@ -184,7 +189,12 @@ export class NativeVimService extends Disposable implements INativeVimService {
 	private async ex(line: string): Promise<void> {
 		const editor = this.editors.getFocusedCodeEditor() ?? this.editors.getActiveCodeEditor(); const model = editor?.getModel();
 		if (!editor || !model) { return; }
-		if (/^\d+$/.test(line)) { editor.setPosition({ lineNumber: Math.min(model.getLineCount(), Math.max(1, Number(line))), column: 1 }); return; }
+		if (/^\d+$/.test(line)) {
+			const position = { lineNumber: Math.min(model.getLineCount(), Math.max(1, Number(line))), column: 1 };
+			editor.setPosition(position);
+			editor.revealPositionInCenterIfOutsideViewport(position);
+			return;
+		}
 		const simple: Record<string, string> = { w: 'workbench.action.files.save', wa: 'workbench.action.files.saveAll', q: 'workbench.action.closeActiveEditor', bd: 'workbench.action.closeActiveEditor', bdelete: 'workbench.action.closeActiveEditor', bn: 'workbench.action.nextEditorInGroup', bnext: 'workbench.action.nextEditorInGroup', bp: 'workbench.action.previousEditorInGroup', bprevious: 'workbench.action.previousEditorInGroup', buffers: 'workbench.action.showEditorsInActiveGroup', ls: 'workbench.action.showEditorsInActiveGroup', split: 'terminalFirst.tile.splitEditorDown', sp: 'terminalFirst.tile.splitEditorDown', vsplit: 'terminalFirst.tile.splitEditorRight', vs: 'terminalFirst.tile.splitEditorRight' };
 		if (simple[line]) { await this.commands.executeCommand(simple[line]); return; }
 		if (line === 'wq' || line === 'x') { const input = this.editorService.activeEditor; await this.commands.executeCommand('workbench.action.files.save'); if (input && this.editorService.activeEditor === input && !input.isDirty()) { await this.commands.executeCommand('workbench.action.closeActiveEditor'); } return; }
